@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "keep": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "/home/factory-user/modern-software-dev-assignments/week2",
+        "run",
+        "keep-mcp"
+      ],
+      "env": {
+        "KEEP_OAUTH_CLIENT_FILE": "~/.config/keep-mcp/client_secret.json",
+        "KEEP_TOKEN_FILE": "~/.local/state/keep-mcp/token.json",
+        "KEEP_STATE_FILE": "~/.local/state/keep-mcp/managed_notes.json",
+        "KEEP_DWD_SERVICE_ACCOUNT": "keep-mcp-probe@keep-mcp-week2.iam.gserviceaccount.com",
+        "KEEP_SAFE_MODE": "true"
+      }
+    }
+  }
+}

@@ -1,0 +1,34 @@
+[project]
+name = "keep-mcp"
+version = "0.1.0"
+description = "MCP server for the official Google Keep API (FastMCP, stdio)"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    # tested against FastMCP 4.0.11 / MCP SDK 2.3 (mcp.types ToolAnnotations,
+    # CallToolResult.structured_content, in-memory Client)
+    "fastmcp>=4.0",
+    "httpx>=0.27",
+    "pydantic[email]>=2.7",
+]
+
+[project.scripts]
+keep-mcp = "keep_mcp.__main__:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/keep_mcp"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"

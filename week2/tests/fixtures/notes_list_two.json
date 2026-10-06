@@ -1,0 +1,59 @@
+{
+  "notes": [
+    {
+      "name": "notes/AAAsampleChecklistId000000000000000000000000000000000000000000000",
+      "createTime": "2026-10-06T01:05:28.185841Z",
+      "updateTime": "2026-10-06T01:05:28.185841Z",
+      "permissions": [
+        {
+          "name": "notes/AAAsampleChecklistId000000000000000000000000000000000000000000000/permissions/AAAsamplePermissionId0000000000000000001",
+          "role": "OWNER",
+          "email": "user@example.com",
+          "user": {
+            "email": "user@example.com"
+          }
+        }
+      ],
+      "title": "[mcp-probe] checklist 2026-10-06 01:05:27",
+      "body": {
+        "list": {
+          "listItems": [
+            {
+              "text": {
+                "text": "first"
+              },
+              "checked": false
+            },
+            {
+              "text": {
+                "text": "second"
+              },
+              "checked": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "notes/AAAsampleTextNoteId00000000000000000000000000000000000000000000000",
+      "createTime": "2026-10-06T01:05:27.716317Z",
+      "updateTime": "2026-10-06T01:05:27.716317Z",
+      "permissions": [
+        {
+          "name": "notes/AAAsampleTextNoteId00000000000000000000000000000000000000000000000/permissions/AAAsamplePermissionId0000000000000000000",
+          "role": "OWNER",
+          "email": "user@example.com",
+          "user": {
+            "email": "user@example.com"
+          }
+        }
+      ],
+      "title": "[mcp-probe] 2026-10-06 01:05:27",
+      "body": {
+        "text": {
+          "text": "probe body"
+        }
+      }
+    }
+  ]
+}

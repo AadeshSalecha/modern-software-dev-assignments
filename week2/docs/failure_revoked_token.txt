@@ -1,0 +1,31 @@
+== keep-mcp live failure demo: revoked refresh token (protocol level) ==
+launch (verbatim from .mcp.json.example): uv --directory /home/factory-user/modern-software-dev-assignments/week2 run keep-mcp
+command resolved for this machine: /home/factory-user/.venvs/uv/bin/uv
+setup: KEEP_TOKEN_FILE points at a TEMP copy of the real token file with
+  - refresh_token replaced by an invalid string (as if the grant was revoked),
+  - expires_at=0, so the first call must attempt the silent refresh.
+the real token file is never touched; nothing is written to the account.
+
+> search_notes {"query": "[mcp-demo]"}
+  -> ok=false error={"category": "auth_revoked", "code": "login_revoked", "hint": "Run `uv run keep-mcp login` in the week2 directory to sign in again.", "message": "The cached Google login was rejected (invalid_grant): the refresh token was revoked, expired, or the app grant was removed. No browser was opened.", "override": null, "retry_after_seconds": null, "retryable": false}
+  PASS: the call fails with a structured result, not a crash
+  PASS: code login_revoked (got 'login_revoked')
+  PASS: category auth_revoked (got 'auth_revoked')
+  PASS: the message says no browser was opened
+  PASS: retryable=false (a human must sign in again)
+  PASS: the hint gives the exact next action (uv run keep-mcp login)
+
+> search_notes {"query": "[mcp-demo]"}
+  -> ok=false error={"category": "auth_revoked", "code": "login_revoked", "hint": "Run `uv run keep-mcp login` in the week2 directory to sign in again.", "message": "The cached Google login was rejected (invalid_grant): the refresh token was revoked, expired, or the app grant was removed. No browser was opened.", "override": null, "retry_after_seconds": null, "retryable": false}
+  PASS: the server keeps answering after the revoked error (no crash, no browser)
+  PASS: no browser/login flow ever started in the server log
+
+== server log (stderr, scrubbed) ==
+  [10/06/26 03:10:46] INFO     Starting MCP server 'keep' with    transport.py:242
+                               transport 'stdio'                                  
+  INFO httpx: HTTP Request: POST https://oauth2.googleapis.com/token "HTTP/1.1 400 Bad Request"
+  INFO httpx: HTTP Request: POST https://oauth2.googleapis.com/token "HTTP/1.1 400 Bad Request"
+
+== summary ==
+checks: 8/8 passed
+failure transcript complete: auth_revoked/login_revoked over stdio, no browser opened

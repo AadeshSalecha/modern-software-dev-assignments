@@ -1,0 +1,28 @@
+# Agent transcript: explicit missing-note ID
+
+Client: Factory Droid CLI v0.233.0, `gpt-6-luna`, low reasoning effort,
+`--auto low --only-tools MCP:keep`, stdio.
+The intentionally nonexistent resource name is scrubbed as `notes/<id>`.
+IDs and email are scrubbed (`notes/<id>`, `<user>`).
+
+User:
+> Show me the Keep note notes/<id>
+
+Droid loaded the Keep detail/search tools, then passed the explicit resource
+name straight to `get_note`:
+```text
+keep___get_note
+args: {"name":"notes/<id>"}
+result: {"ok":false,"note":null,"error":{
+  "code":"note_not_accessible","category":"not_found",
+  "message":"The Keep API refused this note. Google never distinguishes 'does not exist' from 'not yours', so this covers a deleted, mistyped, or foreign note.",
+  "retryable":false,"retry_after_seconds":null,
+  "hint":"The name does not exist, was deleted, or is not visible to this account; get a fresh name from search_notes.",
+  "override":null
+}}
+```
+
+Droid:
+> I couldn't access notes/<id>. It may not exist, may have been deleted, or may not be visible to this account.
+
+There was no retry of the same ID and no additional Keep tool call.

@@ -1,0 +1,195 @@
+== keep-mcp live smoke (L2, real Google Keep API) ==
+date: 2026-10-06T03:10:31Z (account emails scrubbed to <user>)
+launch (verbatim from .mcp.json.example): uv --directory /home/factory-user/modern-software-dev-assignments/week2 run keep-mcp
+command resolved for this machine: /home/factory-user/.venvs/uv/bin/uv
+env override: KEEP_STATE_FILE=/tmp/keep-mcp-smoke-nflm_v3g/managed_notes.json (temp registry; the real one is untouched)
+auth: defaults (client file ~/.config/keep-mcp/client_secret.json, token file ~/.local/state/keep-mcp/token.json)
+guarantees: only [mcp-test] notes are written; allow_foreign is never passed; [mcp-demo] notes are never deleted
+
+> search_notes {"query": "[mcp-demo]", "state": "any"}
+  -> ok=true count=5 truncated=False notes=['[mcp-demo] checklist: all done' (notes/<id>); '[mcp-demo] checklist: nested sub-items' (notes/<id>); '[mcp-demo] checklist: groceries (mixed checked)' (notes/<id>); '[mcp-demo] text: long multiline' (notes/<id>); '[mcp-demo] text: short' (notes/<id>)]
+  PASS: baseline: exactly the 5 [mcp-demo] fixture notes are present
+
+> search_notes {"query": "[mcp-demo]", "state": "active"}
+  -> ok=true count=0 truncated=False notes=[]
+  note: the 5 [mcp-demo] notes are in the Keep trash (a pre-existing state; notes.list without a filter hides trashed notes). This run neither trashed nor deleted nor modified them.
+
+> search_notes {"max_results": 200, "state": "any"}
+  -> ok=true count=6 truncated=False notes=['[mcp-demo] checklist: all done' (notes/<id>); '[mcp-demo] checklist: nested sub-items' (notes/<id>); '[mcp-demo] checklist: groceries (mixed checked)' (notes/<id>); '[mcp-demo] text: long multiline' (notes/<id>); '[mcp-demo] text: short' (notes/<id>); '' (notes/<id>)]
+  PASS: baseline: account snapshot taken (6 notes, any state)
+
+> create_note {"content": {"kind": "text", "text": "smoke body 20261006T031031Z"}, "title": "[mcp-test] smoke 20261006T031031Z"}
+  -> ok=true {"created": "2026-10-06T03:10:35.264618Z", "error": null, "kind": "text", "managed": true, "name": "notes/<id>", "title": "[mcp-test] smoke 20261006T031031Z"}
+  PASS: S1.1 create_note (text): ok=true, managed=true, kind=text
+  PASS: S1.1 create_note returned a notes/ name
+
+> search_notes {"query": "[mcp-test]"}
+  -> ok=true count=1 truncated=False notes=['[mcp-test] smoke 20261006T031031Z' (notes/<id>)]
+  PASS: S1.2 search_notes(query='[mcp-test]') finds the new note
+
+> get_note {"name": "notes/<id>"}
+  -> ok=true {"error": null, "note": {"attachment_count": 0, "checklist": null, "collaborators": [{"email": "<user>", "role": "OWNER"}], "created": "2026-10-06T03:10:35.264618Z", "kind": "text", "name": "notes/<id>", "text": "smoke body 20261006T031031Z", "title": "[mcp-test] smoke 20261006T031031Z", "updated": "2026-10-06T03:10:35.264618Z"}}
+  PASS: S1.3 get_note returns the same title, kind, and text
+  PASS: S1.3 get_note lists collaborators (the OWNER entry) without an extra call
+
+> delete_note {"name": "notes/<id>"}
+  -> ok=true {"deleted": false, "dry_run": true, "error": null, "managed": true, "name": "notes/<id>", "preview": {"attachment_count": 0, "collaborators": [{"email": "<user>", "role": "OWNER"}], "kind": "text", "name": "notes/<id>", "title": "[mcp-test] smoke 20261006T031031Z", "updated": "2026-10-06T03:10:35.264618Z"}, "warnings": []}
+  PASS: S1.4 delete_note default dry_run: preview only, deleted=false
+
+> get_note {"name": "notes/<id>"}
+  -> ok=true {"error": null, "note": {"attachment_count": 0, "checklist": null, "collaborators": [{"email": "<user>", "role": "OWNER"}], "created": "2026-10-06T03:10:35.264618Z", "kind": "text", "name": "notes/<id>", "text": "smoke body 20261006T031031Z", "title": "[mcp-test] smoke 20261006T031031Z", "updated": "2026-10-06T03:10:35.264618Z"}}
+  PASS: S1.5 the note still exists after the dry run
+
+> delete_note {"dry_run": false, "name": "notes/<id>"}
+  -> ok=true {"deleted": true, "dry_run": false, "error": null, "managed": true, "name": "notes/<id>", "preview": {"attachment_count": 0, "collaborators": [{"email": "<user>", "role": "OWNER"}], "kind": "text", "name": "notes/<id>", "title": "[mcp-test] smoke 20261006T031031Z", "updated": "2026-10-06T03:10:35.264618Z"}, "warnings": []}
+  PASS: S1.6 delete_note dry_run=false: deleted=true
+
+> get_note {"name": "notes/<id>"}
+  -> ok=false error={"category": "not_found", "code": "note_not_accessible", "hint": "The name does not exist, was deleted, or is not visible to this account; get a fresh name from search_notes.", "message": "The Keep API refused this note. Google never distinguishes 'does not exist' from 'not yours', so this covers a deleted, mistyped, or foreign note.", "override": null, "retry_after_seconds": null, "retryable": false}
+  PASS: S1.7 get_note after delete: note_not_accessible / not_found / not retryable
+  PASS: S1.7 the hint points back to search_notes for a fresh name
+
+> create_note {"content": {"items": [{"checked": false, "text": "buy oat milk"}, {"checked": true, "text": "charge laptop"}, {"checked": false, "children": [{"checked": true, "text": "book room"}], "text": "prep the demo"}], "kind": "checklist"}, "title": "[mcp-test] checklist 20261006T031031Z"}
+  -> ok=true {"created": "2026-10-06T03:10:36.802206Z", "error": null, "kind": "checklist", "managed": true, "name": "notes/<id>", "title": "[mcp-test] checklist 20261006T031031Z"}
+  PASS: S2.1 create_note (checklist with a nested child): ok=true, kind=checklist
+
+> get_note {"name": "notes/<id>"}
+  -> ok=true {"error": null, "note": {"attachment_count": 0, "checklist": [{"checked": false, "children": [], "text": "buy oat milk"}, {"checked": true, "children": [], "text": "charge laptop"}, {"checked": false, "children": [{"checked": true, "text": "book room"}], "text": "prep the demo"}], "collaborators": [{"email": "<user>", "role": "OWNER"}], "created": "2026-10-06T03:10:36.802206Z", "kind": "checklist", "name": "notes/<id>", "text": null, "title": "[mcp-test] checklist 20261006T031031Z", "updated": "2026-10-06T03:10:36.802206Z"}}
+  PASS: S2.2 get_note round-trips three items with their checked state
+  PASS: S2.2 the nested child comes back under children with its checked state
+  PASS: S2.2 shaped output only: no raw Google keys leak
+
+> create_note {"content": {"items": [{"checked": true, "children": [{"checked": false, "text": "book room"}], "text": "prep the demo"}], "kind": "checklist"}, "title": "[mcp-test] bad combo 20261006T031031Z"}
+  -> ok=false error={"category": "input", "code": "invalid_argument", "hint": "Check every child of that item too, or leave the parent item unchecked.", "message": "Keep rejects a checked checklist item with unchecked sub-items: item 'prep the demo' is checked but its sub-item(s) 'book room' are not.", "override": null, "retry_after_seconds": null, "retryable": false}
+  PASS: S2.4 create_note with a checked parent and unchecked child: input/invalid_argument
+  PASS: S2.4 the message names the checked-parent rule
+
+> search_notes {"query": "[mcp-test]"}
+  -> ok=true count=1 truncated=False notes=['[mcp-test] checklist 20261006T031031Z' (notes/<id>)]
+  PASS: S2.4 nothing was created by the rejected request
+
+> search_notes {"query": "[mcp-test]", "updated_after": "2026-10-06T02:10:37Z"}
+  -> ok=true count=1 truncated=False notes=['[mcp-test] checklist 20261006T031031Z' (notes/<id>)]
+  PASS: X1 search_notes(updated_after=1h ago) works and finds the note just created
+  PASS: X1 the API accepted the combined filter in one request
+  combined filter verdict: ACCEPTED by the live API (no fallback)
+
+> search_notes {"state": "trashed"}
+  -> ok=true count=6 truncated=False notes=['[mcp-demo] checklist: all done' (notes/<id>); '[mcp-demo] checklist: nested sub-items' (notes/<id>); '[mcp-demo] checklist: groceries (mixed checked)' (notes/<id>); '[mcp-demo] text: long multiline' (notes/<id>); '[mcp-demo] text: short' (notes/<id>); '' (notes/<id>)]
+  PASS: X2 search_notes(state='trashed') succeeds (count=6)
+
+> search_notes {"state": "any"}
+  -> ok=true count=7 truncated=False notes=['[mcp-test] checklist 20261006T031031Z' (notes/<id>); '[mcp-demo] checklist: all done' (notes/<id>); '[mcp-demo] checklist: nested sub-items' (notes/<id>); '[mcp-demo] checklist: groceries (mixed checked)' (notes/<id>); '[mcp-demo] text: long multiline' (notes/<id>); '[mcp-demo] text: short' (notes/<id>); '' (notes/<id>)]
+  PASS: X3 search_notes(state='any') succeeds and sees the demo notes
+
+> delete_note {"dry_run": false, "name": "notes/<id>"}
+  -> ok=true {"deleted": true, "dry_run": false, "error": null, "managed": true, "name": "notes/<id>", "preview": {"attachment_count": 0, "collaborators": [{"email": "<user>", "role": "OWNER"}], "kind": "checklist", "name": "notes/<id>", "title": "[mcp-test] checklist 20261006T031031Z", "updated": "2026-10-06T03:10:36.802206Z"}, "warnings": []}
+  PASS: S2.3 delete_note (checklist): deleted=true
+
+> get_note {"name": "notes/<id>"}
+  -> ok=false error={"category": "not_found", "code": "note_not_accessible", "hint": "The name does not exist, was deleted, or is not visible to this account; get a fresh name from search_notes.", "message": "The Keep API refused this note. Google never distinguishes 'does not exist' from 'not yours', so this covers a deleted, mistyped, or foreign note.", "override": null, "retry_after_seconds": null, "retryable": false}
+  PASS: X4 get_note on a valid-format but nonexistent name: note_not_accessible
+
+> guard check on the fixture note notes/<id> (never allow_foreign)
+
+> delete_note {"dry_run": false, "name": "notes/<id>"}
+  -> ok=false error={"category": "policy", "code": "managed_notes_only", "hint": "Ask the user to confirm, then delete that single note with allow_foreign=true.", "message": "Safe mode refuses to delete 'notes/<id>' because keep-mcp did not create it. This is an intentional safety guard against deleting a real note by mistake, not a malfunction.", "override": "Pass allow_foreign=true to delete this one foreign note, or start the server with KEEP_SAFE_MODE=false to switch the guard off.", "retry_after_seconds": null, "retryable": false}
+  PASS: X5 delete_note dry_run=false on a foreign [mcp-demo] note: policy/managed_notes_only
+  PASS: X5 the refusal names the allow_foreign override
+  PASS: X5 the refusal says it is an intentional guard, not a malfunction
+
+> get_note {"name": "notes/<id>"}
+  -> ok=true {"error": null, "note": {"attachment_count": 0, "checklist": [{"checked": true, "children": [], "text": "Probe API"}, {"checked": true, "children": [], "text": "Write spec"}], "collaborators": [{"email": "<user>", "role": "OWNER"}], "created": "2026-10-06T01:11:46.845766Z", "kind": "checklist", "name": "notes/<id>", "text": null, "title": "[mcp-demo] checklist: all done", "updated": "2026-10-06T01:11:46.845Z"}}
+  PASS: X5 the [mcp-demo] note still exists after the refusal
+
+> create_note {"content": {"kind": "text", "text": "share target"}, "title": "[mcp-test] share 20261006T031031Z"}
+  -> ok=true {"created": "2026-10-06T03:10:39.753210Z", "error": null, "kind": "text", "managed": true, "name": "notes/<id>", "title": "[mcp-test] share 20261006T031031Z"}
+  PASS: S3.1 create_note (share target): ok=true
+  (unknown recipient is a fabricated address this script invents; like every email it prints as <user>)
+
+> share_note {"emails": ["<user>"], "name": "notes/<id>"}
+  -> ok=false error={"category": "input", "code": "unknown_recipient", "hint": "Check the address for typos, or share the note from the Keep web UI instead.", "message": "The Keep API rejected the share target '<user>': no Google account with that address can receive this note.", "override": null, "retry_after_seconds": null, "retryable": false}
+  PASS: S3.2 share_note with an unknown recipient: input/unknown_recipient
+  PASS: S3.2 the error names the offending address
+
+> get_note {"name": "notes/<id>"}
+  -> ok=true {"error": null, "note": {"attachment_count": 0, "checklist": null, "collaborators": [{"email": "<user>", "role": "OWNER"}], "created": "2026-10-06T03:10:39.753210Z", "kind": "text", "name": "notes/<id>", "text": "share target", "title": "[mcp-test] share 20261006T031031Z", "updated": "2026-10-06T03:10:39.753210Z"}}
+  PASS: S3.3 nothing was shared: get_note still shows only the owner
+  KEEP_SMOKE_SHARE_EMAIL is not set: the real share is skipped (S3 optional)
+
+> delete_note {"dry_run": false, "name": "notes/<id>"}
+  -> ok=true {"deleted": true, "dry_run": false, "error": null, "managed": true, "name": "notes/<id>", "preview": {"attachment_count": 0, "collaborators": [{"email": "<user>", "role": "OWNER"}], "kind": "text", "name": "notes/<id>", "title": "[mcp-test] share 20261006T031031Z", "updated": "2026-10-06T03:10:39.753210Z"}, "warnings": []}
+  PASS: S3.5 delete_note (share target): deleted=true
+
+== cleanup ==
+
+> search_notes {"query": "[mcp-test]", "state": "any"}
+  -> ok=true count=0 truncated=False notes=[]
+
+> search_notes {"query": "[mcp-test]", "state": "any"}
+  -> ok=true count=0 truncated=False notes=[]
+  PASS: cleanup: no [mcp-test] note remains (any trash state)
+
+> search_notes {"query": "[mcp-demo]", "state": "any"}
+  -> ok=true count=5 truncated=False notes=['[mcp-demo] checklist: all done' (notes/<id>); '[mcp-demo] checklist: nested sub-items' (notes/<id>); '[mcp-demo] checklist: groceries (mixed checked)' (notes/<id>); '[mcp-demo] text: long multiline' (notes/<id>); '[mcp-demo] text: short' (notes/<id>)]
+  PASS: cleanup: exactly the 5 [mcp-demo] fixture notes remain (same names as the baseline)
+
+> search_notes {"max_results": 200, "state": "any"}
+  -> ok=true count=6 truncated=False notes=['[mcp-demo] checklist: all done' (notes/<id>); '[mcp-demo] checklist: nested sub-items' (notes/<id>); '[mcp-demo] checklist: groceries (mixed checked)' (notes/<id>); '[mcp-demo] text: long multiline' (notes/<id>); '[mcp-demo] text: short' (notes/<id>); '' (notes/<id>)]
+  PASS: cleanup: the account is byte-for-byte the set of notes it started with (before=6, after=6)
+
+> search_notes {"state": "active"}
+  -> ok=true count=0 truncated=False notes=[]
+  final account state: 0 active note(s), 6 in total (active + trashed)
+
+== server log (stderr, scrubbed: the protocol trace) ==
+  [10/06/26 03:10:32] INFO     Starting MCP server 'keep' with    transport.py:242
+                               transport 'stdio'                                  
+  INFO httpx: HTTP Request: GET https://openidconnect.googleapis.com/v1/userinfo "HTTP/1.1 200 OK"
+  INFO httpx: HTTP Request: POST https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/<user>:signJwt "HTTP/1.1 200 OK"
+  INFO httpx: HTTP Request: POST https://oauth2.googleapis.com/token "HTTP/1.1 200 OK"
+  INFO httpx: HTTP Request: GET https://keep.googleapis.com/v1/notes?pageSize=100 "HTTP/1.1 200 OK"
+  INFO httpx: HTTP Request: GET https://keep.googleapis.com/v1/notes?pageSize=100&filter=trashed "HTTP/1.1 200 OK"
+  INFO httpx: HTTP Request: GET https://keep.googleapis.com/v1/notes?pageSize=100&filter=-trashed "HTTP/1.1 200 OK"
+  INFO httpx: HTTP Request: GET https://keep.googleapis.com/v1/notes?pageSize=100 "HTTP/1.1 200 OK"
+  INFO httpx: HTTP Request: GET https://keep.googleapis.com/v1/notes?pageSize=100&filter=trashed "HTTP/1.1 200 OK"
+  INFO httpx: HTTP Request: POST https://keep.googleapis.com/v1/notes "HTTP/1.1 200 OK"
+  INFO httpx: HTTP Request: GET https://keep.googleapis.com/v1/notes?pageSize=100&filter=-trashed "HTTP/1.1 200 OK"
+  INFO httpx: HTTP Request: GET https://keep.googleapis.com/v1/notes/<id> "HTTP/1.1 200 OK"
+  INFO httpx: HTTP Request: GET https://keep.googleapis.com/v1/notes/<id> "HTTP/1.1 200 OK"
+  INFO httpx: HTTP Request: GET https://keep.googleapis.com/v1/notes/<id> "HTTP/1.1 200 OK"
+  INFO httpx: HTTP Request: GET https://keep.googleapis.com/v1/notes/<id> "HTTP/1.1 200 OK"
+  INFO httpx: HTTP Request: DELETE https://keep.googleapis.com/v1/notes/<id> "HTTP/1.1 200 OK"
+  INFO httpx: HTTP Request: GET https://keep.googleapis.com/v1/notes/<id> "HTTP/1.1 403 Forbidden"
+  INFO httpx: HTTP Request: POST https://keep.googleapis.com/v1/notes "HTTP/1.1 200 OK"
+  INFO httpx: HTTP Request: GET https://keep.googleapis.com/v1/notes/<id> "HTTP/1.1 200 OK"
+  INFO httpx: HTTP Request: GET https://keep.googleapis.com/v1/notes?pageSize=100&filter=-trashed "HTTP/1.1 200 OK"
+  INFO httpx: HTTP Request: GET https://keep.googleapis.com/v1/notes?pageSize=100&filter=update_time+%3E+%222026-10-06T02%3A10%3A37Z%22+AND+-trashed "HTTP/1.1 200 OK"
+  INFO httpx: HTTP Request: GET https://keep.googleapis.com/v1/notes?pageSize=100&filter=trashed "HTTP/1.1 200 OK"
+  INFO httpx: HTTP Request: GET https://keep.googleapis.com/v1/notes?pageSize=100 "HTTP/1.1 200 OK"
+  INFO httpx: HTTP Request: GET https://keep.googleapis.com/v1/notes?pageSize=100&filter=trashed "HTTP/1.1 200 OK"
+  INFO httpx: HTTP Request: GET https://keep.googleapis.com/v1/notes/<id> "HTTP/1.1 200 OK"
+  INFO httpx: HTTP Request: DELETE https://keep.googleapis.com/v1/notes/<id> "HTTP/1.1 200 OK"
+  INFO httpx: HTTP Request: GET https://keep.googleapis.com/v1/notes/<id> "HTTP/1.1 403 Forbidden"
+  INFO httpx: HTTP Request: GET https://keep.googleapis.com/v1/notes/<id> "HTTP/1.1 200 OK"
+  INFO httpx: HTTP Request: GET https://keep.googleapis.com/v1/notes/<id> "HTTP/1.1 200 OK"
+  INFO httpx: HTTP Request: POST https://keep.googleapis.com/v1/notes "HTTP/1.1 200 OK"
+  INFO httpx: HTTP Request: GET https://keep.googleapis.com/v1/notes/<id> "HTTP/1.1 200 OK"
+  INFO httpx: HTTP Request: POST https://keep.googleapis.com/v1/notes/<id>:batchCreate "HTTP/1.1 400 Bad Request"
+  INFO httpx: HTTP Request: GET https://keep.googleapis.com/v1/notes/<id> "HTTP/1.1 200 OK"
+  INFO httpx: HTTP Request: GET https://keep.googleapis.com/v1/notes/<id> "HTTP/1.1 200 OK"
+  INFO httpx: HTTP Request: DELETE https://keep.googleapis.com/v1/notes/<id> "HTTP/1.1 200 OK"
+  INFO httpx: HTTP Request: GET https://keep.googleapis.com/v1/notes?pageSize=100 "HTTP/1.1 200 OK"
+  INFO httpx: HTTP Request: GET https://keep.googleapis.com/v1/notes?pageSize=100&filter=trashed "HTTP/1.1 200 OK"
+  INFO httpx: HTTP Request: GET https://keep.googleapis.com/v1/notes?pageSize=100 "HTTP/1.1 200 OK"
+  INFO httpx: HTTP Request: GET https://keep.googleapis.com/v1/notes?pageSize=100&filter=trashed "HTTP/1.1 200 OK"
+  INFO httpx: HTTP Request: GET https://keep.googleapis.com/v1/notes?pageSize=100 "HTTP/1.1 200 OK"
+  INFO httpx: HTTP Request: GET https://keep.googleapis.com/v1/notes?pageSize=100&filter=trashed "HTTP/1.1 200 OK"
+  INFO httpx: HTTP Request: GET https://keep.googleapis.com/v1/notes?pageSize=100 "HTTP/1.1 200 OK"
+  INFO httpx: HTTP Request: GET https://keep.googleapis.com/v1/notes?pageSize=100&filter=trashed "HTTP/1.1 200 OK"
+  INFO httpx: HTTP Request: GET https://keep.googleapis.com/v1/notes?pageSize=100&filter=-trashed "HTTP/1.1 200 OK"
+
+== summary ==
+checks: 37/37 passed
+combined filter (update_time > "..." AND -trashed): ACCEPTED by the live API (no fallback)
+LIVE SMOKE GREEN: S1, S2, S3 (unknown recipient), and the live-only checks all passed
