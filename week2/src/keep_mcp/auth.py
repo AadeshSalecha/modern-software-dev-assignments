@@ -123,8 +123,17 @@ class _CallbackHandler(BaseHTTPRequestHandler):
     """Captures the one OAuth redirect that matters."""
 
     def do_GET(self) -> None:  # noqa: N802 - http.server API
-        params = {key: values[0] for key, values in parse_qs(urlparse(self.path).query).items()}
-        self.server.captured = params  # type: ignore[attr-defined]
+        parsed = urlparse(self.path)
+        params = {key: values[0] for key, values in parse_qs(parsed.query).items()}
+        # Browsers fetch /favicon.ico and port forwarders probe new ports; only the
+        # real redirect may end the wait, or the code arriving later is lost.
+        if parsed.path != "/callback" or not ("code" in params or "error" in params):
+            self.send_response(404)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+        if self.server.captured is None:  # type: ignore[attr-defined]
+            self.server.captured = params  # type: ignore[attr-defined]
         body = (
             b"<html><body style='font-family:sans-serif'>"
             b"<h3>keep-mcp: login complete.</h3>"

@@ -1,9 +1,13 @@
 # Week 2 Write-up
 
+## Demo Video:
+
+https://drive.google.com/file/d/1j5yB5KJtd3CDtFjm91VLH4KsEMAvHLWX/view?usp=sharing
+
 ## Part I: The Server
 
 **API chosen**, and why:
-> The official Google Keep API (`keep.googleapis.com/v1`): Keep is the notes service I use, and the supported API exposes real text/checklist notes, collaborators, and deletes. I use the official API rather than scraping the web UI. The server wraps five composable operations: search, get, create, share, and delete.
+> The official Google Keep API (`keep.googleapis.com/v1`): There's no official Google MCP server, and GKeep is the notes service I use, and the supported API exposes real text/checklist notes, collaborators, and deletes. I use the official API rather than scraping the web UI (like other MCP implementations
 
 **How to run it** (one command):
 ```bash
@@ -30,15 +34,15 @@ One-time interactive sign-in before starting the server: `cd week2 && uv run kee
 | Brake on the write tool | `src/keep_mcp/tools.py:429-480`; `src/keep_mcp/server.py:46-51,68-73` | `dry_run=true` previews by default; permanent commit requires an explicit confirmation in a later user turn. Safe mode also refuses to commit deletes for notes the server did not create. |
 
 **One thing changed after watching the agent misuse a tool:**
-> The first G3 run previewed then immediately called `delete_note(dry_run=false)`; an intermediate retry supplied a reconstructed name that returned `note_not_accessible`. The first G4 run searched an explicit resource ID as text and stopped. I strengthened delete instructions to require a later confirmation and exact names, clarified that explicit IDs go straight to `get_note` and must not be retried, and documented substring/plural behavior after `grocery` returned no hits. Protocol tests now assert this guidance. Afterward G3 previewed and asked, committing only after “Yes, delete it”; G4 returned `note_not_accessible` without retry; G1 tried `groceries`, chained to `get_note`, and answered “oat milk and bananas.”
+> One of my first tests showed me that  `delete_note(dry_run=false)` ran without any confirmation; an intermediate retry supplied a reconstructed name that returned `note_not_accessible`. It then searched an explicit resource ID as text and stopped. So, I changed the prompting to strengthen delete instructions to require a confirmation and also note exact names. I also prompted to clarify that explicit IDs go straight to `get_note` and must not be retried, and documented substring/plural behavior after `grocery` returned no hits.
 
 ## Part III: OAuth
 
 **Flow**: how a token is obtained, cached, and refreshed:
-> `uv run keep-mcp login` runs authorization-code OAuth with PKCE, a local callback, state validation, and offline access (`src/keep_mcp/auth.py:431-443,445-489,491-530`). The refresh token is cached at `~/.local/state/keep-mcp/token.json` with mode 0600. Tool calls silently refresh the user token as needed, resolve the verified email from userinfo, use that user token to call IAM `signJwt` on the configured service account, exchange the signed delegation assertion for a Keep token, and cache the Keep token in memory until 60 seconds before expiry (`src/keep_mcp/auth.py:259-270,279-321,326-426`). No service-account key is stored or created.
+> `uv run keep-mcp login` runs authorization-code OAuth with PKCE, a local callback, state validation, and offline access (`src/keep_mcp/auth.py:440-452,454-498,500-539`). The refresh token is cached at `~/.local/state/keep-mcp/token.json` (with mode 0600). Tool calls silently refresh the user token as needed, resolve the verified email from userinfo, use that user token to call IAM `signJwt` on the configured service account, exchange the signed delegation assertion for a Keep token, and cache the Keep token in memory until 60 seconds before expiry (`src/keep_mcp/auth.py:268-279,288-330,335-435`). No service-account key is stored or created.
 
 **Scopes requested**, and why each is necessary:
-> The user consent screen requests only `openid`, `email`, and `https://www.googleapis.com/auth/iam` (`src/keep_mcp/auth.py:63-66`). `openid` requests the OpenID Connect identity; `email` provides the verified account address that becomes the delegation subject (`auth.py:326-368`). `iam` lets that same user's token call `signJwt` on the service account (the user has Token Creator; `auth.py:370-405`). Google refuses Keep scopes on the consent screen with `400 invalid_scope` (issue tracker 210500028), so `https://www.googleapis.com/auth/keep` is **not** requested from the user. Instead, an administrator grants exactly that Keep scope to the service account through domain-wide delegation; the signed JWT carries it (`auth.py:61,370-381`). The user credential cannot read Keep by itself, and DWD is only exercised using that authenticated user's token. This hybrid is also necessary because the organization blocks service-account key creation.
+> The user consent screen requests only `openid`, `email`, and `https://www.googleapis.com/auth/iam` (`src/keep_mcp/auth.py:63-66`). `openid` requests the OpenID Connect identity; `email` provides the verified account address that becomes the delegation subject (`auth.py:335-377`). `iam` lets that same user's token call `signJwt` on the service account (the user has Token Creator; `auth.py:379-414`). Google refuses Keep scopes on the consent screen with `400 invalid_scope` (issue tracker 210500028), so `https://www.googleapis.com/auth/keep` is **not** requested from the user. Instead, an administrator grants exactly that Keep scope to the service account through domain-wide delegation; the signed JWT carries it (`auth.py:61,379-390`). The user credential cannot read Keep by itself, and DWD is only exercised using that authenticated user's token. This hybrid is also necessary because the organization blocks service-account key creation.
 
 **Secrets**: what's in env, what's gitignored:
 > `KEEP_OAUTH_CLIENT_FILE` points to the downloaded Desktop client JSON (default `~/.config/keep-mcp/client_secret.json`); `KEEP_TOKEN_FILE` points to the 0600 cached token outside the repo. The optional `.env` holds only local configuration/paths and is ignored. The real `.mcp.json` and `.factory/mcp.json` are ignored; `.mcp.json.example` contains the stdio command and non-secret configuration. `.gitignore` excludes `.env*` (except the example), `.mcp.json*` (except the example), client-secret/credential JSON, token files, `.factory/mcp.json`, and `.venv` (`.gitignore:1-25`). No token, client secret, or service-account key belongs in the repository.

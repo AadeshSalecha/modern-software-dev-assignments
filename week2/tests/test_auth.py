@@ -14,6 +14,7 @@ import os
 import re
 import stat
 import subprocess
+import threading
 import time
 import webbrowser
 from base64 import urlsafe_b64encode
@@ -436,6 +437,33 @@ async def test_login_without_a_refresh_token_explains_what_to_do(tmp_path: Path,
     assert not config.token_file.exists()
 
 
+def test_login_ignores_stray_requests_before_the_redirect(tmp_path: Path) -> None:
+    import urllib.error
+    import urllib.request
+
+    config = make_config(tmp_path)
+
+    def browser(url: str) -> bool:
+        redirect = parse_qs(urlparse(url).query)["redirect_uri"][0]
+        state = parse_qs(urlparse(url).query)["state"][0]
+        base = redirect.rsplit("/", 1)[0]
+
+        def hit() -> None:
+            for stray in (f"{base}/", f"{base}/favicon.ico", redirect):
+                try:
+                    urllib.request.urlopen(stray, timeout=2)
+                except urllib.error.HTTPError as exc:
+                    assert exc.code == 404
+            urllib.request.urlopen(f"{redirect}?code=real-code&state={state}", timeout=2)
+
+        threading.Thread(target=hit, daemon=True).start()
+        return True
+
+    auth = KeepAuth(config, open_browser=browser)
+    code, _ = auth._await_callback(state="s123", challenge="c", timeout_seconds=5)
+    assert code == "real-code"
+
+
 async def test_login_state_mismatch_is_refused(tmp_path: Path) -> None:
     config = make_config(tmp_path)
     auth = KeepAuth(config, open_browser=lambda url: True)
@@ -447,7 +475,6 @@ async def test_login_state_mismatch_is_refused(tmp_path: Path) -> None:
 # A10: secrets audit
 # --------------------------------------------------------------------------- #
 SECRET_NAME = re.compile(r"^(\.env|\.env\..*|\.mcp\.json|client_secret.*|tokens?\.json|.*\.token\.json)$")
-IGNORED_DIRS = {".venv", ".git", "__pycache__", ".pytest_cache", "node_modules", ".ruff_cache"}
 # split so this very test file does not contain the literal it scans for
 GOOGLE_CLIENT_SECRET_PREFIX = "GOCSPX" + "-"
 
@@ -461,13 +488,25 @@ def _is_secret_path(relative: str) -> bool:
     return relative.startswith("secrets/") or "/secrets/" in f"/{relative}"
 
 
-def _week2_files() -> list[Path]:
+def _tracked_week2_files() -> list[Path]:
     week2 = Path(__file__).resolve().parents[1]
-    return [
-        path
-        for path in week2.rglob("*")
-        if path.is_file() and not any(part in IGNORED_DIRS for part in path.relative_to(week2).parts)
-    ]
+    repo_root = Path(
+        subprocess.run(
+            ["git", "-C", str(week2), "rev-parse", "--show-toplevel"],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=30,
+        ).stdout.strip()
+    )
+    tracked = subprocess.run(
+        ["git", "-C", str(repo_root), "ls-files", "--", "week2"],
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=30,
+    )
+    return [repo_root / line for line in tracked.stdout.splitlines()]
 
 
 def test_a10_no_secrets_in_the_tree_and_gitignore_covers_them() -> None:
@@ -477,27 +516,18 @@ def test_a10_no_secrets_in_the_tree_and_gitignore_covers_them() -> None:
     for pattern in (".env", ".mcp.json", ".venv", "client_secret", "token.json"):
         assert pattern in gitignore, f".gitignore must cover {pattern!r}"
 
+    tracked_files = _tracked_week2_files()
     present = sorted(
-        str(path.relative_to(week2)) for path in _week2_files() if _is_secret_path(str(path.relative_to(week2)))
+        str(path.relative_to(week2)) for path in tracked_files if _is_secret_path(str(path.relative_to(week2)))
     )
     assert present == [], f"secret-shaped files are present in week2: {present}"
 
-    for path in _week2_files():
+    for path in tracked_files:
         if path.suffix in {".json", ".md", ".py", ".example", ".toml"} or path.name.startswith(".env"):
             text = path.read_text(encoding="utf-8", errors="ignore")
             assert GOOGLE_CLIENT_SECRET_PREFIX not in text, (
                 f"a real Google client secret prefix appears in {path}"
             )
-
-    tracked = subprocess.run(
-        ["git", "-C", str(week2), "ls-files", "--", "week2"],
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
-    if tracked.returncode == 0:
-        offenders = [line for line in tracked.stdout.split() if _is_secret_path(line[len("week2/") :])]
-        assert offenders == [], f"git tracks secret-shaped files: {offenders}"
 
     assert (week2 / ".env.example").exists()
     assert (week2 / ".mcp.json.example").exists()
