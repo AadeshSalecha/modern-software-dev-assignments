@@ -1,0 +1,15 @@
+{
+  "skill_name": "hyfin-drive-organizer",
+  "iteration": 1,
+  "human_feedback_from_manual_runs": [
+    {"source": "Aadesh, approval widget in earlier manual runs", "note": "I liked the per-file Approve / Recategorize / Skip table, but I clicked buttons and thought nothing happened, because only Submit sends decisions.", "action_taken": "Large green Submit button in a sticky bar, the line 'Nothing moves until you click Submit', and a live tally of decisions."},
+    {"source": "Aadesh, first version of the skill", "note": "The proposals reshuffled shared-drive folders that teammates reach through folder-level shares. Bad.", "action_taken": "Scope rule: only My Drive files the runner owns; never anything inside a shared drive."},
+    {"source": "Aadesh, shared-drive reorganization run", "note": "A .docx lost its two outside collaborators when it moved between folders inside the shared drive.", "action_taken": "Gotcha plus a mechanical before/after permissions snapshot and diff for externally shared files."}
+  ],
+  "review_notes_on_this_iteration": [
+    {"reviewer": "agent review, pending Aadesh's own read", "eval": "report-only / sensitive-file", "note": "The no-skill baseline pointed out that 00-Needs-Review is inside the shared drive, so moving an offer letter there exposes it to every drive member. The skill already defaults sensitive rows to Skip, but the control said only 'Move to Needs Review'.", "action_taken": "The sensitive-row control now reads 'Move to Needs Review (whole team can see it)', the text report adds 'stays private unless you choose to move it', and references/sensitivity.md explains why Skip is the default."},
+    {"reviewer": "agent review, pending Aadesh's own read", "eval": "report-only", "note": "The approval report said '1 proposed moves' and 'Proposing 1 moves'.", "action_taken": "Fixed the plurals in the template and in build_report.py."},
+    {"reviewer": "agent review, pending Aadesh's own read", "eval": "test-file-move", "note": "The lean skill's execute summary listed every shared-drive member by name when it reported sharing after the move. Accurate, but noisy, and it spreads names around.", "action_taken": "None yet. Candidate change: report sharing differences as counts and roles, not names."},
+    {"reviewer": "agent review, pending Aadesh's own read", "eval": "all", "note": "The GAIA test file title also matched the AI-Native-Org cue ('skills documentation'). Both skill versions chose 03-GAIA at medium confidence and named the alternative in the reason, which is the behaviour I want."}
+  ]
+}

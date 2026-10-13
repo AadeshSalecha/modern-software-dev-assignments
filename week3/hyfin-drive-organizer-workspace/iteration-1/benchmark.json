@@ -1,0 +1,59 @@
+{
+ "configs": {
+  "with_skill": {
+   "passed": 23,
+   "graded": 23,
+   "disc_passed": 7,
+   "disc_graded": 7,
+   "pass_rate": 1.0,
+   "discriminating_pass_rate": 1.0,
+   "report_only_seconds": 69.9,
+   "report_only_tokens": 711950,
+   "report_only_tool_calls": 15,
+   "execute_seconds": 50.8,
+   "execute_tokens": 404399,
+   "execute_tool_calls": 11
+  },
+  "old_skill": {
+   "passed": 19,
+   "graded": 20,
+   "disc_passed": 6,
+   "disc_graded": 7,
+   "pass_rate": 0.95,
+   "discriminating_pass_rate": 0.857,
+   "report_only_seconds": 51.2,
+   "report_only_tokens": 442636,
+   "report_only_tool_calls": 10,
+   "execute_seconds": 41.6,
+   "execute_tokens": 298254,
+   "execute_tool_calls": 5
+  },
+  "without_skill": {
+   "passed": 13,
+   "graded": 20,
+   "disc_passed": 0,
+   "disc_graded": 7,
+   "pass_rate": 0.65,
+   "discriminating_pass_rate": 0.0,
+   "report_only_seconds": 68.6,
+   "report_only_tokens": 467773,
+   "report_only_tool_calls": 17,
+   "execute_seconds": 26.5,
+   "execute_tokens": 146659,
+   "execute_tool_calls": 4
+  }
+ },
+ "notes": [
+  "One run per config per eval (n=1), so no variance estimate. Treat the differences as qualitative.",
+  "Tokens are total processed tokens from the subagent transcript, cache reads included, so they mostly track how many turns a run took.",
+  "test-file-move: only the lean skill executed the real move; old_skill and without_skill ran the same decision as a dry run, because the brief allows a single real move of one test file. N/A rows are excluded from pass rates.",
+  "'discriminating' marks assertions whose verdicts differ between configs. Non-discriminating ones are kept as safety regression checks rather than removed, and the discriminating pass rate is reported separately.",
+  "The lean report-only run took longer and processed more tokens than old_skill because it read two reference files and ran build_report.py (15 tool calls vs 10)."
+ ],
+ "skill_md_size": {
+  "old_skill_chars": 33364,
+  "lean_skill_md_chars": 12888,
+  "lean_references_chars": 15558,
+  "estimate": "tokens ~ chars/4: old ~8.3k loaded on every trigger; lean ~3.2k on trigger, plus ~0.5-1k per reference read when needed"
+ }
+}

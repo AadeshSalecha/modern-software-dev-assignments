@@ -1,0 +1,7 @@
+{
+ "phase": "report-only",
+ "seconds": 69.9,
+ "total_tokens_incl_cache_reads": 711950,
+ "tool_calls": 15,
+ "note": "sensitive-file and no-hyfin-signal are graded on the report-only run, so they share its timing"
+}

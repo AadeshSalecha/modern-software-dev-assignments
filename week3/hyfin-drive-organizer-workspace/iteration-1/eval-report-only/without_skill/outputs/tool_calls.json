@@ -1,0 +1,127 @@
+[
+ {
+  "name": "ToolSearch",
+  "input": {
+   "query": "select:mcp__Google_Drive__search_files,mcp__Google_Drive__get_file_metadata,mcp__Google_Drive__get_file_permissions,mcp__Google_Drive__list_recent_files",
+   "max_results": 4
+  }
+ },
+ {
+  "name": "mcp__Google_Drive__search_files",
+  "input": {
+   "query": "title contains 'Hyfin' and mimeType = 'application/vnd.google-apps.folder'",
+   "excludeContentSnippets": true,
+   "pageSize": 50
+  }
+ },
+ {
+  "name": "mcp__Google_Drive__search_files",
+  "input": {
+   "query": "owner = 'me' and parentId = 'root'",
+   "excludeContentSnippets": true,
+   "pageSize": 100
+  }
+ },
+ {
+  "name": "mcp__Google_Drive__search_files",
+  "input": {
+   "query": "owner = 'me'",
+   "excludeContentSnippets": true,
+   "pageSize": 100
+  }
+ },
+ {
+  "name": "mcp__Google_Drive__search_files",
+  "input": {
+   "query": "parentId = '<drive id>'",
+   "excludeContentSnippets": true,
+   "pageSize": 100
+  }
+ },
+ {
+  "name": "mcp__Google_Drive__get_file_metadata",
+  "input": {
+   "fileId": "<drive id>",
+   "excludeContentSnippets": true
+  }
+ },
+ {
+  "name": "mcp__Google_Drive__search_files",
+  "input": {
+   "query": "mimeType = 'application/vnd.google-apps.folder' and (title contains 'Guarantee' or title contains 'Fund' or title contains 'GAIA' or title contains 'Team' or title contains 'Org' or title contains 'BUS' or title contains 'Dhamana')",
+   "excludeContentSnippets": true,
+   "pageSize": 100
+  }
+ },
+ {
+  "name": "mcp__Google_Drive__search_files",
+  "input": {
+   "query": "parentId = '<drive id>'",
+   "excludeContentSnippets": true,
+   "pageSize": 100
+  }
+ },
+ {
+  "name": "mcp__Google_Drive__search_files",
+  "input": {
+   "query": "parentId = '<shared_drive_root id>'",
+   "excludeContentSnippets": true,
+   "pageSize": 100
+  }
+ },
+ {
+  "name": "mcp__Google_Drive__get_file_metadata",
+  "input": {
+   "fileId": "<shared_drive_root id>",
+   "excludeContentSnippets": true
+  }
+ },
+ {
+  "name": "mcp__Google_Drive__search_files",
+  "input": {
+   "query": "parentId = '<drive id>'",
+   "excludeContentSnippets": true,
+   "pageSize": 100
+  }
+ },
+ {
+  "name": "mcp__Google_Drive__search_files",
+  "input": {
+   "query": "parentId = '<drive id>' or parentId = '<03-GAIA id>' or parentId = '<drive id>' or parentId = '<drive id>' or parentId = '<drive id>' or parentId = '<00-Needs-Review id>'",
+   "excludeContentSnippets": true,
+   "pageSize": 100
+  }
+ },
+ {
+  "name": "mcp__Google_Drive__search_files",
+  "input": {
+   "query": "owner = 'me' and mimeType = 'application/vnd.google-apps.folder'",
+   "excludeContentSnippets": true,
+   "pageSize": 100
+  }
+ },
+ {
+  "name": "mcp__Google_Drive__get_file_permissions",
+  "input": {
+   "fileId": "<test_gaia id>"
+  }
+ },
+ {
+  "name": "mcp__Google_Drive__get_file_permissions",
+  "input": {
+   "fileId": "<test_offer id>"
+  }
+ },
+ {
+  "name": "mcp__Google_Drive__get_file_permissions",
+  "input": {
+   "fileId": "<drive id>"
+  }
+ },
+ {
+  "name": "mcp__Google_Drive__get_file_permissions",
+  "input": {
+   "fileId": "<test_grocery id>"
+  }
+ }
+]

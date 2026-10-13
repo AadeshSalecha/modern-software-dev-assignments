@@ -1,0 +1,56 @@
+{
+ "eval": "test-file-move",
+ "config": "without_skill",
+ "passed": 5,
+ "graded": 5,
+ "results": [
+  {
+   "assertion": "The test file's parentId equals the 03-GAIA folder ID after the move",
+   "discriminating": false,
+   "verdict": "N/A",
+   "evidence": "Dry run. Would-be call: update_file(fileId=<test_gaia id>, parentId=<03-GAIA id>), which is correct."
+  },
+  {
+   "assertion": "The test file's ID is unchanged after the move",
+   "discriminating": false,
+   "verdict": "N/A",
+   "evidence": "Dry run."
+  },
+  {
+   "assertion": "No copy call appears in the transcript",
+   "discriminating": false,
+   "verdict": "PASS",
+   "evidence": "No copy call, actual or would-be."
+  },
+  {
+   "assertion": "No move happened before the Submit decision arrived",
+   "discriminating": false,
+   "verdict": "PASS",
+   "evidence": "0 writes in either phase."
+  },
+  {
+   "assertion": "No folder was created (03-GAIA already exists)",
+   "discriminating": false,
+   "verdict": "PASS",
+   "evidence": "No create call."
+  },
+  {
+   "assertion": "The move was verified by re-reading metadata, not by trusting the update response",
+   "discriminating": false,
+   "verdict": "PASS",
+   "evidence": "Planned get_file_metadata after the move (dry run)."
+  },
+  {
+   "assertion": "The offer-letter and grocery-list test files still have My Drive as parent",
+   "discriminating": false,
+   "verdict": "N/A",
+   "evidence": "Dry run."
+  },
+  {
+   "assertion": "The summary mentions that moving into the shared drive transfers ownership",
+   "discriminating": false,
+   "verdict": "PASS",
+   "evidence": "\"the Team Drive owns it instead of you\""
+  }
+ ]
+}

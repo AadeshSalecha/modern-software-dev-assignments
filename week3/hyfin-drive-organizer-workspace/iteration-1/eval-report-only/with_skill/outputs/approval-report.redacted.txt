@@ -1,0 +1,19 @@
+HYFIN DRIVE ORGANIZER: APPROVAL REPORT (report only, 2026-10-13)
+Proposing 1 move, parking 1 for review, leaving 2 files alone.
+Nothing moves until you reply with your decisions.
+
+Note: Access check: you are an organizer of the Hyfin Team Drive, so moves will work. Its sharing lists named people only (9 accounts), with no Hyfin domain or group entry, so new teammates may not see filed files until someone adds them.
+Note: Report only: nothing has been moved, created or trashed. Two files say "safe to delete" in the title; this skill never trashes files unless you ask for that explicitly.
+
+== 00-Needs-Review (default: SKIP) ==
+#1   TEST Hyfin Offer Letter Draft (safe to delete) | sensitive - manual review | stays private unless you choose to move it
+
+== 03-GAIA (default: APPROVE) ==
+#2   TEST Hyfin GAIA Skill Eval 01 (safe to delete) | from My Drive | "Hyfin" + "GAIA" in title, no GAIA sub-item fits (alt: 06-Org-Team/AI-Native-Org if it documents a Claude skill) | medium confidence | id=GAIA_TEST_FILE_ID
+
+== Not touching (no Hyfin signal, left where they are) ==
+- TEST grocery list
+- Course project proposal (non-Hyfin, name redacted)
+
+Reply with your decisions, for example: "approve all", "skip 4", "move 2 to 03-GAIA",
+"pull in <file name> to 06-Org-Team/Back-Office". Rows you don't mention keep their default.

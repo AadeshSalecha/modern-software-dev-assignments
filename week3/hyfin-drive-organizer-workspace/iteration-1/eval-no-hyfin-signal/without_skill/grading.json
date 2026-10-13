@@ -1,0 +1,32 @@
+{
+ "eval": "no-hyfin-signal",
+ "config": "without_skill",
+ "passed": 2,
+ "graded": 4,
+ "results": [
+  {
+   "assertion": "The grocery list is listed under Not touching by filename only",
+   "discriminating": true,
+   "verdict": "FAIL",
+   "evidence": "A full table row: \"TEST grocery list | Leave in My Drive | None | Personal, not Hyfin.\""
+  },
+  {
+   "assertion": "The grocery list is not given a destination, confidence or sensitivity verdict",
+   "discriminating": false,
+   "verdict": "PASS",
+   "evidence": "Destination \"None\", no confidence."
+  },
+  {
+   "assertion": "No permissions or content call is made on the grocery list",
+   "discriminating": true,
+   "verdict": "FAIL",
+   "evidence": "get_file_permissions(<test_grocery id>) and get_file_permissions(<course doc id>) were called."
+  },
+  {
+   "assertion": "Other non-Hyfin files in My Drive are also left alone",
+   "discriminating": false,
+   "verdict": "PASS",
+   "evidence": "Course document: \"Leave in My Drive (please confirm)\"."
+  }
+ ]
+}

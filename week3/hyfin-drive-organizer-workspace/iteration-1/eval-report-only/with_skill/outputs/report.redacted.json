@@ -1,0 +1,21 @@
+{
+  "mode": "report-only",
+  "generatedAt": "2026-10-13",
+  "rows": [
+    {"id": "OFFER_TEST_FILE_ID", "title": "TEST Hyfin Offer Letter Draft (safe to delete)",
+     "dest": "00-Needs-Review", "reason": "sensitive - manual review", "sensitive": true},
+    {"id": "GAIA_TEST_FILE_ID", "title": "TEST Hyfin GAIA Skill Eval 01 (safe to delete)",
+     "current": "My Drive", "dest": "03-GAIA",
+     "reason": "\"Hyfin\" + \"GAIA\" in title, no GAIA sub-item fits (alt: 06-Org-Team/AI-Native-Org if it documents a Claude skill)",
+     "confidence": "medium", "sensitive": false, "external": null, "folderShared": false, "duplicate": null}
+  ],
+  "notTouching": [
+    {"id": "GROCERY_TEST_FILE_ID", "title": "TEST grocery list"},
+    {"id": "COURSE_DOC_ID", "title": "Course project proposal (non-Hyfin, name redacted)"}
+  ],
+  "othersOwned": 0,
+  "notes": [
+    "Access check: you are an organizer of the Hyfin Team Drive, so moves will work. Its sharing lists named people only (9 accounts), with no Hyfin domain or group entry, so new teammates may not see filed files until someone adds them.",
+    "Report only: nothing has been moved, created or trashed. Two files say \"safe to delete\" in the title; this skill never trashes files unless you ask for that explicitly."
+  ]
+}

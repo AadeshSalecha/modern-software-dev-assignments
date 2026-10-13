@@ -1,0 +1,395 @@
+{
+  "label": "iteration-1-stress",
+  "model": "claude-opus-5-5",
+  "runs_per_query": 3,
+  "threshold": 0.5,
+  "skill_dir": "/home/user/modern-software-dev-assignments/week3/hyfin-drive-organizer",
+  "description": "(as in SKILL.md)",
+  "summary": {},
+  "results": [
+    {
+      "id": "s01",
+      "split": "stress",
+      "should_trigger": true,
+      "query": "file this in the right Drive folder pls: BRD facility term sheet v2",
+      "trigger_rate": 1.0,
+      "triggered": true,
+      "pass": true,
+      "runs": [
+        {
+          "run": 1,
+          "triggered": true,
+          "skill_called": "hyfin-drive-organizer",
+          "tools": [
+            "Skill {\"skill\": \"hyfin-drive-organizer\", \"args\": \"BRD facility term sheet v2\"}"
+          ],
+          "text": "",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 3.5
+        },
+        {
+          "run": 2,
+          "triggered": true,
+          "skill_called": "hyfin-drive-organizer",
+          "tools": [
+            "Skill {\"skill\": \"hyfin-drive-organizer\", \"args\": \"File this doc into the right Hyfin Team Drive folder: \\\"BRD facility term sh"
+          ],
+          "text": "",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 5.3
+        },
+        {
+          "run": 3,
+          "triggered": true,
+          "skill_called": "hyfin-drive-organizer",
+          "tools": [
+            "Skill {\"skill\": \"hyfin-drive-organizer\", \"args\": \"File \\\"BRD facility term sheet v2\\\" into the right Hyfin Team Drive folder\"}"
+          ],
+          "text": "",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 7.1
+        }
+      ]
+    },
+    {
+      "id": "s02",
+      "split": "stress",
+      "should_trigger": true,
+      "query": "my drive is a mess, half of it is hyfin stuff. help",
+      "trigger_rate": 1.0,
+      "triggered": true,
+      "pass": true,
+      "runs": [
+        {
+          "run": 1,
+          "triggered": true,
+          "skill_called": "hyfin-drive-organizer",
+          "tools": [
+            "Skill {\"skill\": \"hyfin-drive-organizer\"}"
+          ],
+          "text": "",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 3.5
+        },
+        {
+          "run": 2,
+          "triggered": true,
+          "skill_called": "hyfin-drive-organizer",
+          "tools": [
+            "Skill {\"skill\": \"hyfin-drive-organizer\"}"
+          ],
+          "text": "",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 4.2
+        },
+        {
+          "run": 3,
+          "triggered": true,
+          "skill_called": "hyfin-drive-organizer",
+          "tools": [
+            "Skill {\"skill\": \"hyfin-drive-organizer\", \"args\": \"User's My Drive is messy, roughly half is Hyfin work. Propose where each Hyf"
+          ],
+          "text": "",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 6.6
+        }
+      ]
+    },
+    {
+      "id": "s03",
+      "split": "stress",
+      "should_trigger": true,
+      "query": "does the CMRF receivables model belong under funds or guarantees?",
+      "trigger_rate": 1.0,
+      "triggered": true,
+      "pass": true,
+      "runs": [
+        {
+          "run": 1,
+          "triggered": true,
+          "skill_called": "hyfin-drive-organizer",
+          "tools": [
+            "Skill {\"skill\": \"hyfin-drive-organizer\", \"args\": \"Where should the CMRF receivables model live: Funds or Guarantees? (question"
+          ],
+          "text": "",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 3.2
+        },
+        {
+          "run": 2,
+          "triggered": true,
+          "skill_called": "hyfin-drive-organizer",
+          "tools": [
+            "Skill {\"skill\": \"hyfin-drive-organizer\", \"args\": \"Where should the CMRF receivables model live: Funds or Guarantees? (Question"
+          ],
+          "text": "",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 3.4
+        },
+        {
+          "run": 3,
+          "triggered": true,
+          "skill_called": "hyfin-drive-organizer",
+          "tools": [
+            "Skill {\"skill\": \"hyfin-drive-organizer\", \"args\": \"Where should the CMRF receivables model live: Funds or Guarantees? (question"
+          ],
+          "text": "",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 3.9
+        }
+      ]
+    },
+    {
+      "id": "s04",
+      "split": "stress",
+      "should_trigger": true,
+      "query": "anything new in my drive this week that should be in the team drive?",
+      "trigger_rate": 1.0,
+      "triggered": true,
+      "pass": true,
+      "runs": [
+        {
+          "run": 1,
+          "triggered": true,
+          "skill_called": "hyfin-drive-organizer",
+          "tools": [
+            "Skill {\"skill\": \"hyfin-drive-organizer\", \"args\": \"Preview only: find files created or modified this week (since 2026-10-06) in"
+          ],
+          "text": "",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 4.9
+        },
+        {
+          "run": 2,
+          "triggered": true,
+          "skill_called": "hyfin-drive-organizer",
+          "tools": [
+            "Skill {\"skill\": \"hyfin-drive-organizer\", \"args\": \"Preview only: find files in my personal My Drive created or modified this we"
+          ],
+          "text": "",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 4.1
+        },
+        {
+          "run": 3,
+          "triggered": true,
+          "skill_called": "hyfin-drive-organizer",
+          "tools": [
+            "Skill {\"skill\": \"hyfin-drive-organizer\", \"args\": \"Preview only: find files added or changed in my personal My Drive this week "
+          ],
+          "text": "",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 4.0
+        }
+      ]
+    },
+    {
+      "id": "s05",
+      "split": "stress",
+      "should_trigger": false,
+      "query": "summarize the Tara FI mapping doc in my drive",
+      "trigger_rate": 0.0,
+      "triggered": false,
+      "pass": true,
+      "runs": [
+        {
+          "run": 1,
+          "triggered": false,
+          "skill_called": null,
+          "tools": [],
+          "text": "I can't get to your Google Drive from this session. No Drive or Docs connector is connected here, so I have no way to search for or open the Tara FI mapping doc.\n\nHere are two ways to get your summary:\n\n- **Paste the content here**, or export the doc (File \u2192 Download \u2192 .docx, PDF or Markdown) and drop the file into this working directory. I'll read it and summarize it.\n- **Connect the Google Drive",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 5.7
+        },
+        {
+          "run": 2,
+          "triggered": false,
+          "skill_called": null,
+          "tools": [],
+          "text": "I can't get into your Google Drive from this session because there's no Drive or Docs connector here. The only tools I have are local shell, web fetch and web search, and none of them can read files in your Drive.\n\nHere's how to get the summary:\n\n1. **Paste the text** of the Tara FI mapping doc into the chat and I'll summarize it.\n2. **Export it** (File \u2192 Download \u2192 .docx, .pdf or .md), save it in",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 5.4
+        },
+        {
+          "run": 3,
+          "triggered": false,
+          "skill_called": null,
+          "tools": [
+            "ToolSearch {\"query\": \"google drive\", \"max_results\": 5}"
+          ],
+          "text": "I can't open your Google Drive from here, so I can't read or summarize the Tara FI mapping doc. This session has no Google Drive or Docs connector. The only web tool I have can't open private files, and a Drive doc needs your login.\n\nHere are two ways to get the summary:\n\n1. **Paste the text here.** Copy the doc's contents into this chat, or download it and give me the file path. Docs can be expor",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 7.4
+        }
+      ]
+    },
+    {
+      "id": "s06",
+      "split": "stress",
+      "should_trigger": false,
+      "query": "make a copy of the CAFF deck so I can edit my own version",
+      "trigger_rate": 0.0,
+      "triggered": false,
+      "pass": true,
+      "runs": [
+        {
+          "run": 1,
+          "triggered": false,
+          "skill_called": "google-workspace",
+          "tools": [
+            "Skill {\"skill\": \"google-workspace\", \"args\": \"Make a copy of the CAFF deck (Google Slides) so the user can edit their own versi"
+          ],
+          "text": "",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 3.7
+        },
+        {
+          "run": 2,
+          "triggered": false,
+          "skill_called": "google-workspace",
+          "tools": [
+            "Skill {\"skill\": \"google-workspace\", \"args\": \"Make a copy of the CAFF deck (Google Slides) so the user can edit their own versi"
+          ],
+          "text": "",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 3.5
+        },
+        {
+          "run": 3,
+          "triggered": false,
+          "skill_called": "google-workspace",
+          "tools": [
+            "Skill {\"skill\": \"google-workspace\", \"args\": \"Make a copy of the CAFF deck (Google Slides) so the user can edit their own versi"
+          ],
+          "text": "",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 3.5
+        }
+      ]
+    },
+    {
+      "id": "s07",
+      "split": "stress",
+      "should_trigger": false,
+      "query": "create a new folder called News-Agent under 03-GAIA in the team drive",
+      "trigger_rate": 0.0,
+      "triggered": false,
+      "pass": true,
+      "runs": [
+        {
+          "run": 1,
+          "triggered": false,
+          "skill_called": null,
+          "tools": [],
+          "text": "I can't create that folder from this session because I don't have a Google Drive connection here. My only tools are the local shell and web search/fetch, and none of them can reach the Hyfin Team Drive.\n\nYou can do it yourself in a few seconds:\n\n1. Open the Hyfin Team Drive in Google Drive.\n2. Go into **03-GAIA**.\n3. Click **New \u2192 New folder**, name it `News-Agent`, and click **Create**.\n\nIf you c",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 6.3
+        },
+        {
+          "run": 2,
+          "triggered": false,
+          "skill_called": null,
+          "tools": [],
+          "text": "I can't create that folder from here. This session has no Google Drive connector, so I can't reach the Hyfin Team Drive at all.\n\nYou can do it in Drive yourself in a few seconds:\n1. Open the Hyfin Team Drive and go into **03-GAIA**.\n2. Click **New \u2192 New folder**.\n3. Name it **News-Agent** and click **Create**.\n\nIf you connect Google Drive to this session, I can create it for you. Once it exists, I",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 6.2
+        },
+        {
+          "run": 3,
+          "triggered": false,
+          "skill_called": null,
+          "tools": [],
+          "text": "I can't create that folder from here. This session isn't connected to Google Drive, so I can't reach the Hyfin Team Drive or the `03-GAIA` folder.\n\nYou can make it yourself in a few seconds:\n\n1. In Google Drive, open **Shared drives \u2192 Hyfin Team Drive \u2192 03-GAIA**.\n2. Click **+ New \u2192 New folder**.\n3. Name it `News-Agent` and click **Create**.\n\nIf you connect Google Drive to this session, I can crea",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 5.6
+        }
+      ]
+    },
+    {
+      "id": "s08",
+      "split": "stress",
+      "should_trigger": false,
+      "query": "who has access to the Dhamana folder?",
+      "trigger_rate": 0.0,
+      "triggered": false,
+      "pass": true,
+      "runs": [
+        {
+          "run": 1,
+          "triggered": false,
+          "skill_called": null,
+          "tools": [],
+          "text": "I can't check that from this session because I don't have a Google Drive connection here, so I can't see the Dhamana folder or its sharing settings.\n\nYou can check it yourself in Google Drive:\n\n1. **If it's in the Hyfin Team Drive:** Open the shared drive, right-click the Dhamana folder and choose **Share**. You'll see everyone who can open it. Team Drive members get access automatically, and you ",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 5.9
+        },
+        {
+          "run": 2,
+          "triggered": false,
+          "skill_called": null,
+          "tools": [],
+          "text": "I can't check that from here. This session isn't connected to Google Drive, so I can't see the Dhamana folder or who it's shared with.\n\nYou can check it yourself in Drive:\n\n- **If the folder is in a shared drive** (for example under Guarantees in the Hyfin Team Drive): open the shared drive, click its name at the top, and choose **Manage members**. Everyone listed there can see the folder. Some fo",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 7.0
+        },
+        {
+          "run": 3,
+          "triggered": false,
+          "skill_called": null,
+          "tools": [],
+          "text": "I can't check that from here. This session has no Google Drive connection, so I can't look up the sharing settings on the Dhamana folder.\n\nTo see who has access yourself:\n\n1. **Open Google Drive** and find the Dhamana folder. If it's in the Hyfin Team Drive, it's probably under the Guarantees workstream.\n2. **Right-click it and choose Share \u2192 Share.** The dialog shows everyone with access, their r",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 5.7
+        }
+      ]
+    }
+  ]
+}

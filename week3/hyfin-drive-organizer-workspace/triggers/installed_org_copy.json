@@ -1,0 +1,1021 @@
+{
+  "label": "installed_org_copy",
+  "model": "claude-opus-5-5",
+  "runs_per_query": 3,
+  "threshold": 0.5,
+  "skill_dir": "/root/.claude/skills/synced/c1f8a2ca-dc4d-4b80-aff1-6d154badde49_5fbfbab7-b5f7-4539-b67f-3d27b8706894/hyfin-drive-organizer",
+  "description": "(as in SKILL.md)",
+  "summary": {
+    "train": {
+      "passed": 12,
+      "total": 12,
+      "pass_rate": 1.0
+    },
+    "validation": {
+      "passed": 8,
+      "total": 8,
+      "pass_rate": 1.0
+    }
+  },
+  "results": [
+    {
+      "id": "t01",
+      "split": "train",
+      "should_trigger": true,
+      "query": "can you sort my hyfin files into the new drive structure? i've got a bunch of stuff in my drive from the guarantee work",
+      "trigger_rate": 1.0,
+      "triggered": true,
+      "pass": true,
+      "runs": [
+        {
+          "run": 1,
+          "triggered": true,
+          "skill_called": "hyfin-drive-organizer",
+          "tools": [
+            "Skill {\"skill\": \"hyfin-drive-organizer\", \"args\": \"Sort the user's Hyfin-related My Drive files (including guarantee work) into"
+          ],
+          "text": "",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 9.5
+        },
+        {
+          "run": 2,
+          "triggered": true,
+          "skill_called": "hyfin-drive-organizer",
+          "tools": [
+            "Skill {\"skill\": \"hyfin-drive-organizer\"}"
+          ],
+          "text": "",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 10.2
+        },
+        {
+          "run": 3,
+          "triggered": true,
+          "skill_called": "hyfin-drive-organizer",
+          "tools": [
+            "Skill {\"skill\": \"hyfin-drive-organizer\", \"args\": \"Sort the user's Hyfin-related My Drive files (largely from the Guarantee / D"
+          ],
+          "text": "",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 10.0
+        }
+      ]
+    },
+    {
+      "id": "t02",
+      "split": "train",
+      "should_trigger": true,
+      "query": "where should the Dhamana LOI draft live in the Hyfin drive?",
+      "trigger_rate": 1.0,
+      "triggered": true,
+      "pass": true,
+      "runs": [
+        {
+          "run": 1,
+          "triggered": true,
+          "skill_called": "hyfin-drive-organizer",
+          "tools": [
+            "Skill {\"skill\": \"hyfin-drive-organizer\", \"args\": \"where should the Dhamana LOI draft live in the Hyfin drive?\"}"
+          ],
+          "text": "",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 11.0
+        },
+        {
+          "run": 2,
+          "triggered": true,
+          "skill_called": "hyfin-drive-organizer",
+          "tools": [
+            "Skill {\"skill\": \"hyfin-drive-organizer\", \"args\": \"Where should the Dhamana LOI draft live in the Hyfin drive? (Answer only: su"
+          ],
+          "text": "",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 11.0
+        },
+        {
+          "run": 3,
+          "triggered": true,
+          "skill_called": "hyfin-drive-organizer",
+          "tools": [
+            "Skill {\"skill\": \"hyfin-drive-organizer\", \"args\": \"Where should the Dhamana LOI draft live in the Hyfin drive? (Question only, "
+          ],
+          "text": "",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 11.4
+        }
+      ]
+    },
+    {
+      "id": "t03",
+      "split": "train",
+      "should_trigger": true,
+      "query": "run the weekly hyfin drive sync",
+      "trigger_rate": 1.0,
+      "triggered": true,
+      "pass": true,
+      "runs": [
+        {
+          "run": 1,
+          "triggered": true,
+          "skill_called": "hyfin-drive-organizer",
+          "tools": [
+            "Skill {\"skill\": \"hyfin-drive-organizer\", \"args\": \"weekly sync\"}"
+          ],
+          "text": "",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 5.0
+        },
+        {
+          "run": 2,
+          "triggered": true,
+          "skill_called": "hyfin-drive-organizer",
+          "tools": [
+            "Skill {\"skill\": \"hyfin-drive-organizer\", \"args\": \"weekly sync\"}"
+          ],
+          "text": "",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 5.9
+        },
+        {
+          "run": 3,
+          "triggered": true,
+          "skill_called": "hyfin-drive-organizer",
+          "tools": [
+            "Skill {\"skill\": \"hyfin-drive-organizer\", \"args\": \"weekly sync\"}"
+          ],
+          "text": "",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 6.5
+        }
+      ]
+    },
+    {
+      "id": "t04",
+      "split": "validation",
+      "should_trigger": true,
+      "query": "clean up my google drive for hyfin, move anything hyfin related into the team drive folders",
+      "trigger_rate": 1.0,
+      "triggered": true,
+      "pass": true,
+      "runs": [
+        {
+          "run": 1,
+          "triggered": true,
+          "skill_called": "hyfin-drive-organizer",
+          "tools": [
+            "Skill {\"skill\": \"hyfin-drive-organizer\"}"
+          ],
+          "text": "",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 6.5
+        },
+        {
+          "run": 2,
+          "triggered": true,
+          "skill_called": "hyfin-drive-organizer",
+          "tools": [
+            "Skill {\"skill\": \"hyfin-drive-organizer\"}"
+          ],
+          "text": "",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 6.6
+        },
+        {
+          "run": 3,
+          "triggered": true,
+          "skill_called": "hyfin-drive-organizer",
+          "tools": [
+            "Skill {\"skill\": \"hyfin-drive-organizer\"}"
+          ],
+          "text": "",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 6.6
+        }
+      ]
+    },
+    {
+      "id": "t05",
+      "split": "train",
+      "should_trigger": true,
+      "query": "i dumped a load of GAIA tara docs in my drive last week, file them where they belong",
+      "trigger_rate": 1.0,
+      "triggered": true,
+      "pass": true,
+      "runs": [
+        {
+          "run": 1,
+          "triggered": true,
+          "skill_called": "hyfin-drive-organizer",
+          "tools": [
+            "Skill {\"skill\": \"hyfin-drive-organizer\", \"args\": \"File the GAIA docs the user added to their My Drive last week into the Hyfin"
+          ],
+          "text": "",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 5.4
+        },
+        {
+          "run": 2,
+          "triggered": true,
+          "skill_called": "hyfin-drive-organizer",
+          "tools": [
+            "Skill {\"skill\": \"hyfin-drive-organizer\", \"args\": \"File the GAIA data docs the user added to their My Drive last week into the "
+          ],
+          "text": "",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 5.6
+        },
+        {
+          "run": 3,
+          "triggered": true,
+          "skill_called": "hyfin-drive-organizer",
+          "tools": [
+            "Skill {\"skill\": \"hyfin-drive-organizer\", \"args\": \"File the GAIA tara docs dumped in My Drive last week into the right place in"
+          ],
+          "text": "",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 5.7
+        }
+      ]
+    },
+    {
+      "id": "t06",
+      "split": "validation",
+      "should_trigger": true,
+      "query": "set up the saturday hyfin drive organizer schedule",
+      "trigger_rate": 0.67,
+      "triggered": true,
+      "pass": true,
+      "runs": [
+        {
+          "run": 1,
+          "triggered": false,
+          "skill_called": "schedule",
+          "tools": [
+            "Skill {\"skill\": \"schedule\", \"args\": \"Weekly Saturday run of the hyfin-drive-organizer skill\"}"
+          ],
+          "text": "",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 7.3
+        },
+        {
+          "run": 2,
+          "triggered": true,
+          "skill_called": "hyfin-drive-organizer",
+          "tools": [
+            "Skill {\"skill\": \"hyfin-drive-organizer\", \"args\": \"set up the saturday hyfin drive organizer schedule\"}"
+          ],
+          "text": "",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 7.6
+        },
+        {
+          "run": 3,
+          "triggered": true,
+          "skill_called": "hyfin-drive-organizer",
+          "tools": [
+            "Skill {\"skill\": \"hyfin-drive-organizer\", \"args\": \"set up the saturday hyfin drive organizer schedule\"}"
+          ],
+          "text": "",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 7.6
+        }
+      ]
+    },
+    {
+      "id": "t07",
+      "split": "train",
+      "should_trigger": true,
+      "query": "ive got CEFIL and NCGCL memos scattered around my drive, tidy them into the right folder pls",
+      "trigger_rate": 1.0,
+      "triggered": true,
+      "pass": true,
+      "runs": [
+        {
+          "run": 1,
+          "triggered": true,
+          "skill_called": "hyfin-drive-organizer",
+          "tools": [
+            "Skill {\"skill\": \"hyfin-drive-organizer\", \"args\": \"Tidy the user's CEFIL and NCGCL memos scattered around their My Drive into t"
+          ],
+          "text": "",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 6.9
+        },
+        {
+          "run": 2,
+          "triggered": true,
+          "skill_called": "hyfin-drive-organizer",
+          "tools": [
+            "Skill {\"skill\": \"hyfin-drive-organizer\", \"args\": \"Tidy the user's CEFIL and NCGCL memos scattered around their My Drive into t"
+          ],
+          "text": "",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 5.8
+        },
+        {
+          "run": 3,
+          "triggered": true,
+          "skill_called": "hyfin-drive-organizer",
+          "tools": [
+            "Skill {\"skill\": \"hyfin-drive-organizer\", \"args\": \"Find the user's CEFIL and NCGCL memos scattered around their My Drive and fi"
+          ],
+          "text": "",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 6.3
+        }
+      ]
+    },
+    {
+      "id": "t08",
+      "split": "validation",
+      "should_trigger": true,
+      "query": "which of my my-drive files should go in the shared drive? just show me first, don't move anything",
+      "trigger_rate": 1.0,
+      "triggered": true,
+      "pass": true,
+      "runs": [
+        {
+          "run": 1,
+          "triggered": true,
+          "skill_called": "hyfin-drive-organizer",
+          "tools": [
+            "Skill {\"skill\": \"hyfin-drive-organizer\", \"args\": \"Report only: show which of my My Drive files should go in the shared Hyfin d"
+          ],
+          "text": "",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 5.4
+        },
+        {
+          "run": 2,
+          "triggered": true,
+          "skill_called": "hyfin-drive-organizer",
+          "tools": [
+            "Skill {\"skill\": \"hyfin-drive-organizer\", \"args\": \"Report only: show which of my My Drive files should go into the shared Hyfin"
+          ],
+          "text": "",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 4.7
+        },
+        {
+          "run": 3,
+          "triggered": true,
+          "skill_called": "hyfin-drive-organizer",
+          "tools": [
+            "Skill {\"skill\": \"hyfin-drive-organizer\", \"args\": \"Report only: list which of my My Drive files should go into the shared Hyfin"
+          ],
+          "text": "",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 7.2
+        }
+      ]
+    },
+    {
+      "id": "t09",
+      "split": "train",
+      "should_trigger": true,
+      "query": "move my fund forge decks into the right place in the hyfin team drive",
+      "trigger_rate": 1.0,
+      "triggered": true,
+      "pass": true,
+      "runs": [
+        {
+          "run": 1,
+          "triggered": true,
+          "skill_called": "hyfin-drive-organizer",
+          "tools": [
+            "Skill {\"skill\": \"hyfin-drive-organizer\", \"args\": \"move my Fund Forge decks into the right place in the Hyfin Team Drive\"}"
+          ],
+          "text": "",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 6.2
+        },
+        {
+          "run": 2,
+          "triggered": true,
+          "skill_called": "hyfin-drive-organizer",
+          "tools": [
+            "Skill {\"skill\": \"hyfin-drive-organizer\", \"args\": \"Move the user's Fund Forge decks into the right place in the Hyfin Team Driv"
+          ],
+          "text": "",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 5.4
+        },
+        {
+          "run": 3,
+          "triggered": true,
+          "skill_called": "hyfin-drive-organizer",
+          "tools": [
+            "Skill {\"skill\": \"hyfin-drive-organizer\", \"args\": \"Move my Fund Forge decks into the right place in the Hyfin Team Drive\"}"
+          ],
+          "text": "",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 7.6
+        }
+      ]
+    },
+    {
+      "id": "t10",
+      "split": "validation",
+      "should_trigger": true,
+      "query": "ok so some context, i joined hyfin about 6 weeks ago from a consulting gig and ive been saving everything to my own drive bc i didnt know where anything went. theres decks from the CAFF fundraise, some notes from calls with the Cambodia folks, a couple of AssetCo models, my onboarding stuff, plus honestly a lot of random junk from my old job mixed in. someone said there's a new team drive layout now. can you get my stuff in order?",
+      "trigger_rate": 1.0,
+      "triggered": true,
+      "pass": true,
+      "runs": [
+        {
+          "run": 1,
+          "triggered": true,
+          "skill_called": "hyfin-drive-organizer",
+          "tools": [
+            "Skill {\"skill\": \"hyfin-drive-organizer\", \"args\": \"New joiner (~6 weeks, ex-consulting) has been saving everything to their own"
+          ],
+          "text": "",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 8.2
+        },
+        {
+          "run": 2,
+          "triggered": true,
+          "skill_called": "hyfin-drive-organizer",
+          "tools": [
+            "Skill {\"skill\": \"hyfin-drive-organizer\"}"
+          ],
+          "text": "",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 6.7
+        },
+        {
+          "run": 3,
+          "triggered": true,
+          "skill_called": "hyfin-drive-organizer",
+          "tools": [
+            "Skill {\"skill\": \"hyfin-drive-organizer\", \"args\": \"User joined Hyfin ~6 weeks ago, has been saving to their own My Drive: CAFF "
+          ],
+          "text": "",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 7.6
+        }
+      ]
+    },
+    {
+      "id": "n01",
+      "split": "train",
+      "should_trigger": false,
+      "query": "organize my Downloads folder by file type",
+      "trigger_rate": 0.0,
+      "triggered": false,
+      "pass": true,
+      "runs": [
+        {
+          "run": 1,
+          "triggered": false,
+          "skill_called": null,
+          "tools": [
+            "Bash {\"command\": \"ls -la ~/Downloads 2>&1 | head -100; echo \\\"---\\\"; find ~/Downloads -maxdepth 1 -type f 2>/dev/null | sed -",
+            "Bash {\"command\": \"ls -la ~/Downloads\", \"description\": \"List the Downloads folder contents\"}"
+          ],
+          "text": "I couldn't get into your Downloads folder, so I haven't moved anything. This session is only allowed to work in `/tmp/trigcwd-xsdu155l`, and trying to list `~/Downloads` was blocked.\n\nTo go ahead, either:\n- **Give this session access to `~/Downloads`**, for example by restarting Claude Code from that folder or adding it as an allowed directory, or\n- **Paste the output of `ls -la ~/Downloads`** her",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 14.3
+        },
+        {
+          "run": 2,
+          "triggered": false,
+          "skill_called": null,
+          "tools": [
+            "Bash {\"command\": \"ls -la ~/Downloads 2>&1 | head -100; echo \\\"---\\\"; find ~/Downloads -maxdepth 1 -type f 2>/dev/null | sed -",
+            "Bash {\"command\": \"ls -la ~/Downloads\", \"description\": \"List Downloads folder contents\"}"
+          ],
+          "text": "I couldn't get into your Downloads folder. This session only has access to `/tmp/trigcwd-xsdu155l`, so listing `~/Downloads` was blocked. I haven't moved or changed anything.\n\nHere's how I'd do it once I have access:\n\n1. **Look first.** List what's in Downloads and count the files by type, so we can see what's there before anything moves.\n2. **Agree on the folders.** I'd suggest something like thi",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 14.1
+        },
+        {
+          "run": 3,
+          "triggered": false,
+          "skill_called": null,
+          "tools": [
+            "Bash {\"command\": \"ls -la ~/Downloads 2>&1 | head -100; echo \\\"---\\\"; find ~/Downloads -maxdepth 1 -type f 2>/dev/null | sed -",
+            "Bash {\"command\": \"ls -la ~/Downloads\", \"description\": \"List Downloads folder contents\"}"
+          ],
+          "text": "I couldn't look at your Downloads folder. This session can only read files in its working directory (`/tmp/trigcwd-xsdu155l`), so listing `~/Downloads` was blocked. I haven't read, moved or changed anything.\n\nIf you give this session access to `~/Downloads`, here's the plan:\n\n1. **Survey first (read-only):** list every file, count them by extension, and point out anything odd, like files with no e",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 14.3
+        }
+      ]
+    },
+    {
+      "id": "n02",
+      "split": "train",
+      "should_trigger": false,
+      "query": "clean up my personal google drive, lots of old photos and tax stuff",
+      "trigger_rate": 0.0,
+      "triggered": false,
+      "pass": true,
+      "runs": [
+        {
+          "run": 1,
+          "triggered": false,
+          "skill_called": null,
+          "tools": [],
+          "text": "I can't do this from here, and none of the available skills fit:\n\n- **No Google Drive access.** This session has no Drive connector, so I can't list, sort or delete anything in your Drive.\n- **The Hyfin Drive organizer won't help.** It only handles Hyfin work files and moves them into the shared Team Drive. It deliberately leaves personal files alone, and old photos and tax documents are exactly t",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 13.8
+        },
+        {
+          "run": 2,
+          "triggered": false,
+          "skill_called": null,
+          "tools": [],
+          "text": "I can't do this from here: this session has no Google Drive connection, so I can't see, move or delete anything in your Drive. The Hyfin Drive organizer skill won't help either. It only files Hyfin work documents into the team drive and deliberately skips personal files like photos and tax records.\n\nHere's a way to do the cleanup yourself in drive.google.com:\n\n**Photos**\n1. In the Drive search bar",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 13.2
+        },
+        {
+          "run": 3,
+          "triggered": false,
+          "skill_called": null,
+          "tools": [],
+          "text": "I can't do this from here. This session has no Google Drive connection, so I can't see, sort or delete anything in your Drive. The Hyfin Drive organizer I have only handles Hyfin work files and is built to leave personal files alone, so it won't help with photos or taxes either.\n\nHere's a quick way to do it yourself:\n\n**Photos**\n1. In Drive search, type `type:image` and sort by **Last modified** t",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 12.2
+        }
+      ]
+    },
+    {
+      "id": "n03",
+      "split": "train",
+      "should_trigger": false,
+      "query": "rename this Google Doc to 'Hyfin Board Memo v2'",
+      "trigger_rate": 0.0,
+      "triggered": false,
+      "pass": true,
+      "runs": [
+        {
+          "run": 1,
+          "triggered": false,
+          "skill_called": "google-workspace",
+          "tools": [
+            "Skill {\"skill\": \"google-workspace\", \"args\": \"rename this Google Doc to 'Hyfin Board Memo v2'\"}"
+          ],
+          "text": "",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 3.6
+        },
+        {
+          "run": 2,
+          "triggered": false,
+          "skill_called": "google-workspace",
+          "tools": [
+            "Skill {\"skill\": \"google-workspace\", \"args\": \"rename this Google Doc to 'Hyfin Board Memo v2'\"}"
+          ],
+          "text": "",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 3.3
+        },
+        {
+          "run": 3,
+          "triggered": false,
+          "skill_called": "google-workspace",
+          "tools": [
+            "Skill {\"skill\": \"google-workspace\", \"args\": \"rename this Google Doc to 'Hyfin Board Memo v2'\"}"
+          ],
+          "text": "",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 6.7
+        }
+      ]
+    },
+    {
+      "id": "n04",
+      "split": "validation",
+      "should_trigger": false,
+      "query": "make a Hyfin-branded one-pager for the Dhamana facility",
+      "trigger_rate": 0.0,
+      "triggered": false,
+      "pass": true,
+      "runs": [
+        {
+          "run": 1,
+          "triggered": false,
+          "skill_called": "make-it-hyfin",
+          "tools": [
+            "Skill {\"skill\": \"make-it-hyfin\", \"args\": \"One-pager for the Dhamana facility\"}"
+          ],
+          "text": "",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 6.1
+        },
+        {
+          "run": 2,
+          "triggered": false,
+          "skill_called": "make-it-hyfin",
+          "tools": [
+            "Skill {\"skill\": \"make-it-hyfin\", \"args\": \"One-pager for the Dhamana facility\"}"
+          ],
+          "text": "",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 5.4
+        },
+        {
+          "run": 3,
+          "triggered": false,
+          "skill_called": "make-it-hyfin",
+          "tools": [
+            "Skill {\"skill\": \"make-it-hyfin\", \"args\": \"One-pager for the Dhamana facility\"}"
+          ],
+          "text": "",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 7.0
+        }
+      ]
+    },
+    {
+      "id": "n05",
+      "split": "train",
+      "should_trigger": false,
+      "query": "who could lend to the [REDACTED] AssetCo in Vietnam?",
+      "trigger_rate": 0.0,
+      "triggered": false,
+      "pass": true,
+      "runs": [
+        {
+          "run": 1,
+          "triggered": false,
+          "skill_called": "gaia-capital-providers",
+          "tools": [
+            "Skill {\"skill\": \"gaia-capital-providers\", \"args\": \"who could lend to the [REDACTED] AssetCo in Vietnam?\"}"
+          ],
+          "text": "",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 5.8
+        },
+        {
+          "run": 2,
+          "triggered": false,
+          "skill_called": "gaia-capital-providers",
+          "tools": [
+            "Skill {\"skill\": \"gaia-capital-providers\", \"args\": \"who could lend to the [REDACTED] AssetCo in Vietnam?\"}"
+          ],
+          "text": "",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 5.9
+        },
+        {
+          "run": 3,
+          "triggered": false,
+          "skill_called": "gaia-capital-providers",
+          "tools": [
+            "Skill {\"skill\": \"gaia-capital-providers\", \"args\": \"who could lend to the [REDACTED] AssetCo in Vietnam?\"}"
+          ],
+          "text": "",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 6.5
+        }
+      ]
+    },
+    {
+      "id": "n06",
+      "split": "validation",
+      "should_trigger": false,
+      "query": "reorganize the src/ folder structure of my React repo",
+      "trigger_rate": 0.0,
+      "triggered": false,
+      "pass": true,
+      "runs": [
+        {
+          "run": 1,
+          "triggered": false,
+          "skill_called": "reppit",
+          "tools": [
+            "Skill {\"skill\": \"reppit\", \"args\": \"reorganize the src/ folder structure of my React repo\"}"
+          ],
+          "text": "",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 5.7
+        },
+        {
+          "run": 2,
+          "triggered": false,
+          "skill_called": "reppit",
+          "tools": [
+            "Skill {\"skill\": \"reppit\", \"args\": \"reorganize the src/ folder structure of my React repo\"}"
+          ],
+          "text": "",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 6.6
+        },
+        {
+          "run": 3,
+          "triggered": false,
+          "skill_called": "reppit",
+          "tools": [
+            "Skill {\"skill\": \"reppit\", \"args\": \"reorganize the src/ folder structure of my React repo\"}"
+          ],
+          "text": "",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 6.5
+        }
+      ]
+    },
+    {
+      "id": "n07",
+      "split": "train",
+      "should_trigger": false,
+      "query": "share the Hyfin Team Drive with a new hire",
+      "trigger_rate": 0.0,
+      "triggered": false,
+      "pass": true,
+      "runs": [
+        {
+          "run": 1,
+          "triggered": false,
+          "skill_called": null,
+          "tools": [],
+          "text": "I can't add the new hire myself. This session has no Google Drive connection, and none of my tools can change who has access to a shared drive. A Workspace admin or a Manager of the Hyfin Team Drive can do it in about a minute:\n\n**In the browser (drive.google.com):**\n1. In the left sidebar, open **Shared drives** and click **Hyfin Team Drive**.\n2. Click the drive name at the top, then choose **Man",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 13.2
+        },
+        {
+          "run": 2,
+          "triggered": false,
+          "skill_called": null,
+          "tools": [],
+          "text": "I can't do this from here. This session has no Google Drive connection, so I can't add members to the Hyfin Team Drive. You can do it yourself in about a minute if you have Manager access to the drive:\n\n1. Open [drive.google.com](https://drive.google.com) and click **Shared drives** in the left sidebar.\n2. Right-click **Hyfin Team Drive** and choose **Manage members**. You can also open the drive ",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 12.2
+        },
+        {
+          "run": 3,
+          "triggered": false,
+          "skill_called": null,
+          "tools": [],
+          "text": "I can't add someone to the Hyfin Team Drive from here because this session has no Google Drive connection with sharing permissions. You can do it yourself in about a minute:\n\n**Add the new hire as a shared drive member**\n1. Open [drive.google.com](https://drive.google.com) and click **Shared drives** in the left sidebar.\n2. Right-click **Hyfin Team Drive** and choose **Manage members**. You can al",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 11.8
+        }
+      ]
+    },
+    {
+      "id": "n08",
+      "split": "validation",
+      "should_trigger": false,
+      "query": "what's in the 01-Guarantees folder?",
+      "trigger_rate": 0.0,
+      "triggered": false,
+      "pass": true,
+      "runs": [
+        {
+          "run": 1,
+          "triggered": false,
+          "skill_called": null,
+          "tools": [
+            "Bash {\"command\": \"ls -la; find / -maxdepth 6 -type d -iname \\\"*01-Guarantees*\\\" 2>/dev/null | head\", \"description\": \"List wor",
+            "Bash {\"command\": \"ls -la /tmp/trigcwd-xsdu155l\", \"description\": \"List working directory contents\"}",
+            "Bash {\"command\": \"find / -maxdepth 7 -type d -iname \\\"*Guarantees*\\\" -not -path \\\"/proc/*\\\" 2>/dev/null | head -20\", \"descrip"
+          ],
+          "text": "",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 9.2
+        },
+        {
+          "run": 2,
+          "triggered": false,
+          "skill_called": null,
+          "tools": [
+            "Bash {\"command\": \"ls -la; find / -maxdepth 6 -type d -iname \\\"*01-Guarantees*\\\" 2>/dev/null | head\", \"description\": \"List wor",
+            "Bash {\"command\": \"ls -la /tmp/trigcwd-xsdu155l\", \"description\": \"List working directory contents\"}",
+            "Bash {\"command\": \"find / -maxdepth 6 -type d -iname \\\"*Guarantees*\\\" 2>/dev/null | head\", \"description\": \"Search filesystem f"
+          ],
+          "text": "",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 7.7
+        },
+        {
+          "run": 3,
+          "triggered": false,
+          "skill_called": null,
+          "tools": [
+            "Bash {\"command\": \"find / -maxdepth 6 -type d -iname \\\"*01-Guarantees*\\\" 2>/dev/null | head; ls -la /tmp/trigcwd-xsdu155l\", \"d",
+            "Bash {\"command\": \"ls -la /tmp/trigcwd-xsdu155l\", \"description\": \"List files in the working directory\"}"
+          ],
+          "text": "I couldn't find a `01-Guarantees` folder. The working directory (`/tmp/trigcwd-xsdu155l`) is empty, and I don't have permission to search the rest of the filesystem.\n\nFrom the name, it's probably the Guarantees workstream folder in the shared Hyfin Team Drive. That's the first of the six workstream folders: Guarantees, Funds, GAIA, Fund Forge, BUS and Org/Team. This session has no Google Drive con",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 9.8
+        }
+      ]
+    },
+    {
+      "id": "n09",
+      "split": "train",
+      "should_trigger": false,
+      "query": "find the latest Hyfin LOI in my drive",
+      "trigger_rate": 0.0,
+      "triggered": false,
+      "pass": true,
+      "runs": [
+        {
+          "run": 1,
+          "triggered": false,
+          "skill_called": null,
+          "tools": [
+            "ToolSearch {\"query\": \"google drive search files\", \"max_results\": 5}",
+            "Bash {\"command\": \"ls -la ~ /tmp/trigcwd-xsdu155l 2>/dev/null; ls /mnt /media 2>/dev/null; which rclone gdrive 2>/dev/null\", \""
+          ],
+          "text": "I couldn't search your Drive because this session has no Google Drive connection. The only extra tools I have are web search and web fetch, and they can't open private Drive files. I also tried to check this machine for a synced Drive folder, but that command needed approval and didn't run.\n\nTo find the latest Hyfin LOI, you could:\n\n1. **Connect Google Drive** to this session, then ask me again. I",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 9.6
+        },
+        {
+          "run": 2,
+          "triggered": false,
+          "skill_called": null,
+          "tools": [
+            "ToolSearch {\"query\": \"google drive search files\", \"max_results\": 5}"
+          ],
+          "text": "I can't search your Google Drive from this session because no Google Drive connector is connected, and I couldn't find a tool for one. Web search won't help either, since it can't see private Drive files.\n\nYou can do either of these:\n\n1. **Connect Google Drive** (for example, by adding the Google Drive MCP connector to Claude Code), then ask again. I'll search for files with names like \"Hyfin LOI\"",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 7.4
+        },
+        {
+          "run": 3,
+          "triggered": false,
+          "skill_called": null,
+          "tools": [
+            "ToolSearch {\"query\": \"google drive search files\", \"max_results\": 5}",
+            "Bash {\"command\": \"ls -d ~/Google* ~/gdrive ~/GoogleDrive /mnt/* /Volumes/* 2>/dev/null; find / -maxdepth 4 -iname \\\"*LOI*\\\" -"
+          ],
+          "text": "I couldn't search your Drive because this session isn't connected to Google Drive. The only extra tools available here are web search and web fetch, and web fetch can't open private Drive links. I also tried to check for a Drive folder synced to this machine, but that command needed your approval and didn't run.\n\nHere are three ways to find it:\n\n1. **Connect Google Drive** to this session, then as",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 10.9
+        }
+      ]
+    },
+    {
+      "id": "n10",
+      "split": "validation",
+      "should_trigger": false,
+      "query": "move my day-job spreadsheets into a Work folder",
+      "trigger_rate": 0.0,
+      "triggered": false,
+      "pass": true,
+      "runs": [
+        {
+          "run": 1,
+          "triggered": false,
+          "skill_called": null,
+          "tools": [
+            "Bash {\"command\": \"ls -la && find . -maxdepth 3 -type f \\\\( -iname '*.xls*' -o -iname '*.csv' -o -iname '*.tsv' -o -iname '*.o"
+          ],
+          "text": "I haven't moved anything yet because I couldn't find any spreadsheets. My working directory (`/tmp/trigcwd-xsdu155l`) is empty, and I don't have a Google Drive connection in this session, so I can't see your Drive either.\n\nTo go ahead, I need two things:\n\n1. **Where the spreadsheets are.** If they're on this machine, send me the folder path (for example `~/Documents` or `~/Downloads`). If they're ",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 12.3
+        },
+        {
+          "run": 2,
+          "triggered": false,
+          "skill_called": null,
+          "tools": [
+            "Bash {\"command\": \"ls -la /tmp/trigcwd-xsdu155l; ls ~ 2>/dev/null | head -50\", \"description\": \"List working directory and home"
+          ],
+          "text": "I haven't moved anything yet because I need two details from you first.\n\n1. **Where are the spreadsheets?** Are they files on this machine (if so, which folder, such as `~/Downloads` or `~/Documents`), or in Google Drive?\n2. **How do I tell which ones are for your day job?** Do they share a name pattern, an employer or client name, or a date range? Or should I list every spreadsheet so you can pic",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 9.0
+        },
+        {
+          "run": 3,
+          "triggered": false,
+          "skill_called": null,
+          "tools": [
+            "Bash {\"command\": \"ls -la /tmp/trigcwd-xsdu155l; ls ~ 2>/dev/null | head -50\", \"description\": \"List working and home directory",
+            "Bash {\"command\": \"ls -la /tmp/trigcwd-xsdu155l\", \"description\": \"List working directory contents\"}"
+          ],
+          "text": "I can help, but first I need to know where the spreadsheets are and which ones count as day-job files. My current working folder is empty, and I can't see your Google Drive from here.\n\nCan you tell me:\n\n1. **Where are the spreadsheets?** Are they in Google Drive (My Drive) or in a folder on this machine? If they're local, what's the path, for example `~/Documents`?\n2. **How do I spot a day-job fil",
+          "skills_listed": [
+            "hyfin-drive-organizer"
+          ],
+          "seconds": 11.5
+        }
+      ]
+    }
+  ]
+}

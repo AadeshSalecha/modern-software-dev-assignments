@@ -1,0 +1,50 @@
+{
+ "eval": "report-only",
+ "config": "with_skill",
+ "passed": 7,
+ "graded": 7,
+ "results": [
+  {
+   "assertion": "No Drive write call (move/update, copy, create, trash, share) appears in the transcript",
+   "discriminating": false,
+   "verdict": "PASS",
+   "evidence": "Parsed transcript: 15 tool calls, Drive calls are only search_files, get_file_metadata, get_file_permissions."
+  },
+  {
+   "assertion": "The report states counts up front (proposed moves, parked for review, left alone)",
+   "discriminating": true,
+   "verdict": "PASS",
+   "evidence": "\"Proposing 1 move, parking 1 for review, leaving 2 files alone.\" (first line after the title)"
+  },
+  {
+   "assertion": "The GAIA test file is proposed for a taxonomy folder and its row shows file name, current folder, destination, reason and confidence",
+   "discriminating": true,
+   "verdict": "PASS",
+   "evidence": "\"TEST Hyfin GAIA Skill Eval 01 (safe to delete) | from My Drive | \\\"Hyfin\\\" + \\\"GAIA\\\" in title, no GAIA sub-item fits ... | medium confidence\" under \"== 03-GAIA (default: APPROVE) ==\""
+  },
+  {
+   "assertion": "The run checks the runner's role on the shared drive before proposing moves",
+   "discriminating": true,
+   "verdict": "PASS",
+   "evidence": "get_file_permissions(<shared_drive_root id>) before the candidate search; reply: \"You're an organizer on the team drive.\""
+  },
+  {
+   "assertion": "The run reads the GAIA test file's permissions (sharing check) before showing the report",
+   "discriminating": false,
+   "verdict": "PASS",
+   "evidence": "get_file_permissions(<test_gaia id>), result: only the owner."
+  },
+  {
+   "assertion": "Nothing inside a shared drive is listed as a candidate",
+   "discriminating": false,
+   "verdict": "PASS",
+   "evidence": "Candidates come only from owner = 'me' (4 files, all at the My Drive root)."
+  },
+  {
+   "assertion": "An interactive HTML approval report is produced (or the absence of a widget surface is stated) and a plain-text fallback is shown",
+   "discriminating": true,
+   "verdict": "PASS",
+   "evidence": "build_report.py validated the data (\"ok: proposing 1 move...\") and wrote approval-report.html and approval-report.txt; the text report appears in the reply."
+  }
+ ]
+}

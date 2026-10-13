@@ -1,0 +1,35 @@
+[
+ {
+  "name": "Read",
+  "input": {
+   "file_path": "<scratch path>"
+  }
+ },
+ {
+  "name": "ToolSearch",
+  "input": {
+   "query": "select:mcp__Google_Drive__get_file_metadata,mcp__Google_Drive__update_file,mcp__Google_Drive__get_file_permissions",
+   "max_results": 3
+  }
+ },
+ {
+  "name": "mcp__Google_Drive__get_file_metadata",
+  "input": {
+   "fileId": "<03-GAIA id>",
+   "excludeContentSnippets": true
+  }
+ },
+ {
+  "name": "mcp__Google_Drive__get_file_metadata",
+  "input": {
+   "fileId": "<test_gaia id>",
+   "excludeContentSnippets": true
+  }
+ },
+ {
+  "name": "mcp__claude-code-remote__list_triggers",
+  "input": {
+   "limit": 100
+  }
+ }
+]

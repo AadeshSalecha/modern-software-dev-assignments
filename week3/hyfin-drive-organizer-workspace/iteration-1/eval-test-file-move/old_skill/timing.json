@@ -1,0 +1,7 @@
+{
+ "phase": "execute (dry run)",
+ "seconds": 41.6,
+ "total_tokens_incl_cache_reads": 298254,
+ "tool_calls": 5,
+ "note": "sensitive-file and no-hyfin-signal are graded on the report-only run, so they share its timing"
+}

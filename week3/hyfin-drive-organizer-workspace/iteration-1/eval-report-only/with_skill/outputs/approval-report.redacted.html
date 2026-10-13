@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hyfin Drive approval</title>
+<style>
+  :root {
+    --bg: #f7f8f6; --card: #ffffff; --ink: #1b1f1d; --muted: #59625d; --line: #d9ddd9;
+    --accent: #1f6f4a; --accent-ink: #ffffff; --accent-soft: #e3f1e9;
+    --warn: #8a4b00; --warn-soft: #fff1dc; --danger: #a1262d; --danger-soft: #fde8e9;
+    --info: #1f4f8a; --info-soft: #e5eefb; --focus: #2b6cd4;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #121513; --card: #1b201d; --ink: #e8ece9; --muted: #a6b0aa; --line: #333b36;
+      --accent: #3fae78; --accent-ink: #08130d; --accent-soft: #183326;
+      --warn: #ffb860; --warn-soft: #3a2a14; --danger: #ff8a90; --danger-soft: #3d1a1d;
+      --info: #8db8ff; --info-soft: #182a44; --focus: #8db8ff;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 980px; margin: 0 auto; padding: 16px 16px 8px; }
+  h1 { font-size: 1.25rem; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 14px; }
+  .counts { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; padding: 0; list-style: none; }
+  .counts li { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; }
+  .counts strong { font-size: 1.15rem; margin-right: 4px; }
+  .notes { background: var(--info-soft); color: var(--ink); border-radius: 10px; padding: 8px 12px; margin: 0 0 12px; }
+  .notes p { margin: 2px 0; }
+  section.group { margin: 18px 0; }
+  section.group > h2 { font-size: 1rem; margin: 0 0 6px; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+  section.group > h2 code { font: inherit; font-weight: 700; }
+  .gnote { color: var(--muted); font-weight: 400; font-size: .9rem; }
+  .row { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin: 6px 0;
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 16px; align-items: center; }
+  .row.review { border-left: 4px solid var(--warn); }
+  .title { font-weight: 600; overflow-wrap: anywhere; }
+  .meta { color: var(--muted); font-size: .9rem; display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 2px; }
+  .chip { display: inline-block; border-radius: 999px; padding: 0 8px; font-size: .8rem; font-weight: 600; line-height: 1.6; }
+  .c-high { background: var(--accent-soft); color: var(--accent); }
+  .c-medium { background: var(--info-soft); color: var(--info); }
+  .c-low { background: var(--warn-soft); color: var(--warn); }
+  .ext { background: var(--danger-soft); color: var(--danger); }
+  .fold { background: var(--warn-soft); color: var(--warn); }
+  .sens { background: var(--danger-soft); color: var(--danger); }
+  .dup { background: var(--info-soft); color: var(--info); }
+  fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+  legend { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .ctl { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; justify-content: flex-end; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
+  .seg input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  .seg label { padding: 6px 10px; cursor: pointer; user-select: none; font-size: .9rem; border-right: 1px solid var(--line); }
+  .seg label:last-of-type { border-right: 0; }
+  .seg input:checked + label { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  .seg input[value="skip"]:checked + label { background: var(--muted); color: var(--card); }
+  .seg input:focus-visible + label { outline: 3px solid var(--focus); outline-offset: -3px; }
+  select { font: inherit; font-size: .9rem; color: var(--ink); background: var(--card); border: 1px solid var(--line);
+    border-radius: 8px; padding: 5px 6px; max-width: 230px; }
+  select:focus-visible, button:focus-visible, summary:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+  details { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; margin-top: 18px; }
+  summary { cursor: pointer; font-weight: 600; }
+  .nt { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 12px; padding: 8px 0; border-top: 1px solid var(--line); }
+  .nt:first-of-type { border-top: 0; }
+  .bar { position: sticky; bottom: 0; margin-top: 16px; background: var(--card); border-top: 1px solid var(--line);
+    padding: 10px 16px; box-shadow: 0 -4px 16px rgba(0,0,0,.08); }
+  .bar-in { max-width: 980px; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; }
+  .tally { font-size: .95rem; }
+  .warnline { font-weight: 700; }
+  button { font: inherit; cursor: pointer; border-radius: 10px; border: 1px solid var(--line); background: var(--card); color: var(--ink); padding: 8px 12px; }
+  #submit { background: var(--accent); color: var(--accent-ink); border: 0; font-size: 1.1rem; font-weight: 700; padding: 12px 28px; min-width: 200px; }
+  #submit[disabled] { opacity: .6; cursor: default; }
+  #fallback { display: none; margin-top: 16px; }
+  #fallback textarea { width: 100%; min-height: 200px; font: 13px/1.4 ui-monospace, Menlo, Consolas, monospace;
+    color: var(--ink); background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 8px; }
+  .done { background: var(--accent-soft); border-radius: 10px; padding: 10px 12px; margin-top: 12px; display: none; }
+  @media (max-width: 640px) {
+    .row { grid-template-columns: 1fr; }
+    .ctl { justify-content: flex-start; }
+    select { max-width: 100%; }
+    #submit { flex: 1; min-width: 0; }
+    .bar-in > div:last-child { width: 100%; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1 id="h">Hyfin Drive: approve moves</h1>
+  <p class="sub" id="sub"></p>
+  <ul class="counts" id="counts" aria-label="Summary"></ul>
+  <div class="notes" id="notes" hidden></div>
+  <div id="groups"></div>
+  <details id="nt-wrap">
+    <summary id="nt-sum">Not touching</summary>
+    <p class="sub">These files have no clear Hyfin signal, so they stay where they are. Pull one in only if it is Hyfin work.</p>
+    <div id="nt"></div>
+  </details>
+  <div class="done" id="done" role="status" aria-live="polite"></div>
+  <div id="fallback">
+    <p><strong>This page can't send to the chat directly.</strong> Copy the decisions below and paste them as your reply.</p>
+    <textarea id="fbtext" readonly aria-label="Decisions to paste into the chat"></textarea>
+    <p><button type="button" id="copy">Copy decisions</button></p>
+  </div>
+</main>
+<div class="bar" role="region" aria-label="Submit decisions">
+  <div class="bar-in">
+    <div>
+      <div class="warnline">Nothing moves until you click Submit.</div>
+      <div class="tally" id="tally" aria-live="polite"></div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button type="button" id="reset">Reset to defaults</button>
+      <button type="button" id="submit">Submit decisions</button>
+    </div>
+  </div>
+</div>
+
+<!-- The agent (or scripts/build_report.py) replaces the JSON inside this tag. Nothing else needs editing. -->
+<script type="application/json" id="report-data">
+{
+ "mode": "report-only",
+ "generatedAt": "2026-10-13",
+ "rows": [
+  {
+   "id": "OFFER_TEST_FILE_ID",
+   "title": "TEST Hyfin Offer Letter Draft (safe to delete)",
+   "dest": "00-Needs-Review",
+   "reason": "sensitive - manual review",
+   "sensitive": true
+  },
+  {
+   "id": "GAIA_TEST_FILE_ID",
+   "title": "TEST Hyfin GAIA Skill Eval 01 (safe to delete)",
+   "current": "My Drive",
+   "dest": "03-GAIA",
+   "reason": "\"Hyfin\" + \"GAIA\" in title, no GAIA sub-item fits (alt: 06-Org-Team/AI-Native-Org if it documents a Claude skill)",
+   "confidence": "medium",
+   "sensitive": false,
+   "external": null,
+   "folderShared": false,
+   "duplicate": null
+  }
+ ],
+ "notTouching": [
+  {
+   "id": "GROCERY_TEST_FILE_ID",
+   "title": "TEST grocery list"
+  },
+  {
+   "id": "COURSE_DOC_ID",
+   "title": "Course project proposal (non-Hyfin, name redacted)"
+  }
+ ],
+ "othersOwned": 0,
+ "notes": [
+  "Access check: you are an organizer of the Hyfin Team Drive, so moves will work. Its sharing lists named people only (9 accounts), with no Hyfin domain or group entry, so new teammates may not see filed files until someone adds them.",
+  "Report only: nothing has been moved, created or trashed. Two files say \"safe to delete\" in the title; this skill never trashes files unless you ask for that explicitly."
+ ],
+ "folders": [
+  "00-Needs-Review",
+  "01-Guarantees",
+  "01-Guarantees/Cambodia-EVGF",
+  "01-Guarantees/BRD",
+  "01-Guarantees/Dhamana",
+  "01-Guarantees/CEFIL-NCGCL-Guarantee",
+  "01-Guarantees/Other-Guarantees-PH-Malaysia-Ethiopia-Agrivoltaics",
+  "02-Funds",
+  "02-Funds/AssetCo-Pipeline",
+  "02-Funds/CAFF",
+  "02-Funds/CMRF",
+  "02-Funds/CEFIL-Green-NBFC",
+  "03-GAIA",
+  "03-GAIA/Tara-Deliverable",
+  "03-GAIA/OEM-AVL-Agent",
+  "03-GAIA/Credit-Assessment-Agent-GAIA-Roadmap",
+  "03-GAIA/News-Agent",
+  "04-Fund-Forge",
+  "05-BUS",
+  "06-Org-Team",
+  "06-Org-Team/Front-Office",
+  "06-Org-Team/Front-Office/Advisory-Board",
+  "06-Org-Team/Back-Office",
+  "06-Org-Team/Team-Hiring",
+  "06-Org-Team/AI-Native-Org"
+ ]
+}
+</script>
+<script>
+(function () {
+  "use strict";
+  var NR = "00-Needs-Review";
+  var data = JSON.parse(document.getElementById("report-data").textContent);
+  var rows = data.rows || [], nt = data.notTouching || [], folders = data.folders || [NR];
+  var $ = function (id) { return document.getElementById(id); };
+  var el = function (tag, attrs, text) {
+    var n = document.createElement(tag);
+    if (attrs) for (var k in attrs) { if (attrs[k] !== null && attrs[k] !== undefined) n.setAttribute(k, attrs[k]); }
+    if (text !== undefined && text !== null) n.textContent = text;
+    return n;
+  };
+  var isNR = function (r) { return r.dest === NR; };
+  var defaultAction = function (r) { return isNR(r) ? "skip" : "approve"; };
+
+  var nMove = rows.filter(function (r) { return !isNR(r); }).length;
+  var nPark = rows.length - nMove;
+  var modeLabel = { "full": "Full sort", "weekly": "Weekly sync", "report-only": "Report only" }[data.mode] || data.mode;
+  $("sub").textContent = (modeLabel ? modeLabel + ". " : "") + "Proposing " + nMove + " move" + (nMove === 1 ? "" : "s") +
+    ", parking " + nPark + " for review, leaving " + nt.length + " file" + (nt.length === 1 ? "" : "s") + " alone." +
+    (data.generatedAt ? " Generated " + data.generatedAt + "." : "");
+  [[nMove, nMove === 1 ? "proposed move" : "proposed moves"], [nPark, "parked for review"], [nt.length, "left alone"]].forEach(function (c) {
+    var li = el("li"); li.appendChild(el("strong", null, String(c[0]))); li.appendChild(document.createTextNode(c[1])); $("counts").appendChild(li);
+  });
+  var notes = (data.notes || []).slice();
+  if (data.othersOwned) notes.push(data.othersOwned + " file(s) you can see are owned by other people, so only their owners can move them.");
+  if (notes.length) { notes.forEach(function (t) { $("notes").appendChild(el("p", null, t)); }); $("notes").hidden = false; }
+
+  function folderSelect(id, label, selected, includeLeave) {
+    var s = el("select", { id: id, "aria-label": label });
+    if (includeLeave) s.appendChild(el("option", { value: "" }, "Leave alone"));
+    folders.forEach(function (f) { var o = el("option", { value: f }, f); if (f === selected) o.selected = true; s.appendChild(o); });
+    return s;
+  }
+
+  // Group rows by destination, Needs Review first, then taxonomy order.
+  var order = {}; folders.forEach(function (f, i) { order[f] = i; });
+  var groups = {};
+  rows.forEach(function (r, i) { r._i = i; (groups[r.dest] = groups[r.dest] || []).push(r); });
+  Object.keys(groups).sort(function (a, b) {
+    if (a === NR) return -1; if (b === NR) return 1; return (order[a] || 0) - (order[b] || 0);
+  }).forEach(function (dest) {
+    var sec = el("section", { "class": "group", "aria-labelledby": "g-" + order[dest] });
+    var h = el("h2", { id: "g-" + order[dest] }); h.appendChild(el("code", null, dest));
+    h.appendChild(el("span", { "class": "gnote" }, groups[dest].length + (dest === NR ? " · default Skip: a flagged file moves only if you choose it" : " · default Approve")));
+    sec.appendChild(h);
+    groups[dest].forEach(function (r) {
+      var i = r._i, row = el("div", { "class": "row" + (isNR(r) ? " review" : "") });
+      var left = el("div"); left.appendChild(el("div", { "class": "title", id: "t" + i }, r.title));
+      var meta = el("div", { "class": "meta" });
+      if (r.sensitive) {
+        meta.appendChild(el("span", { "class": "chip sens" }, "sensitive - manual review"));
+      } else {
+        if (r.current) meta.appendChild(el("span", null, "From: " + r.current));
+        meta.appendChild(el("span", null, "To: " + r.dest));
+        if (r.reason) meta.appendChild(el("span", null, r.reason));
+        if (r.confidence) meta.appendChild(el("span", { "class": "chip c-" + r.confidence }, r.confidence + " confidence"));
+        if (r.external) meta.appendChild(el("span", { "class": "chip ext" }, "Shared externally: " + r.external));
+        if (r.folderShared) meta.appendChild(el("span", { "class": "chip fold" }, "Parent folder is shared: teammates lose folder-level access"));
+        if (r.duplicate) meta.appendChild(el("span", { "class": "chip dup" }, "Possible duplicate: " + r.duplicate));
+      }
+      left.appendChild(meta); row.appendChild(left);
+      var fs = el("fieldset", { "class": "ctl" }); fs.appendChild(el("legend", null, "Decision for " + r.title));
+      var seg = el("div", { "class": "seg" });
+      [["approve", r.sensitive ? "Move to Needs Review (whole team can see it)" : (isNR(r) ? "Move to Needs Review" : "Approve")], ["recat", "Recategorize"], ["skip", "Skip"]].forEach(function (a) {
+        var rid = "a" + i + a[0];
+        var inp = el("input", { type: "radio", name: "a" + i, id: rid, value: a[0] });
+        if (a[0] === defaultAction(r)) inp.checked = true;
+        seg.appendChild(inp); seg.appendChild(el("label", { "for": rid }, a[1]));
+      });
+      fs.appendChild(seg);
+      var sel = folderSelect("s" + i, "Recategorize " + r.title + " to", r.suggest || r.dest, false);
+      sel.addEventListener("change", function () { $("a" + i + "recat").checked = true; tally(); });
+      fs.appendChild(sel);
+      fs.addEventListener("change", tally);
+      row.appendChild(fs); sec.appendChild(row);
+    });
+    $("groups").appendChild(sec);
+  });
+
+  $("nt-sum").textContent = "Not touching (" + nt.length + " file" + (nt.length === 1 ? "" : "s") + " with no Hyfin signal)";
+  if (!nt.length) $("nt-wrap").hidden = true;
+  nt.forEach(function (f, j) {
+    var d = el("div", { "class": "nt" }); d.appendChild(el("span", { "class": "title" }, f.title));
+    var s = folderSelect("n" + j, "Pull in " + f.title + " to", null, true); s.value = "";
+    s.addEventListener("change", tally); d.appendChild(s); $("nt").appendChild(d);
+  });
+
+  function decisions() {
+    var out = [];
+    rows.forEach(function (r) {
+      var i = r._i, a = document.querySelector('input[name="a' + i + '"]:checked').value, to = $("s" + i).value;
+      if (a === "approve") out.push({ action: "MOVE", id: r.id, title: r.title, dest: r.dest });
+      else if (a === "recat") out.push({ action: to === r.dest ? "MOVE" : "RECATEGORIZE", id: r.id, title: r.title, dest: to });
+      else out.push({ action: "SKIP", id: r.id, title: r.title });
+    });
+    nt.forEach(function (f, j) { var to = $("n" + j).value; if (to) out.push({ action: "PULL IN", id: f.id, title: f.title, dest: to }); });
+    return out;
+  }
+  function tally() {
+    var d = decisions(), mv = 0, sk = 0, pi = 0;
+    d.forEach(function (x) { if (x.action === "SKIP") sk++; else if (x.action === "PULL IN") pi++; else mv++; });
+    $("tally").textContent = mv + " to move · " + sk + " skipped · " + pi + " pulled in";
+  }
+  function summaryText() {
+    var d = decisions(), lines = ["HYFIN DRIVE DECISIONS (submitted from the approval report)",
+      "Execute exactly these. Any file not listed stays where it is."];
+    d.forEach(function (x, k) {
+      lines.push((k + 1) + ". " + x.action + " | id=" + x.id + ' | "' + x.title + '"' + (x.dest ? " | to " + x.dest : ""));
+    });
+    var mv = d.filter(function (x) { return x.action === "MOVE" || x.action === "RECATEGORIZE"; }).length;
+    var pi = d.filter(function (x) { return x.action === "PULL IN"; }).length;
+    lines.push("Totals: " + mv + " move, " + (d.length - mv - pi) + " skip, " + pi + " pull in.");
+    return lines.join("\n");
+  }
+  $("reset").addEventListener("click", function () {
+    rows.forEach(function (r) { var i = r._i; $("a" + i + defaultAction(r)).checked = true; $("s" + i).value = r.suggest || r.dest; });
+    nt.forEach(function (f, j) { $("n" + j).value = ""; });
+    tally();
+  });
+  $("submit").addEventListener("click", function () {
+    var text = summaryText();
+    if (typeof window.sendPrompt === "function") {
+      window.sendPrompt(text);
+      document.querySelectorAll("input,select,#reset").forEach(function (n) { n.disabled = true; });
+      $("submit").disabled = true; $("submit").textContent = "Submitted";
+      $("done").textContent = "Decisions sent. Claude will now execute only what you approved."; $("done").style.display = "block";
+    } else {
+      $("fbtext").value = text; $("fallback").style.display = "block"; $("fbtext").focus(); $("fbtext").select();
+    }
+  });
+  $("copy").addEventListener("click", function () {
+    var t = $("fbtext"); t.select();
+    if (navigator.clipboard) navigator.clipboard.writeText(t.value).catch(function () { document.execCommand("copy"); });
+    else document.execCommand("copy");
+    $("copy").textContent = "Copied";
+  });
+  tally();
+})();
+</script>
+</body>
+</html>
