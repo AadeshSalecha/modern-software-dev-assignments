@@ -1,15 +1,15 @@
 # Week 3 Write-up
 
 **Skill name**, and the repo you targeted:
-> `hyfin-drive-organizer` (in `week3/hyfin-drive-organizer/`). The target is my own Google Drive workspace, not a code repo: the shared drive "Hyfin Team Drive" plus my personal My Drive. The instructors agreed this counts, so wherever the assignment says "repo", read "the Drive".
->
-> This repository is public. Before committing, I replaced vendor, team-member and named-deal names with `[REDACTED]`, and Drive IDs and real filenames with placeholders. The copy I tested, and the one Hyfin installs, has the real terms.
+> `hyfin-drive-organizer` (in `week3/hyfin-drive-organizer/`). The target is my enterprise Google Drive workspace.
+
+> This repository is public. Before committing, I replaced vendor, team-member and named-deal names with `[REDACTED]`, and Drive IDs and real filenames with placeholders. 
 
 
 ## Part I: The Workflow
 
 **What the workflow is**, and why it's worth encoding:
-> Hyfin runs six workstreams: Guarantees, Funds, GAIA, Fund Forge, BUS and Org/Team. Everyone on the team, me included, piles Hyfin documents into their personal My Drive. Those files belong in the shared drive's workstream tree, where teammates can find them. The workflow is: find my own Hyfin files in My Drive, decide where each one belongs, show that plan to a human, and move only what they approve. Every teammate runs it, and the plan is to run it weekly. Without a skill, I was pasting the same long checklist into chat every time, and the agent still made the same mistakes.
+> My startup [Hyfin](https://hyfin.capital/) runs six workstreams (Guarantees, Funds, GAIA, Fund Forge, BUS and Org/Team). Everyone on the team, me included, piles Hyfin documents into their personal My Drive. Those files belong in the shared drive's workstream tree, where teammates can find them. The workflow is: find my own Hyfin files in My Drive, decide where each one belongs, show that plan to a human, and move only what they approve. Every teammate runs it, and the plan is to run it weekly. Without a skill, I was pasting the same long checklist into chat every time, and the agent still made the same mistakes.
 
 **The decision point** in it (what the agent has to judge, not just execute):
 > Almost every step is a judgment call. Is this file Hyfin at all, or a day-job spreadsheet or a payslip? Is it sensitive (an offer letter, a passport scan), so it should be parked for review rather than guessed about? Which of the 20 destination folders fits, and what happens when two do? Is the file shared outside Hyfin, so its sharing has to be checked after the move? Can the Drive connector make this move, or does it need the browser? And at the end, the person decides per file: approve, recategorize or skip.
@@ -17,13 +17,10 @@
 **What you learned running it manually** that you would not have guessed:
 > I ran this by hand, then with better and better instructions, many times before writing the skill. Each lesson is now in it.
 >
-> 1. **The first version proposed moves inside the shared drive's legacy folders.** That reshuffled folders teammates reach through folder-level shares. Now the scope is My Drive files the runner owns, never shared-drive contents.
-> 2. **The connector moves files from My Drive into the shared drive, and nothing else.** Every move inside the shared drive failed with "The caller does not have permission" (10 out of 10, even as an organizer), and folders can't be moved at all. So the skill has a second route through the Drive web UI.
-> 3. **The browser pane lags.** Screenshots trail clicks by one step, and right-click menus land in unexpected places in the 800 px frame. One blind click hit "Move to trash" (I cancelled it; nothing was deleted). Now the skill screenshots after every right-click, moves one item at a time, and verifies each move from file metadata, not the screen.
-> 4. **Scheduled runs are unattended.** A weekly report-only run correctly moved nothing. It also correctly refused a move I passed in as fire-time text. Authorization written into a saved task prompt did work.
-> 5. **The approval widget needed a louder Submit.** I clicked Approve on rows and thought nothing happened, because only Submit sends decisions. Now there is a big green Submit button and the line "Nothing moves until you click Submit".
-> 6. **Sharing can change inside a shared drive.** During a 24-row reorganization, a `.docx` lost its two outside collaborators, while a Slides file and an anyone-with-the-link file kept theirs. Now the skill snapshots permissions before moving an externally shared file, diffs them afterwards, and reports any difference.
-> 7. **My Drive's root and a shared drive's root have look-alike IDs** (both start with `0A`). My draft said that only shared-drive roots look like that, and my own My Drive proved it wrong. The skill now tells them apart by metadata: "My Drive" with an owner, versus "Drive" with no owner.
+> 1. **The first version did a wider sweep** Now the scope is "My Drive" files the runner owns, never shared-drive contents.
+> 2. **The connector can't move folders** Every move inside the shared drive failed with "The caller does not have permission" (10 out of 10, even as an organizer), and folders can't be moved at all. So the skill has a second route through the Drive web UI.
+> 3. **It DELETED files.** Screenshots trail clicks by one step, and right-click menus land in unexpected places in the 800 px frame. One blind click hit "Move to trash" (I cancelled it; nothing was deleted). Now the skill screenshots after every right-click, moves one item at a time, and verifies each move from file metadata, not the screen.
+> 6. **My Drive's root and a shared drive's root have look-alike IDs** (both start with `0A`). My draft instructions said that only shared-drive roots look like that, and my own My Drive proved it wrong. The skill now tells them apart by metadata: "My Drive" with an owner, versus "Drive" with no owner.
 
 
 ## Part II: The Skill
@@ -34,7 +31,7 @@ Files a Hyfin team member's own Hyfin work from their personal My Drive into the
 ```
 
 **Why it's worded that way** (what a user would type to trigger it):
-> The trigger list uses the words teammates actually type: "organize", "tidy", "clean up", "where should this live", "the new structure", "weekly sync". Workstream and vehicle names are there because people say "my GAIA docs" or "the Dhamana LOI" without ever saying "Drive" or "Hyfin". "Use it even if they never say skill" is the deliberate pushiness agentskills.io recommends, because most skills fail by never firing. The scope sentence keeps it off personal Drive cleanups. The final "Not for…" sentence hands neighbouring jobs to other skills: renaming a Google Doc goes to the Google Workspace skill, and plain search and folder questions go to the Drive tools. The description is 987 characters. My first draft was 1,035, and `skills-ref validate` rejected it for exceeding the 1,024 limit.
+> The trigger list uses the words teammates actually type: "organize", "tidy", "clean up", "where should this live", "the new structure", "weekly sync". Workstream and vehicle names are there because people say "my GAIA docs" or "the Dhamana LOI" without ever saying "Drive" or "Hyfin". "Use it even if they never say skill" is the deliberate pushiness agentskills.io recommends, because most skills fail by never firing. The scope sentence keeps it off personal Drive cleanups. The final "Not for…" sentence hands neighbouring jobs to other skills: renaming a Google Doc goes to the Google Workspace skill, and plain search and folder questions go to the Drive tools. The description is 987 characters. **My first draft was 1,035, and `skills-ref validate` rejected it for exceeding the 1,024 limit.**
 
 **Judgment encoded in the body** (what it says to do when things are ambiguous, and what not to do):
 > Every file goes through three checks, in a fixed order. The **Hyfin gate** comes first: a file with no Hyfin signal is left alone and never even reaches the sensitivity check. Otherwise someone's day-job payslip would turn into a "sensitive file proposed for the team drive". The **sensitivity check** comes second. It looks at the filename, path and title only, never opens the file, and flags whenever in doubt, because a false positive costs one click and a false negative puts pay data in a team folder. **Taxonomy** comes third: if two folders fit, pick the more specific one; cross-cutting documents go in the workstream's top folder; low confidence means `00-Needs-Review` instead of a forced guess. Flagged files default to Skip, because `00-Needs-Review` is itself visible to the whole drive.
