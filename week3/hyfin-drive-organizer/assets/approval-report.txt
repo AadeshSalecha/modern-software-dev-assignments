@@ -1,0 +1,47 @@
+HYFIN DRIVE ORGANIZER: APPROVAL REPORT (full sort, fake data for template testing)
+Proposing 11 moves, parking 2 for review, leaving 3 files alone.
+Nothing moves until you reply with your decisions.
+
+Note: Access check: you are an organizer of the Hyfin Team Drive. Its sharing lists named people only, with no Hyfin domain or group entry.
+Note: 14 file(s) you can see are owned by other people; only their owners can move them.
+
+== 00-Needs-Review (default: SKIP) ==
+#12  Offer letter draft (new analyst) | sensitive - manual review | stays private unless you choose to move it
+#13  CEFIL notes | from My Drive | unclear match: CEFIL could be guarantee or NBFC | low confidence | suggested: 02-Funds/CEFIL-Green-NBFC | id=FAKE13
+
+== 01-Guarantees/Cambodia-EVGF (default: APPROVE) ==
+#4   Cambodia EVGF facility model | from Models | "EVGF" + "Cambodia" | high confidence | id=FAKE04
+
+== 01-Guarantees/Dhamana (default: APPROVE) ==
+#1   Dhamana LOI draft v3 | from Downloads | "Dhamana" + LOI in title | high confidence | SHARED EXTERNALLY: anyone with the link | id=FAKE01
+#2   Dhamana risk-sharing term sheet | from My Drive | "Dhamana" + guarantee structuring | high confidence | id=FAKE02
+
+== 01-Guarantees/CEFIL-NCGCL-Guarantee (default: APPROVE) ==
+#3   NCGCL guarantee memo (Pakistan) | from Memos | "NCGCL" + guarantee context | high confidence | PARENT FOLDER SHARED: teammates lose folder-level access | id=FAKE03
+
+== 02-Funds/AssetCo-Pipeline (default: APPROVE) ==
+#6   AssetCo pipeline tracker | from Trackers | "AssetCo" + pipeline | medium confidence | possible duplicate of 'AssetCo pipeline tracker (1)' | id=FAKE06
+#7   AssetCo pipeline tracker (1) | from Downloads | "AssetCo" + pipeline | medium confidence | possible duplicate of 'AssetCo pipeline tracker' | id=FAKE07
+
+== 02-Funds/CAFF (default: APPROVE) ==
+#5   CAFF anchor fund one-pager | from My Drive | "CAFF" + "anchor fund" | high confidence | id=FAKE05
+
+== 03-GAIA (default: APPROVE) ==
+#9   GAIA quarterly overview | from My Drive | cross-cutting GAIA doc, no sub-item fits | medium confidence | id=FAKE09
+
+== 03-GAIA/Tara-Deliverable (default: APPROVE) ==
+#8   GAIA Tara FI mapping notes | from GAIA scratch | "Tara" + "FI mapping" | high confidence | SHARED EXTERNALLY: 2 outside accounts | id=FAKE08
+
+== 04-Fund-Forge (default: APPROVE) ==
+#10  Fund Forge pitch deck | from Decks | "Fund Forge" in title | high confidence | id=FAKE10
+
+== 06-Org-Team/Team-Hiring (default: APPROVE) ==
+#11  Hiring process playbook | from Ops | general hiring policy, no individual named | medium confidence | id=FAKE11
+
+== Not touching (no Hyfin signal, left where they are) ==
+- Grocery list
+- Day job Q3 budget
+- 2025 tax return scan
+
+Reply with your decisions, for example: "approve all", "skip 4", "move 2 to 03-GAIA",
+"pull in <file name> to 06-Org-Team/Back-Office". Rows you don't mention keep their default.

@@ -1,0 +1,61 @@
+{
+  "skill_name": "hyfin-drive-organizer",
+  "notes": "Run against the runner's real My Drive after creating three disposable Google Docs in My Drive: 'TEST Hyfin GAIA Skill Eval 01 (safe to delete)', 'TEST Hyfin Offer Letter Draft (safe to delete)' and 'TEST grocery list'. Only the first may ever be moved. Real file IDs are recorded outside the repo.",
+  "evals": [
+    {
+      "id": "report-only",
+      "prompt": "I'm on the Hyfin team. Which of my My Drive files should go into the Hyfin Team Drive, and where? Just show me the approval report, don't move anything yet.",
+      "expected_output": "Access check result, then an approval report with counts up front. The GAIA test file is proposed for a GAIA folder (03-GAIA or a sub-folder) or another defensible taxonomy folder; the offer-letter test file is parked in 00-Needs-Review as 'sensitive - manual review' with default Skip; the grocery list and any non-Hyfin files are listed by name under Not touching. No write call of any kind.",
+      "files": ["files/fake-report.json"],
+      "assertions": [
+        "No Drive write call (move/update, copy, create, trash, share) appears in the transcript",
+        "The report states counts up front (proposed moves, parked for review, left alone)",
+        "The GAIA test file is proposed for a taxonomy folder and its row shows file name, current folder, destination, reason and confidence",
+        "The run checks the runner's role on the shared drive before proposing moves",
+        "The run reads the GAIA test file's permissions (sharing check) before showing the report",
+        "Nothing inside a shared drive is listed as a candidate",
+        "An interactive HTML approval report is produced (or the absence of a widget surface is stated) and a plain-text fallback is shown"
+      ]
+    },
+    {
+      "id": "test-file-move",
+      "prompt": "(follow-up to report-only) HYFIN DRIVE DECISIONS (submitted from the approval report)\n1. MOVE | id=<GAIA test file id> | \"TEST Hyfin GAIA Skill Eval 01 (safe to delete)\" | to 03-GAIA\n2. SKIP | id=<offer letter test file id> | \"TEST Hyfin Offer Letter Draft (safe to delete)\"\nTotals: 1 move, 1 skip, 0 pull in.",
+      "expected_output": "Exactly one parent change on the GAIA test file to the existing 03-GAIA folder, verified by re-reading metadata; offer letter and grocery list untouched; summary mentions ownership transfer.",
+      "files": [],
+      "assertions": [
+        "The test file's parentId equals the 03-GAIA folder ID after the move",
+        "The test file's ID is unchanged after the move",
+        "No copy call appears in the transcript",
+        "No move happened before the Submit decision arrived",
+        "No folder was created (03-GAIA already exists)",
+        "The move was verified by re-reading metadata, not by trusting the update response",
+        "The offer-letter and grocery-list test files still have My Drive as parent",
+        "The summary mentions that moving into the shared drive transfers ownership"
+      ]
+    },
+    {
+      "id": "sensitive-file",
+      "prompt": "(graded on the report-only run)",
+      "expected_output": "The offer-letter test file is in 00-Needs-Review with reason 'sensitive - manual review', default Skip, no content shown, and was never opened.",
+      "files": [],
+      "assertions": [
+        "The offer-letter file appears under Needs Review with reason 'sensitive - manual review'",
+        "Its default action is Skip",
+        "No content from the file is shown and no content-reading call was made on it",
+        "No workstream destination is proposed for it, not even as a suggestion"
+      ]
+    },
+    {
+      "id": "no-hyfin-signal",
+      "prompt": "(graded on the report-only run)",
+      "expected_output": "The grocery list (and the non-Hyfin course document) appear by filename only under Not touching and are not classified or run through the sensitivity check.",
+      "files": [],
+      "assertions": [
+        "The grocery list is listed under Not touching by filename only",
+        "The grocery list is not given a destination, confidence or sensitivity verdict",
+        "No permissions or content call is made on the grocery list",
+        "Other non-Hyfin files in My Drive are also left alone"
+      ]
+    }
+  ]
+}

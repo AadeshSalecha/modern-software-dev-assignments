@@ -1,0 +1,6 @@
+{
+  "access_token": "ya29.placeholder-user-access-token",
+  "expires_in": 3599,
+  "scope": "openid https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/iam",
+  "token_type": "Bearer"
+}
