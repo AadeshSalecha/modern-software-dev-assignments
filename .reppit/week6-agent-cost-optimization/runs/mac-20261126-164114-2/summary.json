@@ -1,0 +1,39 @@
+{
+  "passed": false,
+  "score": {
+    "categories": {
+      "incident": {
+        "passed": 4,
+        "total": 9,
+        "failed": []
+      },
+      "regressions": {
+        "passed": 10,
+        "total": 10,
+        "failed": []
+      },
+      "compat": {
+        "passed": 2,
+        "total": 2,
+        "failed": []
+      }
+    },
+    "repair": 0.4444,
+    "impact": 1.0
+  },
+  "seconds": 374.7,
+  "cost_usd": 0.0347,
+  "requests": 46,
+  "by_model": {
+    "gpt-6-luna": {
+      "requests": 46,
+      "cost_usd": 0.0347,
+      "input": 63489,
+      "output": 11675,
+      "cache_read": 2253056,
+      "cache_write": 0,
+      "cache_write_1h": 0
+    }
+  },
+  "machine": "mac"
+}

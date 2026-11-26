@@ -24,6 +24,11 @@ Rebuilt by `make_results.py`.
 | A-v4 | 5/5 | 1.00 | 1.00 | $0.197 | $0.19 to $0.21 | 12 | 88 s | 91 s |
 | split-haiku-report | 3/3 | 1.00 | 1.00 | $0.196 | $0.19 to $0.20 | 23 | 94 s | 103 s |
 | haiku-main-sonnet-rescue | 3/3 | 1.00 | 1.00 | $0.093 | $0.05 to $0.15 | 38 | 375 s | 458 s |
+| codex-luna | 0/1 | 0.44 | 1.00 | $0.010 | $0.01 to $0.01 | 12 | 111 s | 111 s |
+| codex-terra | 2/2 | 1.00 | 1.00 | $0.102 | $0.08 to $0.12 | 14 | 140 s | 140 s |
+| A-v5 | 3/3 | 1.00 | 1.00 | $0.230 | $0.21 to $0.24 | 12 | 102 s | 107 s |
+| codex-terra-v5 | 3/3 | 1.00 | 1.00 | $0.101 | $0.09 to $0.11 | 16 | 170 s | 187 s |
+| codex-luna-v5 | 1/2 | 0.72 | 1.00 | $0.029 | $0.02 to $0.03 | 38 | 328 s | 375 s |
 
 ## baseline
 
@@ -213,6 +218,52 @@ A-v4 with `claude-haiku-5-5` as the main agent and Sonnet only if the gate fails
 | 20261126-150427-2 | PASS | 1.00 | 1.00 | $0.048 | 23 | 268 s | 9/9 | 10/10 | 2/2 | 47,583 | 1,252,135 | 91,524 |
 | 20261126-150427-3 | PASS | 1.00 | 1.00 | $0.085 | 44 | 398 s | 9/9 | 10/10 | 2/2 | 71,850 | 3,437,826 | 118,260 |
 
+## codex-luna
+
+A-v4 with Codex and `gpt-6-luna` for the whole session (run on the Mac).
+
+| Run | Result | Repair | Impact | Cost | Requests | Time | Incident | Regr. | Compat | Output | Cache read | Cache write |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| mac-20261126-160840-1 | FAIL | 0.44 | 1.00 | $0.010 | 12 | 111 s | 4/9 | 10/10 | 2/2 | 3,201 | 372,224 | 0 |
+
+## codex-terra
+
+A-v4 with Codex and `gpt-6.1-terra` for the whole session (run on the Mac).
+
+| Run | Result | Repair | Impact | Cost | Requests | Time | Incident | Regr. | Compat | Output | Cache read | Cache write |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| mac-20261126-161259-1 | PASS | 1.00 | 1.00 | $0.121 | 14 | 140 s | 9/9 | 10/10 | 2/2 | 4,749 | 523,648 | 0 |
+| mac-20261126-161259-2 | PASS | 1.00 | 1.00 | $0.083 | 13 | 139 s | 9/9 | 10/10 | 2/2 | 4,551 | 501,632 | 0 |
+
+## A-v5
+
+A-v4 plus the hand-over check in the gate, random port choice and one prompt sentence (commit 4450fb7).
+
+| Run | Result | Repair | Impact | Cost | Requests | Time | Incident | Regr. | Compat | Output | Cache read | Cache write |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 20261126-152520-1 | PASS | 1.00 | 1.00 | $0.242 | 13 | 102 s | 9/9 | 10/10 | 2/2 | 9,416 | 373,069 | 44,173 |
+| 20261126-152520-2 | PASS | 1.00 | 1.00 | $0.206 | 11 | 95 s | 9/9 | 10/10 | 2/2 | 8,892 | 279,595 | 35,438 |
+| 20261126-152520-3 | PASS | 1.00 | 1.00 | $0.242 | 12 | 107 s | 9/9 | 10/10 | 2/2 | 9,651 | 376,912 | 43,277 |
+
+## codex-terra-v5
+
+A-v5 with Codex and `gpt-6.1-terra` for the whole session (Mac).
+
+| Run | Result | Repair | Impact | Cost | Requests | Time | Incident | Regr. | Compat | Output | Cache read | Cache write |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| mac-20261126-163225-1 | PASS | 1.00 | 1.00 | $0.110 | 20 | 187 s | 9/9 | 10/10 | 2/2 | 5,508 | 831,104 | 0 |
+| mac-20261126-163225-2 | PASS | 1.00 | 1.00 | $0.089 | 13 | 150 s | 9/9 | 10/10 | 2/2 | 5,287 | 508,160 | 0 |
+| mac-20261126-163225-3 | PASS | 1.00 | 1.00 | $0.105 | 14 | 171 s | 9/9 | 10/10 | 2/2 | 5,895 | 548,480 | 0 |
+
+## codex-luna-v5
+
+A-v5 with Codex and `gpt-6-luna` for the whole session (Mac).
+
+| Run | Result | Repair | Impact | Cost | Requests | Time | Incident | Regr. | Compat | Output | Cache read | Cache write |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| mac-20261126-164114-1 | PASS | 1.00 | 1.00 | $0.023 | 29 | 282 s | 9/9 | 10/10 | 2/2 | 9,299 | 1,293,824 | 0 |
+| mac-20261126-164114-2 | FAIL | 0.44 | 1.00 | $0.035 | 46 | 375 s | 4/9 | 10/10 | 2/2 | 11,675 | 2,253,056 | 0 |
+
 ## Transfer incident (INC-2231, endpoint changes ignored)
 
 A second incident built to test the setup on a ticket it was not designed around; see
@@ -220,9 +271,14 @@ A second incident built to test the setup on a ticket it was not designed around
 
 | Setup | Run | Result | Repair | Impact | Cost | Requests | Time | Incident | Regr. | Compat |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| baseline | 20261126-153950-1 | PASS | 1.0 | 1.0 | $1.592 | 40 | 405 s | 9/9 | 9/9 | 4/4 |
+| baseline | 20261126-153950-2 | PASS | 1.0 | 1.0 | $1.023 | 27 | 249 s | 9/9 | 9/9 | 4/4 |
 | sonnet-medium | 20261126-150246-1 | PASS | 1.0 | 1.0 | $0.364 | 25 | 179 s | 9/9 | 9/9 | 4/4 |
 | sonnet-medium | 20261126-150246-2 | PASS | 1.0 | 1.0 | $0.270 | 14 | 136 s | 9/9 | 9/9 | 4/4 |
 | sonnet-medium | 20261126-150246-3 | FAIL | 0.9231 | 1.0 | $0.281 | 19 | 187 s | 9/9 | 9/9 | 3/4 |
+| sonnet-medium-v5 | 20261126-153044-1 | PASS | 1.0 | 1.0 | $0.448 | 28 | 234 s | 9/9 | 9/9 | 4/4 |
+| sonnet-medium-v5 | 20261126-153044-2 | PASS | 1.0 | 1.0 | $0.265 | 18 | 150 s | 9/9 | 9/9 | 4/4 |
+| sonnet-medium-v5 | 20261126-153044-3 | PASS | 1.0 | 1.0 | $0.300 | 19 | 146 s | 9/9 | 9/9 | 4/4 |
 
 ## Notes from reading the logs
 

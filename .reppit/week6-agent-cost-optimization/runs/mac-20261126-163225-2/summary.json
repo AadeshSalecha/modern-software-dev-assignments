@@ -1,0 +1,39 @@
+{
+  "passed": true,
+  "score": {
+    "categories": {
+      "incident": {
+        "passed": 9,
+        "total": 9,
+        "failed": []
+      },
+      "regressions": {
+        "passed": 10,
+        "total": 10,
+        "failed": []
+      },
+      "compat": {
+        "passed": 2,
+        "total": 2,
+        "failed": []
+      }
+    },
+    "repair": 1.0,
+    "impact": 1.0
+  },
+  "seconds": 150.3,
+  "cost_usd": 0.0889,
+  "requests": 13,
+  "by_model": {
+    "gpt-6.1-terra": {
+      "requests": 13,
+      "cost_usd": 0.0889,
+      "input": 37034,
+      "output": 5287,
+      "cache_read": 508160,
+      "cache_write": 0,
+      "cache_write_1h": 0
+    }
+  },
+  "machine": "mac"
+}

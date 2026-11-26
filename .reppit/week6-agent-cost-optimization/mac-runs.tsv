@@ -1,0 +1,9 @@
+# kind label run passed repair impact cost requests seconds incident regressions compat input output cache_read cache_write model
+practice codex-luna 20261126-160840-1 FAIL 0.4444 1.0 0.0096 12 111.2 4/9 10/10 2/2 42765 3201 372224 0 gpt-6-luna
+practice codex-terra 20261126-161259-1 PASS 1.0 1.0 0.1214 14 140.5 9/9 10/10 2/2 71516 4749 523648 0 gpt-6.1-terra
+practice codex-terra 20261126-161259-2 PASS 1.0 1.0 0.0826 13 139.3 9/9 10/10 2/2 34738 4551 501632 0 gpt-6.1-terra
+practice codex-terra-v5 20261126-163225-1 PASS 1.0 1.0 0.1103 20 187.0 9/9 10/10 2/2 41210 5508 831104 0 gpt-6.1-terra
+practice codex-terra-v5 20261126-163225-2 PASS 1.0 1.0 0.0889 13 150.3 9/9 10/10 2/2 37034 5287 508160 0 gpt-6.1-terra
+practice codex-terra-v5 20261126-163225-3 PASS 1.0 1.0 0.1047 14 171.3 9/9 10/10 2/2 47759 5895 548480 0 gpt-6.1-terra
+practice codex-luna-v5 20261126-164114-1 PASS 1.0 1.0 0.0228 29 281.5 9/9 10/10 2/2 52294 9299 1293824 0 gpt-6-luna
+practice codex-luna-v5 20261126-164114-2 FAIL 0.4444 1.0 0.0347 46 374.7 4/9 10/10 2/2 63489 11675 2253056 0 gpt-6-luna

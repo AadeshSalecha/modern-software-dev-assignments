@@ -232,6 +232,17 @@ else
 
 $(head -45 work/.gate.txt)"
     handover="An earlier session worked on the ticket in task.md and stopped. Its notes are in work/ledger.md, its scenarios in work/scenarios/, its report script in work/report.py, and its changes are in app/services (compare with .pristine/app/services). $again"
+    untouched=1
+    for service in api router worker; do
+      diff -rq -x AGENTS.md -x __pycache__ ".pristine/app/services/$service" "app/services/$service" >/dev/null 2>&1 || untouched=0
+    done
+    if [ "$untouched" -eq 1 ] && [ ! -s work/ledger.md ] && [ -z "$(ls out 2>/dev/null)" ]; then
+      # The first session left nothing at all (it did not start, or was refused): the next
+      # one gets the whole job, not a hand-over.
+      handover="$(compose kit/prompt.md)"
+      again="$handover"
+      rm -f "work/.session.$main_stage"
+    fi
     if [ -n "$RESCUE" ]; then
       agent "$RESCUE" start $((HARD_STOP - 10 - $(elapsed))) rescue "$handover"
       echo "run.sh: rescue session ($RESCUE) ended with status $? after $(elapsed) s"
