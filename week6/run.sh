@@ -7,16 +7,17 @@
 #   1. kit/prepare.sh   no model: snapshot the release, set unused code aside, install the
 #                       instruction files, load the evidence into work/evidence.db
 #   2. the main agent   one headless session that repairs and reports (see MAIN below)
-#   3. the gate         kit/check.sh; if it fails and time remains, one more session with
-#                       its output
+#   3. the gate         kit/check.sh; if it fails and time remains, one session of the rescue
+#                       agent with its output
 #   4. kit/prepare.sh --restore   put app/ back in its shipped layout (also on a signal)
 #
 # Who does what is three settings, each "<harness>:<model>:<effort>" with harness claude or
 # codex. The defaults are what is submitted; the grader passes no environment, so it gets them.
 #   KIT_MAIN     the main agent
 #   KIT_REPORT   if set, this agent writes the report in parallel and the main agent only repairs
-#   KIT_RESCUE   if set, a failing gate goes to this agent in a new session; otherwise the main
-#                agent gets it (resumed, for claude)
+#   KIT_RESCUE   a failing gate goes to this agent in a new session. It is the other harness and
+#                model family on purpose: if the main one cannot run here at all, this one does
+#                the whole job. Set it empty to have the main agent resumed (claude) instead
 # Other switches for experiments: KIT_TOOLS, KIT_MAX_TURNS, KIT_NO_HOOK=1, KIT_NO_RESUME=1,
 # KIT_VARIANT=flags (the bare ticket with only the harness flags changed), KIT_MAIN_END,
 # KIT_HARD_STOP.
@@ -31,7 +32,7 @@ HARD_STOP=${KIT_HARD_STOP:-570} # everything here is finished by then, 30 s befo
 
 MAIN="${KIT_MAIN:-claude:claude-sonnet-5-5:medium}"
 REPORT="${KIT_REPORT:-}"
-RESCUE="${KIT_RESCUE:-}"
+RESCUE="${KIT_RESCUE-codex:gpt-6.1-terra:medium}" # KIT_RESCUE= (empty) turns the rescue off
 
 elapsed() { echo $(($(date +%s) - STARTED)); }
 

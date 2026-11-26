@@ -29,6 +29,7 @@ Rebuilt by `make_results.py`.
 | A-v5 | 3/3 | 1.00 | 1.00 | $0.230 | $0.21 to $0.24 | 12 | 102 s | 107 s |
 | codex-terra-v5 | 3/3 | 1.00 | 1.00 | $0.101 | $0.09 to $0.11 | 16 | 170 s | 187 s |
 | codex-luna-v5 | 1/2 | 0.72 | 1.00 | $0.029 | $0.02 to $0.03 | 38 | 328 s | 375 s |
+| sonnet-main-terra-rescue | 2/2 | 1.00 | 1.00 | $0.274 | $0.24 to $0.31 | 16 | 149 s | 173 s |
 
 ## baseline
 
@@ -264,6 +265,15 @@ A-v5 with Codex and `gpt-6-luna` for the whole session (Mac).
 | mac-20261126-164114-1 | PASS | 1.00 | 1.00 | $0.023 | 29 | 282 s | 9/9 | 10/10 | 2/2 | 9,299 | 1,293,824 | 0 |
 | mac-20261126-164114-2 | FAIL | 0.44 | 1.00 | $0.035 | 46 | 375 s | 4/9 | 10/10 | 2/2 | 11,675 | 2,253,056 | 0 |
 
+## sonnet-main-terra-rescue
+
+Sonnet as the main agent and `gpt-6.1-terra` (Codex) only if the gate fails, on the Mac's Claude Code 2.1.284.
+
+| Run | Result | Repair | Impact | Cost | Requests | Time | Incident | Regr. | Compat | Output | Cache read | Cache write |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| mac-20261126-170838-1 | PASS | 1.00 | 1.00 | $0.236 | 14 | 125 s | 9/9 | 10/10 | 2/2 | 8,803 | 409,603 | 42,802 |
+| mac-20261126-170838-2 | PASS | 1.00 | 1.00 | $0.312 | 17 | 173 s | 9/9 | 10/10 | 2/2 | 12,881 | 609,442 | 48,842 |
+
 ## Transfer incident (INC-2231, endpoint changes ignored)
 
 A second incident built to test the setup on a ticket it was not designed around; see
@@ -273,6 +283,7 @@ A second incident built to test the setup on a ticket it was not designed around
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | baseline | 20261126-153950-1 | PASS | 1.0 | 1.0 | $1.592 | 40 | 405 s | 9/9 | 9/9 | 4/4 |
 | baseline | 20261126-153950-2 | PASS | 1.0 | 1.0 | $1.023 | 27 | 249 s | 9/9 | 9/9 | 4/4 |
+| codex-luna | 20261126-170021-1 | PASS | 1.0 | 1.0 | $0.029 | 23 | 481 s | 9/9 | 9/9 | 4/4 |
 | codex-terra | 20261126-165400-1 | PASS | 1.0 | 1.0 | $0.110 | 19 | 183 s | 9/9 | 9/9 | 4/4 |
 | codex-terra | 20261126-165400-2 | PASS | 1.0 | 1.0 | $0.147 | 21 | 186 s | 9/9 | 9/9 | 4/4 |
 | sonnet-medium | 20261126-150246-1 | PASS | 1.0 | 1.0 | $0.364 | 25 | 179 s | 9/9 | 9/9 | 4/4 |
