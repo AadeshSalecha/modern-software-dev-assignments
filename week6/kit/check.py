@@ -1,26 +1,30 @@
 #!/usr/bin/env python3
 """The gate: is the work in a state that can be handed in?
 
-    python3 kit/check.py                 run every check, print what is wrong (at most ~40 lines)
+    python3 kit/check.py                 run every check, print what it finds (at most ~40 lines)
     python3 kit/check.py --only report   only the out/ files (for whoever writes only the report)
     python3 kit/check.py --only repair   everything except the out/ files
     python3 kit/check.py --hook          as the stop hook runs it
 
-Checks, in order:
+BLOCKING: things that are wrong whatever the ticket says.
   build       the worker compiles
   tests       each service's own test command passes
   release     the shipped scenarios still pass, on the working tree alone and when the working
               tree replaces the shipped release after any step
   scenarios   every scenario in work/scenarios/ passes on the working tree
-  reproduce   those scenarios fail on the shipped release, and one of them replaces the release
-              part-way (asked for at most 3 times, then only noted)
-  handover    each of those scenarios also passes when the shipped release takes every step up
-              to the last drain and the working tree only finishes (asked like `reproduce`)
   crash       each service has the same numbered crash points as the shipped release
-  report      every out/ file the ticket names exists and has the keys and nesting of the
-              ticket's example; a value of another kind than the example's (text for a number)
-              is asked about like `reproduce`, since the example may only be a placeholder
-  ledger      work/ledger.md has no unchecked line
+  report      every out/ file the ticket names exists and is valid JSON
+
+TO CONSIDER: things this script cannot be sure about. They never block a manual run. The
+stop hook sends them back once, so that they are read, and never again.
+  reproduce   the scenarios in work/scenarios/ fail on the shipped release, and one of them
+              replaces the release part-way
+  handover    each of those scenarios also passes when the shipped release takes every step up
+              to the last drain and the working tree only finishes
+  shape       where an out/ file differs from the ticket's example in keys, nesting or kind of
+              value. The example may use placeholders: the ticket's wording decides, and a
+              correct report is never changed to match a placeholder
+  ledger      work/ledger.md has unchecked lines
 
 Exit status 0: nothing blocks. 1: something does.
 """
@@ -41,7 +45,7 @@ sys.path.insert(0, KIT)
 import rollout  # noqa: E402
 
 SERVICES = ("api", "router", "worker")
-SOFT_LIMIT = 3
+SOFT_LIMIT = 1  # the stop hook sends the to-consider items back this many times
 SOFT_COUNTER = os.path.join(ROOT, "work", ".soft_blocks")
 NO_HARNESS = os.path.join(ROOT, "work", ".no_harness")
 BUDGET_SECONDS = 150  # for all scenario runs together
@@ -160,8 +164,17 @@ def kind(value):
     return "null"
 
 
+PLACEHOLDER = re.compile(r"…|\.\.\.|<[^>]*>|\bxxx\b|^[A-Z]{3}$", re.I)
+
+
 def is_map(example):
-    return bool(example) and all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in example.values())
+    """True when the example's keys are examples of keys, not field names: an ellipsis or other
+    placeholder in a key, or every value a number (totals by code)."""
+    if not example:
+        return False
+    if any(PLACEHOLDER.search(str(key)) for key in example):
+        return True
+    return all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in example.values())
 
 
 def same_kind(example, actual):
@@ -182,13 +195,16 @@ def shape(example, actual, where="report", top=True):
     if isinstance(example, dict):
         if not isinstance(actual, dict):
             return [f"{where}: expected an object, found {kind(actual)}"], []
-        if not top and is_map(example):
+        if is_map(example) and not (top and not any(PLACEHOLDER.search(str(k)) for k in example)):
             sample = next(iter(example.values()))
-            return [], [
-                f"{where}.{key}: the ticket's example has {kind(sample)}, this is {kind(value)}"
-                for key, value in actual.items()
-                if not same_kind(sample, value)
-            ][:3]
+            structure, values = [], []
+            for key, value in list(actual.items())[:200]:
+                found = shape(sample, value, f"{where}.{key}", False)
+                structure += found[0]
+                values += found[1]
+                if len(structure) + len(values) >= 3:
+                    break
+            return structure[:3], values[:3]
         structure = [f"{where}: missing \"{key}\"" for key in example if key not in actual]
         structure += [f"{where}: unexpected \"{key}\"" for key in actual if key not in example]
         values = []
@@ -239,13 +255,14 @@ def named_outputs(task_text):
 
 
 def check_report(task_path):
-    """Returns (hard, soft) problems with the out/ files the ticket names."""
+    """Returns (hard, notes) for the out/ files the ticket names. Only a missing or unreadable
+    file is hard; differences from the ticket's example are notes."""
     try:
         with open(task_path, encoding="utf-8") as handle:
             task_text = handle.read()
     except OSError:
         return [], []
-    hard, soft = [], []
+    hard, notes = [], []
     for path, example in named_outputs(task_text):
         full = os.path.join(ROOT, path)
         if not os.path.isfile(full):
@@ -261,12 +278,17 @@ def check_report(task_path):
             continue
         if example is not None:
             structure, values = shape(example, actual)
-            hard += [p.replace("report", path, 1) for p in structure][:6]
-            soft += [p.replace("report", path, 1) + " (change it only if the ticket's wording agrees)" for p in values][:3]
-    return hard, soft
+            found = [p.replace("report", path, 1) for p in (structure + values)][:5]
+            if found:
+                notes.append(
+                    f"{path} differs from the ticket's example ({'; '.join(found)}). The example may use placeholders: "
+                    "go by the ticket's wording, and do not change a correct report to match a placeholder"
+                )
+    return hard, notes
 
 
 def check_ledger():
+    """Notes about work/ledger.md. The ledger is a thinking aid, so nothing here blocks."""
     path = os.path.join(ROOT, "work", "ledger.md")
     try:
         with open(path, encoding="utf-8") as handle:
@@ -312,7 +334,7 @@ def scenario_checks(bins):
         if scenario.get("skip_checks"):
             soft.append(
                 f"{name} skips the contract check(s) {', '.join(map(str, scenario['skip_checks']))}: "
-                "remove that unless the ticket itself says the rule does not apply"
+                "right only if the ticket itself says the rule does not apply"
             )
         specs.append(("scenarios", name, scenario, "new"))
         if have_old:
@@ -346,9 +368,9 @@ def scenario_checks(bins):
             if problems:
                 soft.append(
                     f"{label} fails when the shipped release takes every step up to the last drain and your change "
-                    f"only finishes ({problems[0][:150]}). That is a region mid-flight at roll-out. Make your change "
-                    "deal with what the shipped release left; if the harm was already complete before that drain, "
-                    "say so in the ledger"
+                    f"only finishes ({problems[0][:150]}). That is a region mid-flight at roll-out: make your change "
+                    "deal with what the shipped release left behind. The one reason not to is that the merchant had "
+                    "already seen the harm before that drain"
                 )
             continue
         if problems:
@@ -407,15 +429,17 @@ def main(argv):
         hard += scenario_hard
         hard += check_crash_points()
     if only != "repair":
-        report_hard, report_soft = check_report(task)
+        report_hard, report_notes = check_report(task)
         hard += report_hard
-        soft += report_soft
+        soft += report_notes
     if only != "report":
-        hard += check_ledger()
+        soft += check_ledger()
 
+    # The to-consider items go back through the stop hook once, so that they are read. They
+    # never block anything else: this script cannot be sure of them.
     asked = soft_count()
-    soft_blocks = bool(soft) and asked < SOFT_LIMIT
-    if hook and soft_blocks:
+    soft_blocks = hook and bool(soft) and asked < SOFT_LIMIT
+    if soft_blocks:
         try:
             os.makedirs(os.path.dirname(SOFT_COUNTER), exist_ok=True)
             with open(SOFT_COUNTER, "w", encoding="utf-8") as handle:
@@ -423,16 +447,11 @@ def main(argv):
         except OSError:
             pass
     lines = []
-    if hard or soft_blocks:
-        lines.append("BLOCKING")
-        lines += hard
-        if soft_blocks:
-            lines += soft
-    if soft and not soft_blocks:
-        lines += ["NOTED (no longer blocking)"] + soft
-    if notes:
-        lines += ["NOTED"] + notes
-    if not (hard or soft_blocks):
+    if hard:
+        lines += ["BLOCKING"] + hard
+    if soft or notes:
+        lines += ["TO CONSIDER (not blocking; act on what is right, leave what is not)"] + soft + notes
+    if not hard:
         lines.insert(0, "check: all clear" if not (soft or notes) else "check: nothing blocking")
     if len(lines) > 40:
         lines = lines[:39] + [f"... {len(lines) - 39} more lines"]

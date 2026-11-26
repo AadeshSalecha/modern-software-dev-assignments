@@ -81,7 +81,7 @@ def stop_blocks(events):
     blocks = 0
     for event in events:
         text = json.dumps(event)
-        if "Not finished: kit/check.sh reports" in text and event.get("type") in ("user", "system"):
+        if ("Not finished: kit/check.sh reports" in text or "Before you stop, kit/check.sh reports" in text) and event.get("type") in ("user", "system"):
             blocks += 1
     return blocks
 

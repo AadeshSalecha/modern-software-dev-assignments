@@ -66,6 +66,42 @@ class ShapeTest(unittest.TestCase):
         self.assertEqual(check.shape(example, {"note": "anything", "rate": 1}), ([], []))
         self.assertEqual(check.shape(example, {"note": None, "rate": 0.5}), ([], []))
 
+    def test_keys_that_are_placeholders_are_free(self):
+        # a report keyed by ids: the example's "ep_…" stands for any endpoint id
+        example = {"by_endpoint": {"ep_…": {"deliveries": ["dlv_…"], "amount_minor": 0}}, "skipped_rows": 0}
+        report = {"by_endpoint": {"ep_a_1": {"deliveries": ["dlv_1"], "amount_minor": 5},
+                                  "ep_b_2": {"deliveries": [], "amount_minor": 0}}, "skipped_rows": 3}
+        self.assertEqual(check.shape(example, report), ([], []))
+        # the same at the top level, and a map from ids to lists
+        self.assertEqual(check.shape({"m_…": ["dlv_…"]}, {"m_one": ["dlv_1"], "m_two": []}), ([], []))
+        self.assertEqual(check.shape({"<merchant id>": 0}, {"m_one": 4}), ([], []))
+        # inside a map the values are still compared
+        structure, values = check.shape(example, {"by_endpoint": {"ep_a_1": {"deliveries": "dlv_1"}}, "skipped_rows": 3})
+        self.assertEqual(structure, ['report.by_endpoint.ep_a_1: missing "amount_minor"',
+                                     "report.by_endpoint.ep_a_1.deliveries: expected a list, found text"])
+
+    def test_report_differences_never_block(self):
+        root, check.ROOT = check.ROOT, tempfile.mkdtemp()
+        try:
+            os.makedirs(os.path.join(check.ROOT, "out"))
+            task = os.path.join(check.ROOT, "task.md")
+            with open(task, "w", encoding="utf-8") as handle:
+                handle.write(TICKET)
+            self.assertEqual(check.check_report(task), (["out/summary.json does not exist yet", "out/notes.txt does not exist yet"], []))
+            with open(os.path.join(check.ROOT, "out", "notes.txt"), "w") as handle:
+                handle.write("x")
+            with open(os.path.join(check.ROOT, "out", "summary.json"), "w") as handle:
+                handle.write('{"items": {}, "total": 1}')
+            hard, notes = check.check_report(task)
+            self.assertEqual(hard, [])
+            self.assertEqual(len(notes), 1)
+            self.assertIn("do not change a correct report to match a placeholder", notes[0])
+            with open(os.path.join(check.ROOT, "out", "summary.json"), "w") as handle:
+                handle.write("{not json")
+            self.assertIn("is not valid JSON", check.check_report(task)[0][0])
+        finally:
+            check.ROOT = root
+
     def test_named_outputs_pair_files_with_the_example_after_them(self):
         self.assertEqual(check.named_outputs(TICKET), [("out/summary.json", EXAMPLE), ("out/notes.txt", None)])
         self.assertEqual(check.named_outputs("nothing to write"), [])
