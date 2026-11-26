@@ -111,12 +111,14 @@ def stderr_tail(state_dir, service, lines=6):
     return [f"  {service} stderr: {line[:200]}" for line in tail]
 
 
-def play(scenario, release, bins, port_base):
-    """Run one scenario. Returns (result, errors)."""
+def play(scenario, release, bins, port_base, new_app=None):
+    """Run one scenario. Returns (result, errors). `new_app` is the tree that stands for the
+    working tree in this run (another candidate repair); the default is NEW_APP."""
+    new_app = new_app or NEW_APP
     steps = scenario["steps"]
     upgrades = any(step.get("do") == "upgrade" for step in steps)
-    app = OLD_APP if (release == "old" or upgrades) else NEW_APP
-    target = OLD_APP if release == "old" else NEW_APP
+    app = OLD_APP if (release == "old" or upgrades) else new_app
+    target = OLD_APP if release == "old" else new_app
     state_dir = tempfile.mkdtemp(prefix="switchyard-")
     dep = Deployment(state_dir, port_base, app, bins[app])
     errors, result = [], None
@@ -393,19 +395,21 @@ def build(apps):
 
 
 def run_all(jobs_spec, bins, jobs=4, port_base=7400, deadline=None):
-    """jobs_spec: list of (label, scenario, release). Returns list of dicts in the same order.
-    Runs that have not started by `deadline` (a time.time() value) are reported as not run."""
+    """jobs_spec: list of (label, scenario, release) or (label, scenario, release, new_app).
+    Returns list of dicts in the same order. Runs that have not started by `deadline` (a
+    time.time() value) are reported as not run."""
     taken, choosing = set(), threading.Lock()
 
     def one(spec):
-        label, scenario, release = spec
+        label, scenario, release = spec[:3]
+        new_app = spec[3] if len(spec) > 3 else None
         if deadline is not None and time.time() > deadline:
             return {"label": label, "name": scenario.get("name", ""), "problems": ["not run: out of time"], "digest": [], "result": None}
         with choosing:
             base = free_port_base(port_base, taken)
             taken.add(base)
         try:
-            result, errors = play(scenario, release, bins, base)
+            result, errors = play(scenario, release, bins, base, new_app)
         finally:
             with choosing:
                 taken.discard(base)

@@ -6,33 +6,41 @@
 # What it does:
 #   1. kit/prepare.sh   no model: snapshot the release, set unused code aside, install the
 #                       instruction files, load the evidence into work/evidence.db
-#   2. the main agent   one headless session that repairs and reports (see MAIN below)
-#   3. the gate         kit/check.sh; if it fails and time remains, one session of the rescue
-#                       agent with its output
-#   4. kit/prepare.sh --restore   put app/ back in its shipped layout (also on a signal)
+#   2. two solvers      each does the whole job on its own, at the same time: the main agent
+#                       here, the second agent in a copy of this workspace. They are different
+#                       harnesses and model families on purpose
+#   3. kit/cross.py     no model: every scenario either solver wrote is run on both repairs,
+#                       and the two reports are compared
+#   4. follow-up        if the better repair still fails something, its author gets the list;
+#                       if the reports differ, a fresh session decides between them
+#   5. install          the better repair and the decided report end up here;
+#                       kit/prepare.sh --restore puts app/ back in its shipped layout
 #
-# Who does what is three settings, each "<harness>:<model>:<effort>" with harness claude or
-# codex. The defaults are what is submitted; the grader passes no environment, so it gets them.
-#   KIT_MAIN     the main agent
-#   KIT_REPORT   if set, this agent writes the report in parallel and the main agent only repairs
-#   KIT_RESCUE   a failing gate goes to this agent in a new session. It is the other harness and
-#                model family on purpose: if the main one cannot run here at all, this one does
-#                the whole job. Set it empty to have the main agent resumed (claude) instead
-# Other switches for experiments: KIT_TOOLS, KIT_MAX_TURNS, KIT_NO_HOOK=1, KIT_NO_RESUME=1,
-# KIT_VARIANT=flags (the bare ticket with only the harness flags changed), KIT_MAIN_END,
-# KIT_HARD_STOP.
+# After step 2 this workspace already holds a complete answer; later steps only replace a
+# part of it when the replacement checks out. Steps 4 is skipped when time or money is short.
+#
+# Settings, each "<harness>:<model>:<effort>" with harness claude or codex. The defaults are
+# what is submitted; the grader passes no environment, so it gets them.
+#   KIT_MAIN     the main solver
+#   KIT_SECOND   the second solver; empty for one solver only
+#   KIT_JUDGE    the session that decides between two different reports
+# Other switches for experiments: KIT_TOOLS, KIT_MAX_TURNS, KIT_NO_HOOK=1, KIT_NO_FOLLOWUP=1,
+# KIT_VARIANT=flags (the bare ticket with only the harness flags changed), KIT_SOLVE_END,
+# KIT_HARD_STOP, KIT_FIX_BUDGET, KIT_JUDGE_BUDGET.
 set -u
 
 TASK_FILE="${1:?usage: ./run.sh <task-file>}"
 cd "$(dirname "$0")" || exit 1
 ROOT=$PWD
 STARTED=$(date +%s)
-MAIN_END=${KIT_MAIN_END:-470}   # agents started first are stopped this many seconds after the start
-HARD_STOP=${KIT_HARD_STOP:-570} # everything here is finished by then, 30 s before the grader's limit
+SOLVE_END=${KIT_SOLVE_END:-330}       # solvers are stopped this many seconds after the start
+HARD_STOP=${KIT_HARD_STOP:-570}       # everything here is finished by then, 30 s before the grader's limit
+FIX_BUDGET=${KIT_FIX_BUDGET:-0.55}    # a fix session starts only below this estimated spend (dollars)
+JUDGE_BUDGET=${KIT_JUDGE_BUDGET:-0.62} # and a report decision only below this
 
 MAIN="${KIT_MAIN:-claude:claude-sonnet-5-5:medium}"
-REPORT="${KIT_REPORT:-}"
-RESCUE="${KIT_RESCUE-codex:gpt-6.1-terra:medium}" # KIT_RESCUE= (empty) turns the rescue off
+SECOND="${KIT_SECOND-codex:gpt-6.1-terra:medium}"
+JUDGE="${KIT_JUDGE:-claude:claude-sonnet-5-5:high}"
 
 elapsed() { echo $(($(date +%s) - STARTED)); }
 
@@ -52,14 +60,15 @@ for extra in /usr/local/go/bin "$HOME/go/bin" "$HOME/.local/bin"; do
   esac
 done
 export PATH
-# Cache writes at the 5-minute rate: the run is one short session, so a longer-lived cache
-# buys nothing and costs 60% more per token written.
+# Cache writes at the 5-minute rate: no session here lasts longer, and the 1-hour rate costs
+# 60% more per token written.
 export FORCE_PROMPT_CACHING_5M=1
 export DISABLE_AUTOUPDATER=1
 
 # --- running things with a deadline, and tidying up whatever happens ------------------
 CHILD=""
 BACKGROUND=""
+B_ROOT=""
 limited() { # limited <seconds> <command...>: stop the command when the time is up
   local seconds=$1
   shift
@@ -90,10 +99,14 @@ kill_tree() { # kill_tree <pid>: the process and everything under it
   kill -TERM "$pid" 2>/dev/null
 }
 
-stop_services() { # replay services started from this workspace detach themselves; stop any left
-  pkill -f "$ROOT/app/services/" 2>/dev/null
-  pkill -f "$ROOT/app/.build/" 2>/dev/null
-  pkill -f "$ROOT/.pristine/app/" 2>/dev/null
+stop_services() { # replay services started from a workspace detach themselves; stop any left
+  local root
+  for root in "$ROOT" "$B_ROOT"; do
+    [ -n "$root" ] || continue
+    pkill -f "$root/app/services/" 2>/dev/null
+    pkill -f "$root/app/.build/" 2>/dev/null
+    pkill -f "$root/.pristine/app/" 2>/dev/null
+  done
   return 0
 }
 
@@ -101,7 +114,9 @@ PREPARED=0
 finish() {
   trap - EXIT TERM INT
   [ -n "$CHILD" ] && kill_tree "$CHILD"
-  [ -n "$BACKGROUND" ] && kill_tree "$BACKGROUND"
+  for pid in $BACKGROUND; do
+    kill_tree "$pid"
+  done
   if [ "$PREPARED" -eq 1 ]; then
     stop_services
     kit/prepare.sh --restore
@@ -111,11 +126,12 @@ trap finish EXIT
 trap 'exit 143' TERM INT
 
 # --- one headless session ----------------------------------------------------------------
-agent() { # agent <harness:model:effort> <start|resume> <seconds> <stage> <prompt>
+agent() { # agent <harness:model:effort> <start|resume> <seconds> <name> <prompt>, in the current directory
   local spec=$1 mode=$2 seconds=$3 stage=$4 prompt=$5
-  local harness model effort
+  local harness model effort began status
   IFS=: read -r harness model effort <<<"$spec"
   effort="${effort:-medium}"
+  began=$(date +%s)
   case "$harness" in
     claude)
       local flags=(
@@ -125,11 +141,9 @@ agent() { # agent <harness:model:effort> <start|resume> <seconds> <stage> <promp
         --permission-mode bypassPermissions
         --output-format stream-json --verbose
       )
-      local began status
-      began=$(date +%s)
       if [ "$mode" = "resume" ] && [ -s "work/.session.$stage" ]; then
         KIT_STAGE="$stage" limited "$seconds" claude -p "$prompt" --resume "$(cat "work/.session.$stage")" \
-          --max-turns 30 "${flags[@]}"
+          --max-turns 40 "${flags[@]}"
       else
         python3 -c 'import uuid; print(uuid.uuid4())' >"work/.session.$stage"
         KIT_STAGE="$stage" limited "$seconds" claude -p "$prompt" --session-id "$(cat "work/.session.$stage")" \
@@ -148,10 +162,7 @@ agent() { # agent <harness:model:effort> <start|resume> <seconds> <stage> <promp
       return $status
       ;;
     codex)
-      # Codex reads the root AGENTS.md by itself. It has no stop hook here; the gate below
-      # and the second session stand in for it.
-      local began status
-      began=$(date +%s)
+      # Codex reads the root AGENTS.md by itself. It has no stop hook here.
       KIT_STAGE="$stage" limited "$seconds" codex exec -m "$model" -c "model_reasoning_effort=\"$effort\"" \
         --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check --json "$prompt"
       status=$?
@@ -172,14 +183,42 @@ agent() { # agent <harness:model:effort> <start|resume> <seconds> <stage> <promp
 
 harness_of() { echo "${1%%:*}"; }
 
-compose() { # compose <prompt file>: the fixed prompt, the notes from prep, then the ticket
+log_for() { # log_for <step> <spec>: where that session's output goes (kit/spend.py reads the name)
+  local rest=${2#*:}
+  echo "$ROOT/work/logs/$1.$(harness_of "$2").${rest%%:*}.jsonl"
+}
+
+affordable() { # affordable <dollars> <seconds>: spend so far is below the first, time gone below the second
+  [ "$(elapsed)" -lt "$2" ] && python3 kit/spend.py --under "$1" work/logs
+}
+
+compose() { # compose <prompt file> [extra file]: the fixed prompt, the notes from prep, then the ticket
   cat "$1"
-  cat work/start.txt 2>/dev/null
-  echo
-  cat work/evidence.txt 2>/dev/null
+  if [ -n "${2:-}" ]; then
+    cat "$2" 2>/dev/null
+  else
+    cat work/start.txt 2>/dev/null
+    echo
+    cat work/evidence.txt 2>/dev/null
+  fi
   printf '\n<ticket file="%s">\n' "$TASK_FILE"
   cat "$TASK_FILE"
   printf '\n</ticket>\n'
+}
+
+make_copy() { # a second workspace for the second solver, outside this one where possible
+  B_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/week6-b.XXXXXX" 2>/dev/null) || B_ROOT=""
+  if [ -z "$B_ROOT" ] || [ ! -w "$B_ROOT" ]; then
+    B_ROOT="$ROOT/.b"
+    mkdir -p "$B_ROOT" || return 1
+  fi
+  cp -R AGENTS.md CLAUDE.md .claude kit app .pristine "$B_ROOT/" || return 1
+  [ -f rate_card.json ] && cp rate_card.json "$B_ROOT/"
+  cp "$TASK_FILE" "$B_ROOT/task.md" || return 1
+  mkdir -p "$B_ROOT/work/scenarios" "$B_ROOT/out"
+  cp work/start.txt work/evidence.txt work/evidence.db "$B_ROOT/work/" 2>/dev/null
+  ln -s "$ROOT/incident" "$B_ROOT/incident" 2>/dev/null
+  return 0
 }
 
 if [ "${KIT_VARIANT:-}" = "flags" ]; then
@@ -191,7 +230,7 @@ if [ "${KIT_VARIANT:-}" = "flags" ]; then
   mv CLAUDE.md CLAUDE.md.off 2>/dev/null
   mv AGENTS.md AGENTS.md.off 2>/dev/null
   mkdir -p work
-  KIT_NO_HOOK=1 agent "$MAIN" start "$MAIN_END" all "$(cat "$TASK_FILE")"
+  KIT_NO_HOOK=1 agent "$MAIN" start "$SOLVE_END" all "$(cat "$TASK_FILE")"
   exit 0
 fi
 
@@ -201,59 +240,113 @@ if [ "$prepared" -eq 3 ]; then
   exit 3 # the development checkout: prepare.sh has said why
 fi
 PREPARED=1
+mkdir -p work/logs work/cross
+PROMPT="$(compose kit/prompt.md)"
 
-if [ -n "$REPORT" ]; then
-  # Two agents: the report in the background, the repair in front. Each has its own prompt
-  # and is checked on its own part.
-  (agent "$REPORT" start $((MAIN_END - $(elapsed))) report "$(compose kit/prompt-report.md)" >work/.report.log 2>&1) &
-  BACKGROUND=$!
-  agent "$MAIN" start $((MAIN_END - $(elapsed))) repair "$(compose kit/prompt-repair.md)"
-  echo "run.sh: repair session ($MAIN) ended with status $? after $(elapsed) s"
-  wait "$BACKGROUND"
-  echo "run.sh: report session ($REPORT) ended with status $? after $(elapsed) s; its output follows"
-  BACKGROUND=""
-  cat work/.report.log
-  main_stage=repair
+# --- 2. the solvers ------------------------------------------------------------------------
+if [ -n "$SECOND" ] && make_copy; then
+  B_LOG=$(log_for b "$SECOND")
+  (cd "$B_ROOT" && agent "$SECOND" start $((SOLVE_END - $(elapsed))) all "$PROMPT") >"$B_LOG" 2>&1 &
+  B_PID=$!
+  BACKGROUND="$B_PID"
 else
-  agent "$MAIN" start $((MAIN_END - $(elapsed))) all "$(compose kit/prompt.md)"
-  echo "run.sh: main session ($MAIN) ended with status $? after $(elapsed) s"
-  main_stage=all
+  SECOND=""
+fi
+A_LOG=$(log_for a "$MAIN")
+agent "$MAIN" start $((SOLVE_END - $(elapsed))) all "$PROMPT" >"$A_LOG" 2>&1
+echo "run.sh: main solver ($MAIN) ended with status $? after $(elapsed) s"
+cat "$A_LOG"
+if [ -n "$SECOND" ]; then
+  wait "$B_PID"
+  echo "run.sh: second solver ($SECOND) ended with status $? after $(elapsed) s; its output follows"
+  BACKGROUND=""
+  cat "$B_LOG"
 fi
 stop_services
 
-# One more go if the gate is still red and there is time to act on it.
-if limited $((HARD_STOP - 60 - $(elapsed))) kit/check.sh >work/.gate.txt 2>&1; then
-  echo "run.sh: gate is clear"
-else
-  echo "run.sh: gate after the session:"
-  head -45 work/.gate.txt
+# --- 3. cross-check, 4. follow-up, 5. install ---------------------------------------------
+BEST=a
+BEST_FAILS=0
+REPORTS=same
+if [ -n "$SECOND" ]; then
+  limited 140 python3 kit/cross.py --b "$B_ROOT" >work/cross/log.txt 2>&1
+  echo "run.sh: cross-check after $(elapsed) s:"
+  head -40 work/cross/log.txt
   stop_services
-  if [ "$(elapsed)" -lt 400 ] && [ "${KIT_NO_RESUME:-}" != "1" ]; then
-    again="kit/check.sh still reports the following. Fix it, keeping the code in a state that builds, then stop.
+  if [ -s work/cross/decision.env ]; then
+    BEST=$(grep '^BEST=' work/cross/decision.env | cut -d= -f2)
+    BEST_FAILS=$(grep '^BEST_FAILS=' work/cross/decision.env | cut -d= -f2)
+    REPORTS=$(grep '^REPORTS=' work/cross/decision.env | cut -d= -f2)
+  fi
+  case "$BEST" in a | b) ;; *) BEST=a ;; esac
+  case "$BEST_FAILS" in '' | *[!0-9]*) BEST_FAILS=0 ;; esac
 
-$(head -45 work/.gate.txt)"
-    handover="An earlier session worked on the ticket in task.md and stopped. Its notes are in work/ledger.md, its scenarios in work/scenarios/, its report script in work/report.py, and its changes are in app/services (compare with .pristine/app/services). $again"
-    untouched=1
-    for service in api router worker; do
-      diff -rq -x AGENTS.md -x __pycache__ ".pristine/app/services/$service" "app/services/$service" >/dev/null 2>&1 || untouched=0
-    done
-    if [ "$untouched" -eq 1 ] && [ ! -s work/ledger.md ] && [ -z "$(ls out 2>/dev/null)" ]; then
-      # The first session left nothing at all (it did not start, or was refused): the next
-      # one gets the whole job, not a hand-over.
-      handover="$(compose kit/prompt.md)"
-      again="$handover"
-      rm -f "work/.session.$main_stage"
+  FIX_PID=""
+  if [ "${KIT_NO_FOLLOWUP:-}" != "1" ]; then
+    # The better repair's author gets the runs it still fails.
+    if [ "$BEST_FAILS" -gt 0 ] && affordable "$FIX_BUDGET" 380; then
+      if [ "$BEST" = "a" ]; then
+        fix_root=$ROOT
+        fix_spec=$MAIN
+      else
+        fix_root=$B_ROOT
+        fix_spec=$SECOND
+      fi
+      fix_prompt="$(cat kit/prompt-fix.md work/cross/fix.txt)"
+      FIX_LOG=$(log_for fix "$fix_spec")
+      (cd "$fix_root" && agent "$fix_spec" resume $((HARD_STOP - 60 - $(elapsed))) all "$fix_prompt") >"$FIX_LOG" 2>&1 &
+      FIX_PID=$!
+      BACKGROUND="$FIX_PID"
     fi
-    if [ -n "$RESCUE" ]; then
-      agent "$RESCUE" start $((HARD_STOP - 10 - $(elapsed))) rescue "$handover"
-      echo "run.sh: rescue session ($RESCUE) ended with status $? after $(elapsed) s"
-    elif [ "$(harness_of "$MAIN")" = "claude" ]; then
-      agent "$MAIN" resume $((HARD_STOP - 10 - $(elapsed))) "$main_stage" "$again"
-      echo "run.sh: resumed session ended with status $? after $(elapsed) s"
-    else
-      agent "$MAIN" start $((HARD_STOP - 10 - $(elapsed))) rescue "$handover"
-      echo "run.sh: second session ($MAIN) ended with status $? after $(elapsed) s"
+    # Two different reports: a fresh session decides. The first report is kept in case it fails.
+    if [ "$REPORTS" = "differ" ] && affordable "$JUDGE_BUDGET" 430; then
+      mkdir -p work/cross/out-a && cp out/* work/cross/out-a/ 2>/dev/null
+      JUDGE_LOG=$(log_for judge "$JUDGE")
+      KIT_NO_HOOK=1 agent "$JUDGE" start $((HARD_STOP - 50 - $(elapsed))) judge \
+        "$(compose kit/prompt-adjudicate.md work/cross/reports.txt)" >"$JUDGE_LOG" 2>&1
+      echo "run.sh: report decision ($JUDGE) ended with status $? after $(elapsed) s"
+      cat "$JUDGE_LOG"
+      for report in work/cross/out-a/*.json; do
+        [ -e "$report" ] || continue
+        if ! python3 -c 'import json, sys; json.load(open(sys.argv[1]))' "out/$(basename "$report")" 2>/dev/null; then
+          echo "run.sh: the decided $(basename "$report") is missing or not JSON; keeping the first report"
+          cp "$report" "out/$(basename "$report")"
+        fi
+      done
+    fi
+    if [ -n "$FIX_PID" ]; then
+      wait "$FIX_PID"
+      echo "run.sh: fix session ended with status $? after $(elapsed) s"
+      BACKGROUND=""
+      cat "$FIX_LOG"
+      stop_services
+      # Has the fix changed which repair is better?
+      if [ "$(elapsed)" -lt $((HARD_STOP - 110)) ]; then
+        limited 100 python3 kit/cross.py --b "$B_ROOT" --out work/cross/after >work/cross/log-after.txt 2>&1
+        if [ -s work/cross/after/decision.env ]; then
+          BEST=$(grep '^BEST=' work/cross/after/decision.env | cut -d= -f2)
+          echo "run.sh: after the fix the better repair is $BEST"
+          head -12 work/cross/log-after.txt
+        fi
+        stop_services
+        case "$BEST" in a | b) ;; *) BEST=a ;; esac
+      fi
     fi
   fi
+
+  if [ "$REPORTS" = "only_b" ]; then
+    mkdir -p out && cp "$B_ROOT"/out/* out/ 2>/dev/null
+    echo "run.sh: only the second solver wrote a report; using it"
+  fi
+  if [ "$BEST" = "b" ]; then
+    for service in api router worker; do
+      if [ -d "$B_ROOT/app/services/$service" ]; then
+        mv "app/services/$service" "work/cross/a-$service" 2>/dev/null
+        cp -R "$B_ROOT/app/services/$service" "app/services/$service"
+      fi
+    done
+    echo "run.sh: installed the second solver's repair"
+  fi
 fi
+echo "run.sh: finished after $(elapsed) s; estimated spend: $(python3 kit/spend.py work/logs | tail -1)"
 exit 0
