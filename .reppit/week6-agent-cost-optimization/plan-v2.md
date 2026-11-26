@@ -73,6 +73,27 @@ Budget: full cost credit up to $0.75 (we used $0.26); 600 s (we used 158 s).
 | 6 | Mac runs with Sonnet + terra | Same, with cost under $0.75 |
 | 7 | Zip, hand to user for submission 2 | |
 
+## Status (end of 2026-11-26)
+
+Steps 1 to 5 and 7 are done; step 6 is half done.
+
+- Built as planned, with three changes found while testing with real models:
+  - The comparison session runs after every cross-check, not only when a run fails, and it is
+    always the main solver's session resumed. The better repair is chosen after it.
+  - A failing run is handed over as the scenario that was played (`work/cross/run-<n>.json`).
+    Named only in words, the author could not replay it and reported "cannot reproduce".
+  - The cross-check also restarts every service before the last drain.
+- Since submission 1: 14 of 14 starter runs and 7 of 7 runs on INC-2231 pass. Cost $0.24 to
+  $0.62, time 113 to 463 s. `results.md` has every run.
+- Step 6: Sonnet + `gpt-6.1-terra` ran twice on the Mac (pass, $0.33 and $0.39) before the
+  comparison session was unconditional. It has not run since: the Mac went to sleep. Every
+  step has run with real models, with a Claude model as the second solver.
+- What the runs do not show: in 6 of 21 runs the main repair failed a cross-check run, each
+  time a hand-over variant, and each of those runs passed its judge. On these two incidents
+  the cross-check has not caught a real defect; the comparison session changed the main
+  repair in 2 of 6 runs for reasons a judge might test (a message type outside the v3 schema,
+  a clean-up that ran only at start-up).
+
 ## Out of scope
 
 Anything that needs to know the held-out ticket. We only get category counts back.
