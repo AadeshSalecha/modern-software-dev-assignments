@@ -260,3 +260,13 @@ Stop and report after step 7, and again after step 9, before any Gradescope subm
   grader and practice both remove that folder, and the grader's container might be a git checkout.
 - `run.sh` ends by moving `_deprecated/` content back and removing the overlay files, so the
   workspace `app/` differs from the release only by the agent's own edits.
+- The gate is `kit/check.py`; `kit/check.sh` is a wrapper with the planned name. It runs one
+  scenario first and reports "the working tree does not start" instead of waiting for every
+  scenario to time out.
+- `kit/mapgen.py` (new): writes the line-numbered map into each service's `AGENTS.md` at run time.
+- Skills are read as files (`.claude/skills/<name>/SKILL.md`), named in the prompt; the Skill tool
+  is not enabled, so the tool list is Bash, Read, Edit, Write.
+- `run.sh` has experiment switches read from the environment (`KIT_MODEL`, `KIT_EFFORT`,
+  `KIT_TOOLS`, `KIT_MAX_TURNS`, `KIT_NO_HOOK`, `KIT_NO_RESUME`, `KIT_VARIANT=flags`). The grader
+  runs with an empty environment, so it always gets the defaults.
+- Steps 1 to 7 done on 2026-11-26. Results are in `results.md`.

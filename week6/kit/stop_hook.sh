@@ -4,6 +4,7 @@
 cd "$(dirname "$0")/.." || exit 0
 [ -d tools/starter ] && exit 0   # the development checkout: this hook is for graded runs only
 [ -d work ] || exit 0
+[ "${KIT_NO_HOOK:-}" = "1" ] && exit 0   # experiments only
 blocks=$(cat work/.stop_blocks 2>/dev/null || echo 0)
 [ "$blocks" -ge 5 ] && exit 0
 output=$(python3 kit/check.py --hook 2>&1)

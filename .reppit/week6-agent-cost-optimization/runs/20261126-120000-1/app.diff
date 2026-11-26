@@ -1,0 +1,195 @@
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/api/src/main.ts week6/app/services/api/src/main.ts
+--- clean-app/services/api/src/main.ts	2026-11-26 10:01:16.143626922 +0000
++++ week6/app/services/api/src/main.ts	2026-11-26 12:00:44.236777189 +0000
+@@ -6,7 +6,6 @@
+ import http from "node:http";
+ import path from "node:path";
+ 
+-import { RecentKeys } from "./keys.ts";
+ import { type Endpoint, type EventRecord, Store } from "./store.ts";
+ 
+ const RELEASE = "2.3.1";
+@@ -23,7 +22,6 @@
+ const routerUrl = `http://127.0.0.1:${portBase + 2}`;
+ 
+ const store = new Store(stateDir);
+-const keys = new RecentKeys();
+ 
+ // --- clock, crash points, log (contracts/harness.md) ----------------------
+ 
+@@ -159,19 +157,18 @@
+     typeof body.idempotency_key === "string" ? body.idempotency_key : null;
+ 
+   const at = now();
+-  if (key !== null) {
+-    const earlier = keys.find(merchantId, key, at);
+-    const found = earlier ? store.event(earlier) : undefined;
+-    if (found) {
+-      log("event.repeated", {
+-        event: found.id,
+-        merchant: merchantId,
+-        idempotency_key: key,
+-      });
+-      return [200, found];
++  const result = store.transaction((): Reply => {
++    if (key !== null) {
++      const found = store.eventByKey(merchantId, key);
++      if (found) {
++        log("event.repeated", {
++          event: found.id,
++          merchant: merchantId,
++          idempotency_key: key,
++        });
++        return [200, found];
++      }
+     }
+-  }
+-  const event = store.transaction((): EventRecord => {
+     const created: EventRecord = {
+       id: store.nextId("evt"),
+       merchant_id: merchantId,
+@@ -188,9 +185,10 @@
+       },
+     };
+     store.saveEvent(created, key, at);
+-    return created;
++    return [202, created];
+   });
+-  if (key !== null) keys.remember(merchantId, key, event.id, at);
++  if (result[0] === 200) return result;
++  const event = result[1] as EventRecord;
+   log("event.accepted", {
+     event: event.id,
+     merchant: merchantId,
+@@ -339,6 +337,7 @@
+   });
+ });
+ 
+-server.listen(portBase + 1, "127.0.0.1", () =>
+-  log("api.started", { release: RELEASE }),
+-);
++server.listen(portBase + 1, "127.0.0.1", () => {
++  store.announceRepeats(now());
++  log("api.started", { release: RELEASE });
++});
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/api/src/store.ts week6/app/services/api/src/store.ts
+--- clean-app/services/api/src/store.ts	2026-11-26 10:01:16.143626922 +0000
++++ week6/app/services/api/src/store.ts	2026-11-26 12:00:44.235747273 +0000
+@@ -58,6 +58,7 @@
+   data text not null,
+   idempotency_key text
+ );
++create table if not exists repeat_notices (event_id text primary key);
+ create table if not exists outbox (
+   seq integer primary key autoincrement,
+   type text not null,
+@@ -80,7 +81,7 @@
+   }
+ 
+   transaction<T>(work: () => T): T {
+-    this.db.exec("begin");
++    this.db.exec("begin immediate");
+     try {
+       const result = work();
+       this.db.exec("commit");
+@@ -216,6 +217,27 @@
+       .run(status, seq);
+   }
+ 
++  // Tell the router about every event that repeats an earlier event's
++  // idempotency key, once each. Safe to run on every start.
++  announceRepeats(now: number): void {
++    this.transaction(() => {
++      const rows = this.db
++        .prepare(
++          `select e.id as id, f.id as original from events e
++           join events f on f.merchant_id = e.merchant_id and f.idempotency_key = e.idempotency_key
++             and f.rowid = (select min(rowid) from events g where g.merchant_id = e.merchant_id and g.idempotency_key = e.idempotency_key)
++           where e.idempotency_key is not null and e.rowid > f.rowid
++             and e.id not in (select event_id from repeat_notices)
++           order by e.rowid`,
++        )
++        .all() as { id: string; original: string }[];
++      for (const r of rows) {
++        this.db.prepare("insert into repeat_notices (event_id) values (?)").run(r.id);
++        this.enqueue("event.repeated", now, { event_id: r.id, original_id: r.original });
++      }
++    });
++  }
++
+   summary(): Record<string, unknown> {
+     const count = (sql: string) =>
+       (this.db.prepare(sql).get() as { n: number }).n;
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/bus.py week6/app/services/router/bus.py
+--- clean-app/services/router/bus.py	2026-11-26 10:01:16.144267697 +0000
++++ week6/app/services/router/bus.py	2026-11-26 12:00:44.237089831 +0000
+@@ -113,6 +113,9 @@
+     if type_ == "resend.requested":
+         body = {"event_id": need(data, "event_id", str), "endpoint_id": need(data, "endpoint_id", str)}
+         return producer, str(seq), "resend", body
++    if type_ == "event.repeated":
++        body = {"event_id": need(data, "event_id", str)}
++        return producer, str(seq), "repeat", body
+     raise Malformed("unknown message type")
+ 
+ 
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/routing.py week6/app/services/router/routing.py
+--- clean-app/services/router/routing.py	2026-11-26 10:01:16.144267697 +0000
++++ week6/app/services/router/routing.py	2026-11-26 12:00:44.237817293 +0000
+@@ -77,6 +77,8 @@
+         amount_minor=event["data"]["amount_minor"],
+         currency=event["data"]["currency"],
+     )
++    if db.execute("select 1 from repeats where event_id = ?", (event["id"],)).fetchone():
++        return
+     endpoints = db.execute(
+         "select id, event_types from endpoints where merchant_id = ? and enabled = 1 order by id",
+         (event["merchant_id"],),
+@@ -98,6 +100,8 @@
+             continue
+         if first_delivery(db, event["id"], endpoint["id"]):
+             continue
++        if db.execute("select 1 from repeats where event_id = ?", (event["id"],)).fetchone():
++            continue
+         create_delivery(db, log, now, event["id"], endpoint["id"])
+ 
+ 
+@@ -148,10 +152,27 @@
+     create_delivery(db, log, now, body["event_id"], body["endpoint_id"], resend_of=original["id"])
+ 
+ 
++def apply_repeat(db, log, now, body):
++    """The event repeats an earlier idempotency key: cancel what is still outstanding."""
++    event_id = body["event_id"]
++    db.execute("insert or ignore into repeats (event_id) values (?)", (event_id,))
++    rows = db.execute(
++        "select id from deliveries where event_id = ? and state in ('queued', 'leased')", (event_id,)
++    ).fetchall()
++    for row in rows:
++        db.execute(
++            "update deliveries set state = 'cancelled', lease_id = null, finished_at = ? where id = ?",
++            (now, row["id"]),
++        )
++        log.write("delivery.cancelled", delivery=row["id"], event=event_id)
++
++
+ def apply(db, log, now, kind, body):
+     if kind == "event":
+         route_event(db, log, now, body)
+     elif kind == "endpoint":
+         apply_endpoint(db, log, now, body)
++    elif kind == "repeat":
++        apply_repeat(db, log, now, body)
+     else:
+         apply_resend(db, log, now, body)
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/store.py week6/app/services/router/store.py
+--- clean-app/services/router/store.py	2026-11-26 10:01:16.144267697 +0000
++++ week6/app/services/router/store.py	2026-11-26 12:00:44.237444998 +0000
+@@ -50,6 +50,7 @@
+ );
+ create index if not exists deliveries_by_key on deliveries (event_id, endpoint_id, endpoint_version);
+ create index if not exists deliveries_by_state on deliveries (state, available_at);
++create table if not exists repeats (event_id text primary key);
+ create table if not exists leases (
+     id text primary key,
+     worker_id text not null,

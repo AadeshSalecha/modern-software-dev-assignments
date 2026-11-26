@@ -11,7 +11,8 @@
 #   3. if the gate still fails and time remains, one resume of that session with its output
 #   4. kit/prepare.sh --restore   put app/ back in its shipped layout
 #
-# Settings can be overridden for experiments: KIT_MODEL, KIT_EFFORT, KIT_MAX_TURNS, KIT_TOOLS.
+# Settings can be overridden for experiments: KIT_MODEL, KIT_EFFORT, KIT_MAX_TURNS, KIT_TOOLS,
+# KIT_NO_HOOK=1 (stop hook off), KIT_NO_RESUME=1, KIT_VARIANT=flags (no kit at all).
 set -u
 
 TASK_FILE="${1:?usage: ./run.sh <task-file>}"
@@ -41,6 +42,20 @@ limited() { # limited <seconds> <command...>: stop the command when the time is 
   kill "$watchdog" 2>/dev/null
   return $status
 }
+
+if [ "${KIT_VARIANT:-}" = "flags" ]; then
+  # Experiment: the baseline prompt with only the harness flags changed. No kit, no notes.
+  if [ -d tools/starter ]; then
+    echo "run.sh: development checkout; use python3 tools/practice.py" >&2
+    exit 3
+  fi
+  mv CLAUDE.md CLAUDE.md.off 2>/dev/null
+  mv AGENTS.md AGENTS.md.off 2>/dev/null
+  limited "$MAIN_LIMIT" claude -p "$(cat "$TASK_FILE")" --model "${KIT_MODEL:-claude-sonnet-5-5}" \
+    --effort "${KIT_EFFORT:-medium}" --tools "${KIT_TOOLS:-Bash,Read,Edit,Write}" --strict-mcp-config \
+    --setting-sources project --permission-mode bypassPermissions --output-format stream-json --verbose
+  exit 0
+fi
 
 kit/prepare.sh
 prepared=$?
@@ -78,7 +93,7 @@ if ! report=$(kit/check.sh 2>&1); then
   elapsed=$(($(date +%s) - STARTED))
   echo "run.sh: gate after the session:"
   echo "$report" | head -45
-  if [ "$elapsed" -lt 400 ]; then
+  if [ "$elapsed" -lt 400 ] && [ "${KIT_NO_RESUME:-}" != "1" ]; then
     limited $((HARD_STOP - 15 - elapsed)) claude -p "kit/check.sh still reports the following. Fix it, keeping the code in a state that builds, then stop.
 
 $(echo "$report" | head -45)" --resume "$SESSION" --max-turns 30 "${FLAGS[@]}"
