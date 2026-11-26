@@ -156,7 +156,7 @@ Upload a zip of your `week6/` folder to the **Assignment 6 (Autograder)** assign
 
 | Submission (up to 3, one run each) | Repair | Impact | Passed? | Cost | What you changed before it |
 | ---------------------------------- | ------ | ------ | ------- | ---- | -------------------------- |
-| 1                                  | TODO   | TODO   | TODO    | TODO | n/a                        |
+| 1                                  | 0.71 (incident 12/17, regressions 51/51, compat 8/8) | 0.11 | No | $0.2603 (Sonnet $0.2413, terra $0.0190; 24 requests, 158.5 s) | n/a |
 | 2                                  | TODO   | TODO   | TODO    | TODO | TODO                       |
 | 3                                  | TODO   | TODO   | TODO    | TODO | TODO                       |
 
