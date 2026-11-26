@@ -42,9 +42,12 @@ python3 kit/evidence.py schema
    smaller set than "it happened".
 3. **Order records by one file's own `ts`**, then `line_no`: lines arrive late and out of
    order. Clocks differ between files by up to minutes; do not order across files.
-4. **Check for holes.** A fact your definition needs may exist in a single file and be
-   missing for some ids (its row was cut). Count how many ids in play lack it before you
-   trust the result.
+4. **Check for holes, and do not fill them.** A fact your definition needs may exist in a
+   single file and be missing for some ids, because its row was cut. Count those ids.
+   `app/contracts/evidence.md` promises that no fact a report depends on is missing from
+   every file, so an id whose defining fact is in no file is not one the report depends on:
+   leave it out, and say how many you left. Never rebuild the missing fact from a record of
+   another kind, such as a service's later conclusion about the same id or key (rule 1).
 5. **Exactness.** Complete ids; one entry per the key the ticket names; every id the entry
    asks for; whole numbers as whole numbers. For each figure, re-read the sentence that
    defines it and compute it over exactly the set it names.

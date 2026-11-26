@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """The gate: is the work in a state that can be handed in?
 
-    python3 kit/check.py            run every check, print what is wrong (at most ~40 lines)
-    python3 kit/check.py --hook     the same, as the stop hook runs it
+    python3 kit/check.py                 run every check, print what is wrong (at most ~40 lines)
+    python3 kit/check.py --only report   only the out/ files (for whoever writes only the report)
+    python3 kit/check.py --only repair   everything except the out/ files
+    python3 kit/check.py --hook          as the stop hook runs it
 
 Checks, in order:
   build       the worker compiles
@@ -305,6 +307,11 @@ def scenario_checks(bins):
             hard.append(f"{name} cannot be read: {problem}")
             continue
         replaces = replaces or any(step.get("do") == "upgrade" for step in scenario["steps"])
+        if scenario.get("skip_checks"):
+            soft.append(
+                f"{name} skips the contract check(s) {', '.join(map(str, scenario['skip_checks']))}: "
+                "remove that unless the ticket itself says the rule does not apply"
+            )
         specs.append(("scenarios", name, scenario, "new"))
         if have_old:
             specs.append(("reproduce", name, scenario, "old"))
@@ -354,13 +361,18 @@ def soft_count():
 def main(argv):
     hook = "--hook" in argv
     task = os.path.join(ROOT, "task.md")
+    only = None
     for index, arg in enumerate(argv):
         if arg == "--task" and index + 1 < len(argv):
             task = argv[index + 1]
+        if arg == "--only" and index + 1 < len(argv) and argv[index + 1] in ("report", "repair"):
+            only = argv[index + 1]
 
     hard, soft, notes = [], [], []
     signal.signal(signal.SIGTERM, rollout.stop_everything)
-    if os.path.exists(NO_HARNESS):
+    if only == "report":
+        pass
+    elif os.path.exists(NO_HARNESS):
         # prepare.sh found that the shipped release cannot be run here (see work/start.txt).
         # Nothing the agent does can change that, so only the files it writes are checked.
         notes.append("the services cannot be run in this environment (work/start.txt); only the report and ledger are checked")
@@ -380,10 +392,12 @@ def main(argv):
                 hard += found
         hard += scenario_hard
         hard += check_crash_points()
-    report_hard, report_soft = check_report(task)
-    hard += report_hard
-    soft += report_soft
-    hard += check_ledger()
+    if only != "repair":
+        report_hard, report_soft = check_report(task)
+        hard += report_hard
+        soft += report_soft
+    if only != "report":
+        hard += check_ledger()
 
     asked = soft_count()
     soft_blocks = bool(soft) and asked < SOFT_LIMIT

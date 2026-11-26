@@ -22,12 +22,12 @@ A scenario is what app/bin/replay takes (see app/bin/replaylib.py), plus:
 Besides the scenario's expectations, every run is checked against the contracts:
   running         api, router and worker are still up at the end
   exits           no service exited except at an armed crash point
-  settled         nothing is left queued or leased after a final drain
+  settled         nothing is left queued or leased after a final drain (any other state passes)
   delivered       a delivery is delivered only with a recorded 2xx
   first_delivery  one first delivery per event and endpoint (a resend may add another)
   requests        every request names a known delivery and its event, with a valid signature
-A scenario can leave checks out with "skip_checks": ["settled"]. Do that only where the
-ticket itself overrides the contract, and say so in the scenario's name.
+A scenario can leave checks out with "skip_checks": ["settled"], but only where the ticket
+itself overrides the contract; the gate lists every scenario that does.
 
 One run may take at most 45 s of wall-clock time.
 
@@ -268,7 +268,10 @@ def invariants(result, scenario):
             answered[receipt["headers"].get("webhook-id")] = True
     for delivery in deliveries:
         if final_drain and delivery["state"] in ("queued", "leased") and enabled.get(delivery["endpoint_id"], True):
-            out.append(f"{label(delivery)} is still {delivery['state']} after the final drain")
+            out.append(
+                f"{label(delivery)} is still {delivery['state']} after the final drain (any other final state passes; "
+                'only if the ticket says deliveries may stay queued or leased, add "skip_checks": ["settled"])'
+            )
         if "delivered" not in skip and delivery["state"] == "delivered" and not answered.get(delivery["id"]):
             out.append(f"{label(delivery)} is delivered but no request for it got a 2xx")
         if delivery.get("resend_of") is None:

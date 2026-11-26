@@ -6,21 +6,32 @@
 # What it does:
 #   1. kit/prepare.sh   no model: snapshot the release, set unused code aside, install the
 #                       instruction files, load the evidence into work/evidence.db
-#   2. one Claude Code session on the medium model, with four tools and a stop hook that
-#      runs kit/check.sh
-#   3. if the gate still fails and time remains, one resume of that session with its output
+#   2. the main agent   one headless session that repairs and reports (see MAIN below)
+#   3. the gate         kit/check.sh; if it fails and time remains, one more session with
+#                       its output
 #   4. kit/prepare.sh --restore   put app/ back in its shipped layout (also on a signal)
 #
-# Settings can be overridden for experiments: KIT_MODEL, KIT_EFFORT, KIT_MAX_TURNS, KIT_TOOLS,
-# KIT_NO_HOOK=1 (stop hook off), KIT_NO_RESUME=1, KIT_VARIANT=flags (no kit at all).
+# Who does what is three settings, each "<harness>:<model>:<effort>" with harness claude or
+# codex. The defaults are what is submitted; the grader passes no environment, so it gets them.
+#   KIT_MAIN     the main agent
+#   KIT_REPORT   if set, this agent writes the report in parallel and the main agent only repairs
+#   KIT_RESCUE   if set, a failing gate goes to this agent in a new session; otherwise the main
+#                agent gets it (resumed, for claude)
+# Other switches for experiments: KIT_TOOLS, KIT_MAX_TURNS, KIT_NO_HOOK=1, KIT_NO_RESUME=1,
+# KIT_VARIANT=flags (the bare ticket with only the harness flags changed), KIT_MAIN_END,
+# KIT_HARD_STOP.
 set -u
 
 TASK_FILE="${1:?usage: ./run.sh <task-file>}"
 cd "$(dirname "$0")" || exit 1
 ROOT=$PWD
 STARTED=$(date +%s)
-MAIN_END=${KIT_MAIN_END:-470}   # the main session is stopped this many seconds after the start
-HARD_STOP=${KIT_HARD_STOP:-570}  # everything here is finished by then, 30 s before the grader's limit
+MAIN_END=${KIT_MAIN_END:-470}   # agents started first are stopped this many seconds after the start
+HARD_STOP=${KIT_HARD_STOP:-570} # everything here is finished by then, 30 s before the grader's limit
+
+MAIN="${KIT_MAIN:-claude:claude-sonnet-5-5:medium}"
+REPORT="${KIT_REPORT:-}"
+RESCUE="${KIT_RESCUE:-}"
 
 elapsed() { echo $(($(date +%s) - STARTED)); }
 
@@ -47,6 +58,7 @@ export DISABLE_AUTOUPDATER=1
 
 # --- running things with a deadline, and tidying up whatever happens ------------------
 CHILD=""
+BACKGROUND=""
 limited() { # limited <seconds> <command...>: stop the command when the time is up
   local seconds=$1
   shift
@@ -69,6 +81,14 @@ limited() { # limited <seconds> <command...>: stop the command when the time is 
   return $status
 }
 
+kill_tree() { # kill_tree <pid>: the process and everything under it
+  local pid=$1 child
+  for child in $(pgrep -P "$pid" 2>/dev/null); do
+    kill_tree "$child"
+  done
+  kill -TERM "$pid" 2>/dev/null
+}
+
 stop_services() { # replay services started from this workspace detach themselves; stop any left
   pkill -f "$ROOT/app/services/" 2>/dev/null
   pkill -f "$ROOT/app/.build/" 2>/dev/null
@@ -79,7 +99,8 @@ stop_services() { # replay services started from this workspace detach themselve
 PREPARED=0
 finish() {
   trap - EXIT TERM INT
-  [ -n "$CHILD" ] && kill -TERM "$CHILD" 2>/dev/null
+  [ -n "$CHILD" ] && kill_tree "$CHILD"
+  [ -n "$BACKGROUND" ] && kill_tree "$BACKGROUND"
   if [ "$PREPARED" -eq 1 ]; then
     stop_services
     kit/prepare.sh --restore
@@ -88,16 +109,54 @@ finish() {
 trap finish EXIT
 trap 'exit 143' TERM INT
 
-MODEL="${KIT_MODEL:-claude-sonnet-5-5}"
-FLAGS=(
-  --model "$MODEL"
-  --effort "${KIT_EFFORT:-medium}"
-  --tools "${KIT_TOOLS:-Bash,Read,Edit,Write}"
-  --strict-mcp-config
-  --setting-sources project
-  --permission-mode bypassPermissions
-  --output-format stream-json --verbose
-)
+# --- one headless session ----------------------------------------------------------------
+agent() { # agent <harness:model:effort> <start|resume> <seconds> <stage> <prompt>
+  local spec=$1 mode=$2 seconds=$3 stage=$4 prompt=$5
+  local harness model effort
+  IFS=: read -r harness model effort <<<"$spec"
+  effort="${effort:-medium}"
+  case "$harness" in
+    claude)
+      local flags=(
+        --model "$model" --effort "$effort"
+        --tools "${KIT_TOOLS:-Bash,Read,Edit,Write}"
+        --strict-mcp-config --setting-sources project
+        --permission-mode bypassPermissions
+        --output-format stream-json --verbose
+      )
+      if [ "$mode" = "resume" ] && [ -s "work/.session.$stage" ]; then
+        KIT_STAGE="$stage" limited "$seconds" claude -p "$prompt" --resume "$(cat "work/.session.$stage")" \
+          --max-turns 30 "${flags[@]}"
+      else
+        python3 -c 'import uuid; print(uuid.uuid4())' >"work/.session.$stage"
+        KIT_STAGE="$stage" limited "$seconds" claude -p "$prompt" --session-id "$(cat "work/.session.$stage")" \
+          --max-turns "${KIT_MAX_TURNS:-90}" "${flags[@]}"
+      fi
+      ;;
+    codex)
+      # Codex reads the root AGENTS.md by itself. It has no stop hook here; the gate below
+      # and the second session stand in for it.
+      KIT_STAGE="$stage" limited "$seconds" codex exec -m "$model" -c "model_reasoning_effort=\"$effort\"" \
+        --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check --json "$prompt"
+      ;;
+    *)
+      echo "run.sh: unknown harness in '$spec'" >&2
+      return 2
+      ;;
+  esac
+}
+
+harness_of() { echo "${1%%:*}"; }
+
+compose() { # compose <prompt file>: the fixed prompt, the notes from prep, then the ticket
+  cat "$1"
+  cat work/start.txt 2>/dev/null
+  echo
+  cat work/evidence.txt 2>/dev/null
+  printf '\n<ticket file="%s">\n' "$TASK_FILE"
+  cat "$TASK_FILE"
+  printf '\n</ticket>\n'
+}
 
 if [ "${KIT_VARIANT:-}" = "flags" ]; then
   # Experiment: the baseline prompt with only the harness flags changed. No kit, no notes.
@@ -107,7 +166,8 @@ if [ "${KIT_VARIANT:-}" = "flags" ]; then
   fi
   mv CLAUDE.md CLAUDE.md.off 2>/dev/null
   mv AGENTS.md AGENTS.md.off 2>/dev/null
-  limited "$MAIN_END" claude -p "$(cat "$TASK_FILE")" "${FLAGS[@]}"
+  mkdir -p work
+  KIT_NO_HOOK=1 agent "$MAIN" start "$MAIN_END" all "$(cat "$TASK_FILE")"
   exit 0
 fi
 
@@ -118,20 +178,23 @@ if [ "$prepared" -eq 3 ]; then
 fi
 PREPARED=1
 
-PROMPT="$(
-  cat kit/prompt.md
-  cat work/start.txt 2>/dev/null
-  echo
-  cat work/evidence.txt 2>/dev/null
-  printf '\n<ticket file="%s">\n' "$TASK_FILE"
-  cat "$TASK_FILE"
-  printf '\n</ticket>\n'
-)"
-
-SESSION=$(python3 -c 'import uuid; print(uuid.uuid4())')
-limited $((MAIN_END - $(elapsed))) claude -p "$PROMPT" --session-id "$SESSION" \
-  --max-turns "${KIT_MAX_TURNS:-90}" "${FLAGS[@]}"
-echo "run.sh: main session ended with status $? after $(elapsed) s"
+if [ -n "$REPORT" ]; then
+  # Two agents: the report in the background, the repair in front. Each has its own prompt
+  # and is checked on its own part.
+  (agent "$REPORT" start $((MAIN_END - $(elapsed))) report "$(compose kit/prompt-report.md)" >work/.report.log 2>&1) &
+  BACKGROUND=$!
+  agent "$MAIN" start $((MAIN_END - $(elapsed))) repair "$(compose kit/prompt-repair.md)"
+  echo "run.sh: repair session ($MAIN) ended with status $? after $(elapsed) s"
+  wait "$BACKGROUND"
+  echo "run.sh: report session ($REPORT) ended with status $? after $(elapsed) s; its output follows"
+  BACKGROUND=""
+  cat work/.report.log
+  main_stage=repair
+else
+  agent "$MAIN" start $((MAIN_END - $(elapsed))) all "$(compose kit/prompt.md)"
+  echo "run.sh: main session ($MAIN) ended with status $? after $(elapsed) s"
+  main_stage=all
+fi
 stop_services
 
 # One more go if the gate is still red and there is time to act on it.
@@ -142,10 +205,20 @@ else
   head -45 work/.gate.txt
   stop_services
   if [ "$(elapsed)" -lt 400 ] && [ "${KIT_NO_RESUME:-}" != "1" ]; then
-    limited $((HARD_STOP - 10 - $(elapsed))) claude -p "kit/check.sh still reports the following. Fix it, keeping the code in a state that builds, then stop.
+    again="kit/check.sh still reports the following. Fix it, keeping the code in a state that builds, then stop.
 
-$(head -45 work/.gate.txt)" --resume "$SESSION" --max-turns 30 "${FLAGS[@]}"
-    echo "run.sh: resumed session ended with status $? after $(elapsed) s"
+$(head -45 work/.gate.txt)"
+    handover="An earlier session worked on the ticket in task.md and stopped. Its notes are in work/ledger.md, its scenarios in work/scenarios/, its report script in work/report.py, and its changes are in app/services (compare with .pristine/app/services). $again"
+    if [ -n "$RESCUE" ]; then
+      agent "$RESCUE" start $((HARD_STOP - 10 - $(elapsed))) rescue "$handover"
+      echo "run.sh: rescue session ($RESCUE) ended with status $? after $(elapsed) s"
+    elif [ "$(harness_of "$MAIN")" = "claude" ]; then
+      agent "$MAIN" resume $((HARD_STOP - 10 - $(elapsed))) "$main_stage" "$again"
+      echo "run.sh: resumed session ended with status $? after $(elapsed) s"
+    else
+      agent "$MAIN" start $((HARD_STOP - 10 - $(elapsed))) rescue "$handover"
+      echo "run.sh: second session ($MAIN) ended with status $? after $(elapsed) s"
+    fi
   fi
 fi
 exit 0

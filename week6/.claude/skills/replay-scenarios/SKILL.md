@@ -15,9 +15,11 @@ python3 kit/rollout.py app/scenarios/*.json --upgrade-each  # shipped scenarios,
 ```
 
 Output is one line per run, plus the problems and a digest of deliveries and requests when
-it fails. Every run is also checked against the contracts (`kit/rollout.py --help` lists
-the checks). Where the ticket itself overrides a contract rule, a scenario can leave that
-check out with `"skip_checks": ["settled"]`; do not use it for anything else.
+it fails. Every run is also checked against the contracts: the services are still up,
+nothing is left `queued` or `leased` after a final drain (any other final state is fine,
+including one your change adds), a delivery is `delivered` only with a recorded 2xx, an
+event has one first delivery per endpoint, and every request is signed and names a known
+delivery.
 
 ## Format
 
