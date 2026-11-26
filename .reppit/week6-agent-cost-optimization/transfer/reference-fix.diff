@@ -1,0 +1,106 @@
+diff -ruN -x .build -x __pycache__ app/services/api/src/main.ts ref/app/services/api/src/main.ts
+--- app/services/api/src/main.ts	2026-11-26 10:01:16.000000000 +0000
++++ app/services/api/src/main.ts	2026-11-26 15:00:42.670968118 +0000
+@@ -339,6 +339,8 @@
+   });
+ });
+ 
++store.transaction(() => store.reannounce(now()));
++
+ server.listen(portBase + 1, "127.0.0.1", () =>
+   log("api.started", { release: RELEASE }),
+ );
+diff -ruN -x .build -x __pycache__ app/services/api/src/store.ts ref/app/services/api/src/store.ts
+--- app/services/api/src/store.ts	2026-11-26 10:01:16.000000000 +0000
++++ app/services/api/src/store.ts	2026-11-26 15:00:42.670857247 +0000
+@@ -202,6 +202,18 @@
+       .run(type, now, JSON.stringify(data));
+   }
+ 
++  // Tell the router the current state of every endpoint again (a change it dropped is
++  // carried by this). Its version is unchanged, so a router that has it does nothing.
++  reannounce(now: number): void {
++    const rows = this.db
++      .prepare("select id from endpoints order by id")
++      .all() as { id: string }[];
++    for (const row of rows) {
++      const endpoint = this.endpoint(row.id);
++      if (endpoint) this.enqueue("endpoint.changed", now, { endpoint });
++    }
++  }
++
+   pending(): OutboxRow[] {
+     return this.db
+       .prepare(
+diff -ruN -x .build -x __pycache__ app/services/router/bus.py ref/app/services/router/bus.py
+--- app/services/router/bus.py	2026-11-26 10:01:16.000000000 +0000
++++ app/services/router/bus.py	2026-11-26 15:00:42.670437379 +0000
+@@ -143,6 +143,7 @@
+             need(ep, "active", bool),
+             seq,
+         )
++        body["from_archive"] = True
+         return "api.v2", str(seq), "endpoint", body
+     raise Malformed("unknown kind")
+ 
+diff -ruN -x .build -x __pycache__ app/services/router/routing.py ref/app/services/router/routing.py
+--- app/services/router/routing.py	2026-11-26 10:01:16.000000000 +0000
++++ app/services/router/routing.py	2026-11-26 15:00:42.670745846 +0000
+@@ -103,9 +103,17 @@
+ 
+ def apply_endpoint(db, log, now, endpoint):
+     old = db.execute("select * from endpoints where id = ?", (endpoint["id"],)).fetchone()
+-    if old is not None and endpoint["version"] <= old["version"]:
+-        log.write("endpoint.stale", endpoint=endpoint["id"], version=endpoint["version"])
+-        return
++    archive = bool(endpoint.get("from_archive"))
++    if old is not None:
++        if archive:
++            stale = old["api_version"] is not None or (
++                old["archive_seq"] is not None and endpoint["version"] <= old["archive_seq"]
++            )
++        else:
++            stale = old["api_version"] is not None and endpoint["version"] <= old["api_version"]
++        if stale:
++            log.write("endpoint.stale", endpoint=endpoint["id"], version=endpoint["version"])
++            return
+     was_enabled = bool(old["enabled"]) if old is not None else None
+     disabled_at = old["disabled_at"] if old is not None else None
+     if not endpoint["enabled"] and was_enabled is not False:
+@@ -127,6 +135,14 @@
+             None if endpoint["enabled"] else disabled_at,
+         ),
+     )
++    db.execute(
++        "update endpoints set api_version = ?, archive_seq = ? where id = ?",
++        (
++            (old["api_version"] if old is not None else None) if archive else endpoint["version"],
++            endpoint["version"] if archive else (old["archive_seq"] if old is not None else None),
++            endpoint["id"],
++        ),
++    )
+     log.write(
+         "endpoint.changed",
+         endpoint=endpoint["id"],
+diff -ruN -x .build -x __pycache__ app/services/router/store.py ref/app/services/router/store.py
+--- app/services/router/store.py	2026-11-26 10:01:16.000000000 +0000
++++ app/services/router/store.py	2026-11-26 15:00:42.670264618 +0000
+@@ -77,6 +77,18 @@
+     db.execute("pragma journal_mode = wal")
+     db.execute("pragma synchronous = normal")
+     db.executescript(SCHEMA)
++    columns = {row[1] for row in db.execute("pragma table_info(endpoints)")}
++    for name in ("api_version", "archive_seq"):
++        if name not in columns:
++            db.execute(f"alter table endpoints add column {name} integer")
++    # Rows written before these columns existed: a version that is the sequence number of a
++    # version-2 message came from the archive, any other from the api.
++    for row in db.execute("select id, version from endpoints where api_version is null and archive_seq is null").fetchall():
++        archived = db.execute(
++            "select 1 from bus_seen where producer = 'api.v2' and ident = ?", (str(row["version"]),)
++        ).fetchone()
++        column = "archive_seq" if archived else "api_version"
++        db.execute(f"update endpoints set {column} = ? where id = ?", (row["version"], row["id"]))
+     db.commit()
+     return db
+ 

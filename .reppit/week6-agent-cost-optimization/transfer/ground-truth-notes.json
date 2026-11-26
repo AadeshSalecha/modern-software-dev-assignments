@@ -1,0 +1,63 @@
+{
+  "events_accepted_by_api": 420,
+  "deliveries": 525,
+  "requests": 599,
+  "switched_off_at_the_end": {
+    "ep_orchid_1": "2026-10-20T09:12:44Z",
+    "ep_quince_1": "2026-10-20T16:40:31Z",
+    "ep_quince_2": "2026-10-20T16:41:02Z",
+    "ep_sorrel_1": "2026-10-21T06:00:15Z",
+    "ep_violet_1": "2026-10-20T09:40:10Z"
+  },
+  "affected_deliveries": {
+    "ep_orchid_1": 33,
+    "ep_quince_1": 25,
+    "ep_violet_1": 28
+  },
+  "skipped_rows_by_file": {
+    "api.ndjson": 10,
+    "router.log": 35,
+    "egress.log": 11,
+    "merchant_export.csv": 3,
+    "worker.jsonl.gz": 29
+  },
+  "affected_deliveries_with_one_cut_record": 28,
+  "states_at_the_end": {
+    "ep_orchid_1": {
+      "delivered": 62,
+      "queued": 6
+    },
+    "ep_orchid_2": {
+      "delivered": 68
+    },
+    "ep_poplar_1": {
+      "delivered": 49
+    },
+    "ep_quince_1": {
+      "delivered": 65
+    },
+    "ep_quince_2": {
+      "delivered": 40
+    },
+    "ep_rowan_1": {
+      "delivered": 46
+    },
+    "ep_sorrel_1": {
+      "delivered": 29
+    },
+    "ep_tulip_1": {
+      "delivered": 52
+    },
+    "ep_umber_1": {
+      "delivered": 46
+    },
+    "ep_violet_1": {
+      "delivered": 62
+    }
+  },
+  "near_misses": {
+    "to a switched-off endpoint, event accepted after, no 2xx": 6,
+    "to a switched-off endpoint, 2xx, event accepted before the switch-off": 165,
+    "to a switched-off endpoint, 2xx, event from the archive (never accepted by the api)": 7
+  }
+}
