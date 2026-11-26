@@ -1,0 +1,42 @@
+{
+  "passed": true,
+  "score": {
+    "categories": {
+      "incident": {
+        "passed": 9,
+        "total": 9,
+        "failed": []
+      },
+      "regressions": {
+        "passed": 9,
+        "total": 9,
+        "failed": []
+      },
+      "compat": {
+        "passed": 4,
+        "total": 4,
+        "failed": []
+      }
+    },
+    "repair": 1.0,
+    "impact": {
+      "impact": 1.0
+    }
+  },
+  "seconds": 249.6,
+  "cost_usd": 0.4126,
+  "requests": 23,
+  "by_model": {
+    "claude-sonnet-5-5": {
+      "requests": 23,
+      "cost_usd": 0.4126,
+      "input": 46,
+      "output": 19354,
+      "cache_read": 850686,
+      "cache_write": 53561,
+      "cache_write_1h": 0
+    }
+  },
+  "cost_by_model": {},
+  "machine": "mac"
+}

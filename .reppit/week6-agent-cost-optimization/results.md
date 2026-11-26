@@ -27,9 +27,12 @@ Rebuilt by `make_results.py`.
 | codex-luna | 0/1 | 0.44 | 1.00 | $0.010 | $0.01 to $0.01 | 12 | 111 s | 111 s |
 | codex-terra | 2/2 | 1.00 | 1.00 | $0.102 | $0.08 to $0.12 | 14 | 140 s | 140 s |
 | A-v5 | 3/3 | 1.00 | 1.00 | $0.230 | $0.21 to $0.24 | 12 | 102 s | 107 s |
+| from-zip | 1/1 | 1.00 | 1.00 | $0.250 | $0.25 to $0.25 | 13 | 116 s | 116 s |
 | codex-terra-v5 | 3/3 | 1.00 | 1.00 | $0.101 | $0.09 to $0.11 | 16 | 170 s | 187 s |
 | codex-luna-v5 | 1/2 | 0.72 | 1.00 | $0.029 | $0.02 to $0.03 | 38 | 328 s | 375 s |
 | sonnet-main-terra-rescue | 2/2 | 1.00 | 1.00 | $0.274 | $0.24 to $0.31 | 16 | 149 s | 173 s |
+| forced-rescue-terra | 2/2 | 1.00 | 1.00 | $0.100 | $0.09 to $0.10 | 17 | 180 s | 185 s |
+| terra-main-sonnet-rescue | 2/2 | 1.00 | 1.00 | $0.095 | $0.09 to $0.10 | 16 | 157 s | 157 s |
 
 ## baseline
 
@@ -246,6 +249,14 @@ A-v4 plus the hand-over check in the gate, random port choice and one prompt sen
 | 20261126-152520-2 | PASS | 1.00 | 1.00 | $0.206 | 11 | 95 s | 9/9 | 10/10 | 2/2 | 8,892 | 279,595 | 35,438 |
 | 20261126-152520-3 | PASS | 1.00 | 1.00 | $0.242 | 12 | 107 s | 9/9 | 10/10 | 2/2 | 9,651 | 376,912 | 43,277 |
 
+## from-zip
+
+A-v5 plus the flag fallback, run from an unpacked copy of the submission zip.
+
+| Run | Result | Repair | Impact | Cost | Requests | Time | Incident | Regr. | Compat | Output | Cache read | Cache write |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 20261126-155525-1 | PASS | 1.00 | 1.00 | $0.250 | 13 | 116 s | 9/9 | 10/10 | 2/2 | 9,891 | 382,250 | 45,171 |
+
 ## codex-terra-v5
 
 A-v5 with Codex and `gpt-6.1-terra` for the whole session (Mac).
@@ -274,6 +285,24 @@ Sonnet as the main agent and `gpt-6.1-terra` (Codex) only if the gate fails, on 
 | mac-20261126-170838-1 | PASS | 1.00 | 1.00 | $0.236 | 14 | 125 s | 9/9 | 10/10 | 2/2 | 8,803 | 409,603 | 42,802 |
 | mac-20261126-170838-2 | PASS | 1.00 | 1.00 | $0.312 | 17 | 173 s | 9/9 | 10/10 | 2/2 | 12,881 | 609,442 | 48,842 |
 
+## forced-rescue-terra
+
+Rescue path exercised on purpose: the main agent names a model that does not exist, so `gpt-6.1-terra` gets the whole job (Mac).
+
+| Run | Result | Repair | Impact | Cost | Requests | Time | Incident | Regr. | Compat | Output | Cache read | Cache write |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| mac-20261126-171351-1 | PASS | 1.00 | 1.00 | $0.105 | 18 | 185 s | 9/9 | 10/10 | 2/2 | 5,725 | 757,632 | 0 |
+| mac-20261126-171857-1 | PASS | 1.00 | 1.00 | $0.094 | 16 | 175 s | 9/9 | 10/10 | 2/2 | 5,385 | 636,416 | 0 |
+
+## terra-main-sonnet-rescue
+
+`gpt-6.1-terra` (Codex) as the main agent and Sonnet only if the gate fails (Mac).
+
+| Run | Result | Repair | Impact | Cost | Requests | Time | Incident | Regr. | Compat | Output | Cache read | Cache write |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| mac-20261126-172200-1 | PASS | 1.00 | 1.00 | $0.094 | 15 | 157 s | 9/9 | 10/10 | 2/2 | 5,217 | 615,680 | 0 |
+| mac-20261126-172200-2 | PASS | 1.00 | 1.00 | $0.097 | 17 | 157 s | 9/9 | 10/10 | 2/2 | 5,273 | 684,544 | 0 |
+
 ## Transfer incident (INC-2231, endpoint changes ignored)
 
 A second incident built to test the setup on a ticket it was not designed around; see
@@ -286,6 +315,7 @@ A second incident built to test the setup on a ticket it was not designed around
 | codex-luna | 20261126-170021-1 | PASS | 1.0 | 1.0 | $0.029 | 23 | 481 s | 9/9 | 9/9 | 4/4 |
 | codex-terra | 20261126-165400-1 | PASS | 1.0 | 1.0 | $0.110 | 19 | 183 s | 9/9 | 9/9 | 4/4 |
 | codex-terra | 20261126-165400-2 | PASS | 1.0 | 1.0 | $0.147 | 21 | 186 s | 9/9 | 9/9 | 4/4 |
+| sonnet-main-terra-rescue | 20261126-172727-1 | PASS | 1.0 | 1.0 | $0.413 | 23 | 250 s | 9/9 | 9/9 | 4/4 |
 | sonnet-medium | 20261126-150246-1 | PASS | 1.0 | 1.0 | $0.364 | 25 | 179 s | 9/9 | 9/9 | 4/4 |
 | sonnet-medium | 20261126-150246-2 | PASS | 1.0 | 1.0 | $0.270 | 14 | 136 s | 9/9 | 9/9 | 4/4 |
 | sonnet-medium | 20261126-150246-3 | FAIL | 0.9231 | 1.0 | $0.281 | 19 | 187 s | 9/9 | 9/9 | 3/4 |

@@ -32,6 +32,7 @@ DESCRIPTIONS = collections.OrderedDict(
         ("codex-luna", "A-v4 with Codex and `gpt-6-luna` for the whole session (run on the Mac)."),
         ("codex-terra", "A-v4 with Codex and `gpt-6.1-terra` for the whole session (run on the Mac)."),
         ("A-v5", "A-v4 plus the hand-over check in the gate, random port choice and one prompt sentence (commit 4450fb7)."),
+        ("from-zip", "A-v5 plus the flag fallback, run from an unpacked copy of the submission zip."),
         ("codex-terra-v5", "A-v5 with Codex and `gpt-6.1-terra` for the whole session (Mac)."),
         ("codex-luna-v5", "A-v5 with Codex and `gpt-6-luna` for the whole session (Mac)."),
         ("luna-main-terra-rescue", "A-v5 with `gpt-6-luna` as the main agent and `gpt-6.1-terra` only if the gate fails (Mac)."),
