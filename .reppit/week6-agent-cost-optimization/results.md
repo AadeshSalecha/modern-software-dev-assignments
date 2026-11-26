@@ -38,6 +38,8 @@ Rebuilt by `make_results.py`.
 | v2-haiku-low-plus-sonnet | 2/2 | 1.00 | 1.00 | $0.247 | $0.22 to $0.28 | 44 | 280 s | 348 s |
 | v2b-judge-exercise | 1/1 | 1.00 | 1.00 | $0.365 | $0.36 to $0.36 | 22 | 156 s | 156 s |
 | v2c-sonnet-plus-haiku | 2/2 | 1.00 | 1.00 | $0.395 | $0.31 to $0.47 | 44 | 299 s | 308 s |
+| v2e-zip-sonnet-low | 2/2 | 1.00 | 1.00 | $0.472 | $0.47 to $0.48 | 28 | 218 s | 229 s |
+| v2f-zip-sonnet-low | 2/2 | 1.00 | 1.00 | $0.508 | $0.47 to $0.55 | 30 | 190 s | 195 s |
 | v2d-from-zip | 1/1 | 1.00 | 1.00 | $0.243 | $0.24 to $0.24 | 13 | 113 s | 113 s |
 
 ## baseline
@@ -354,6 +356,24 @@ Comparison session after every cross-check, kept only if no worse; one prompt se
 | 20261126-204327-1 | PASS | 1.00 | 1.00 | $0.475 | 43 | 308 s | 9/9 | 10/10 | 2/2 | 61,262 | 1,766,990 | 159,483 |
 | 20261126-204327-2 | PASS | 1.00 | 1.00 | $0.315 | 44 | 290 s | 9/9 | 10/10 | 2/2 | 52,472 | 2,035,730 | 123,928 |
 
+## v2e-zip-sonnet-low
+
+A later zip (commit 8a6fdb5: failing runs saved as replayable files), unpacked, with Sonnet at effort low as the second solver so that every step runs here. The comparison session ran in both runs.
+
+| Run | Result | Repair | Impact | Cost | Requests | Time | Incident | Regr. | Compat | Output | Cache read | Cache write |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 20261126-210551-1 | PASS | 1.00 | 1.00 | $0.476 | 30 | 229 s | 9/9 | 10/10 | 2/2 | 18,997 | 897,181 | 78,283 |
+| 20261126-210551-2 | PASS | 1.00 | 1.00 | $0.469 | 25 | 207 s | 9/9 | 10/10 | 2/2 | 18,903 | 729,862 | 82,661 |
+
+## v2f-zip-sonnet-low
+
+The zip for submission 2 (commit 54cab27: the main session always does the comparison, the better repair is chosen after it; spending lines 0.64 and 0.70), unpacked, Sonnet at effort low as the second solver.
+
+| Run | Result | Repair | Impact | Cost | Requests | Time | Incident | Regr. | Compat | Output | Cache read | Cache write |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 20261126-211406-1 | PASS | 1.00 | 1.00 | $0.548 | 33 | 195 s | 9/9 | 10/10 | 2/2 | 22,083 | 1,060,412 | 88,289 |
+| 20261126-211406-2 | PASS | 1.00 | 1.00 | $0.469 | 27 | 186 s | 9/9 | 10/10 | 2/2 | 17,958 | 812,929 | 83,242 |
+
 ## v2d-from-zip
 
 The zip for submission 2, unpacked, nothing set (commit b407568). No Codex in the container, so the second solver cannot start: the run shows that case.
@@ -384,6 +404,10 @@ A second incident built to test the setup on a ticket it was not designed around
 | v2-sonnet-plus-haiku | 20261126-195841-1 | PASS | 1.0 | 1.0 | $0.423 | 53 | 342 s | 9/9 | 9/9 | 4/4 |
 | v2c-sonnet-plus-haiku | 20261126-204327-1 | PASS | 1.0 | 1.0 | $0.304 | 34 | 252 s | 9/9 | 9/9 | 4/4 |
 | v2c-sonnet-plus-haiku | 20261126-204327-2 | PASS | 1.0 | 1.0 | $0.524 | 67 | 388 s | 9/9 | 9/9 | 4/4 |
+| v2e-zip-sonnet-low | 20261126-210551-1 | PASS | 1.0 | 1.0 | $0.597 | 38 | 230 s | 9/9 | 9/9 | 4/4 |
+| v2e-zip-sonnet-low | 20261126-210551-2 | PASS | 1.0 | 1.0 | $0.621 | 39 | 272 s | 9/9 | 9/9 | 4/4 |
+| v2f-zip-sonnet-plus-haiku | 20261126-211406-1 | PASS | 1.0 | 1.0 | $0.524 | 51 | 463 s | 9/9 | 9/9 | 4/4 |
+| v2f-zip-sonnet-plus-haiku | 20261126-211406-2 | PASS | 1.0 | 1.0 | $0.481 | 56 | 396 s | 9/9 | 9/9 | 4/4 |
 
 ## Notes from reading the logs
 

@@ -1,0 +1,146 @@
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/api/src/main.ts week6/app/services/api/src/main.ts
+--- clean-app/services/api/src/main.ts	2026-11-26 10:01:16.143626922 +0000
++++ week6/app/services/api/src/main.ts	2026-11-26 21:07:10.431336130 +0000
+@@ -339,6 +339,8 @@
+   });
+ });
+ 
++store.resyncEndpoints(now());
++
+ server.listen(portBase + 1, "127.0.0.1", () =>
+   log("api.started", { release: RELEASE }),
+ );
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/api/src/store.ts week6/app/services/api/src/store.ts
+--- clean-app/services/api/src/store.ts	2026-11-26 10:01:16.143626922 +0000
++++ week6/app/services/api/src/store.ts	2026-11-26 21:07:10.430300096 +0000
+@@ -79,6 +79,27 @@
+     this.db.exec(SCHEMA);
+   }
+ 
++  // Once per store: tell the router the current state of every endpoint, so changes it
++  // dropped as stale under the shipped release take effect. Safe to run on every start.
++  resyncEndpoints(now: number): void {
++    this.transaction(() => {
++      const done = this.db
++        .prepare("select 1 from meta where key = 'endpoint_resync_1'")
++        .get();
++      if (done) return;
++      const rows = this.db
++        .prepare("select id from endpoints order by id")
++        .all() as { id: string }[];
++      for (const row of rows) {
++        const endpoint = this.endpoint(row.id);
++        if (endpoint) this.enqueue("endpoint.changed", now, { endpoint });
++      }
++      this.db
++        .prepare("insert into meta (key, value) values ('endpoint_resync_1', 1)")
++        .run();
++    });
++  }
++
+   transaction<T>(work: () => T): T {
+     this.db.exec("begin");
+     try {
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/bus.py week6/app/services/router/bus.py
+--- clean-app/services/router/bus.py	2026-11-26 10:01:16.144267697 +0000
++++ week6/app/services/router/bus.py	2026-11-26 21:07:10.427609843 +0000
+@@ -141,8 +141,10 @@
+             need(ep, "secret", str),
+             need(ep, "types", list),
+             need(ep, "active", bool),
+-            seq,
++            0,
+         )
++        body["source"] = "v2"
++        body["v2_seq"] = seq
+         return "api.v2", str(seq), "endpoint", body
+     raise Malformed("unknown kind")
+ 
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/routing.py week6/app/services/router/routing.py
+--- clean-app/services/router/routing.py	2026-11-26 10:01:16.144267697 +0000
++++ week6/app/services/router/routing.py	2026-11-26 21:07:10.429326833 +0000
+@@ -103,19 +103,36 @@
+ 
+ def apply_endpoint(db, log, now, endpoint):
+     old = db.execute("select * from endpoints where id = ?", (endpoint["id"],)).fetchone()
+-    if old is not None and endpoint["version"] <= old["version"]:
+-        log.write("endpoint.stale", endpoint=endpoint["id"], version=endpoint["version"])
+-        return
++    from_v2 = endpoint.get("source") == "v2"
++    if old is not None:
++        if from_v2:
++            # Archived messages never override a change the api has made; among themselves
++            # they are ordered by their own sequence.
++            known = old["v2_seq"] if old["v2_seq"] is not None else old["version"]
++            stale = old["api_version"] is not None or endpoint["v2_seq"] <= known
++        else:
++            stale = old["api_version"] is not None and endpoint["version"] <= old["api_version"]
++        if stale:
++            log.write("endpoint.stale", endpoint=endpoint["id"], version=endpoint["version"])
++            return
+     was_enabled = bool(old["enabled"]) if old is not None else None
+     disabled_at = old["disabled_at"] if old is not None else None
+     if not endpoint["enabled"] and was_enabled is not False:
+         disabled_at = now
++    if from_v2:
++        version = old["version"] if old is not None else 0
++        api_version = None
++        v2_seq = endpoint["v2_seq"]
++    else:
++        version = endpoint["version"]
++        api_version = endpoint["version"]
++        v2_seq = None
+     db.execute(
+-        "insert into endpoints (id, merchant_id, url, secret, event_types, enabled, version, disabled_at) "
+-        "values (?, ?, ?, ?, ?, ?, ?, ?) "
++        "insert into endpoints (id, merchant_id, url, secret, event_types, enabled, version, disabled_at, "
++        "api_version, v2_seq) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+         "on conflict (id) do update set url = excluded.url, secret = excluded.secret, "
+         "event_types = excluded.event_types, enabled = excluded.enabled, version = excluded.version, "
+-        "disabled_at = excluded.disabled_at",
++        "disabled_at = excluded.disabled_at, api_version = excluded.api_version, v2_seq = excluded.v2_seq",
+         (
+             endpoint["id"],
+             endpoint["merchant_id"],
+@@ -123,19 +140,21 @@
+             endpoint["secret"],
+             json.dumps(endpoint["event_types"]),
+             int(endpoint["enabled"]),
+-            endpoint["version"],
++            version,
+             None if endpoint["enabled"] else disabled_at,
++            api_version,
++            v2_seq,
+         ),
+     )
+     log.write(
+         "endpoint.changed",
+         endpoint=endpoint["id"],
+         merchant=endpoint["merchant_id"],
+-        version=endpoint["version"],
++        version=version,
+         enabled=str(endpoint["enabled"]).lower(),
+     )
+     if old is not None and not INC_2188_WORKAROUND:
+-        follow_version(db, log, now, endpoint["id"], endpoint["version"])
++        follow_version(db, log, now, endpoint["id"], version)
+     if endpoint["enabled"] and was_enabled is False and disabled_at is not None:
+         catch_up(db, log, now, endpoint, disabled_at)
+ 
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/store.py week6/app/services/router/store.py
+--- clean-app/services/router/store.py	2026-11-26 10:01:16.144267697 +0000
++++ week6/app/services/router/store.py	2026-11-26 21:07:10.428239945 +0000
+@@ -77,6 +77,13 @@
+     db.execute("pragma journal_mode = wal")
+     db.execute("pragma synchronous = normal")
+     db.executescript(SCHEMA)
++    columns = {r["name"] for r in db.execute("pragma table_info(endpoints)")}
++    # api_version: the api's own version of the endpoint, null while unknown (rows written
++    # before this column existed, or created from an archived v2 message).
++    if "api_version" not in columns:
++        db.execute("alter table endpoints add column api_version integer")
++    if "v2_seq" not in columns:
++        db.execute("alter table endpoints add column v2_seq integer")
+     db.commit()
+     return db
+ 

@@ -47,6 +47,8 @@ DESCRIPTIONS = collections.OrderedDict(
         ("v2-haiku-low-plus-sonnet", "The same with a weak main solver on purpose (Haiku, effort low) and Sonnet as the second, to see a follow-up fire (commit 9466643)."),
         ("v2b-judge-exercise", "Sonnet main; a stand-in second solver hands in the main solver's report minus three entries, so the report decision (Sonnet, effort high) runs with a real model (commit 66c9cc4)."),
         ("v2c-sonnet-plus-haiku", "Comparison session after every cross-check, kept only if no worse; one prompt sentence on every way into the defect; Sonnet main, Haiku medium second (commit 65eb375). Run 1 used both follow-ups."),
+        ("v2e-zip-sonnet-low", "A later zip (commit 8a6fdb5: failing runs saved as replayable files), unpacked, with Sonnet at effort low as the second solver so that every step runs here. The comparison session ran in both runs."),
+        ("v2f-zip-sonnet-low", "The zip for submission 2 (commit 54cab27: the main session always does the comparison, the better repair is chosen after it; spending lines 0.64 and 0.70), unpacked, Sonnet at effort low as the second solver."),
         ("v2d-from-zip", "The zip for submission 2, unpacked, nothing set (commit b407568). No Codex in the container, so the second solver cannot start: the run shows that case."),
     ]
 )

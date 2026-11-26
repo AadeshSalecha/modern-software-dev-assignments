@@ -1,0 +1,171 @@
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/api/src/main.ts week6/app/services/api/src/main.ts
+--- clean-app/services/api/src/main.ts	2026-11-26 10:01:16.143626922 +0000
++++ week6/app/services/api/src/main.ts	2026-11-26 21:20:22.069064448 +0000
+@@ -221,6 +221,34 @@
+ // on stays pending and is tried again on the next tick.
+ async function publish(): Promise<number> {
+   let did = 0;
++  // Once per store, before the outbox, so older events still waiting cannot reach the router
++  // ahead of it: every endpoint's current state. Applied once per endpoint (producer api.resync).
++  const resync = store.resyncList();
++  if (resync) {
++    for (const { rowid, endpoint } of resync) {
++      let status: number;
++      try {
++        const response = await fetch(`${routerUrl}/bus`, {
++          method: "POST",
++          headers: { "content-type": "application/json" },
++          body: JSON.stringify({
++            v: 3,
++            producer: "api.resync",
++            seq: rowid,
++            type: "endpoint.changed",
++            at: now(),
++            data: { endpoint },
++          }),
++        });
++        status = response.status;
++        await response.arrayBuffer();
++      } catch {
++        return did;
++      }
++      if (status !== 200) return did;
++    }
++    store.markResync();
++  }
+   for (const row of store.pending()) {
+     const message = {
+       v: 3,
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/api/src/store.ts week6/app/services/api/src/store.ts
+--- clean-app/services/api/src/store.ts	2026-11-26 10:01:16.143626922 +0000
++++ week6/app/services/api/src/store.ts	2026-11-26 21:20:22.066205663 +0000
+@@ -153,6 +153,26 @@
+     this.enqueue("endpoint.changed", now, { endpoint });
+   }
+ 
++  // Until the first resync is complete: every endpoint with its rowid, which identifies its
++  // resync message. Null once done. Earlier releases' changes may have been dropped by the router.
++  resyncList(): { rowid: number; endpoint: Endpoint }[] | null {
++    if (this.db.prepare("select 1 from meta where key = 'endpoint_resync'").get())
++      return null;
++    const rows = this.db
++      .prepare("select rowid as rowid, id from endpoints order by rowid")
++      .all() as { rowid: number; id: string }[];
++    return rows.map((row) => ({
++      rowid: row.rowid,
++      endpoint: this.endpoint(row.id) as Endpoint,
++    }));
++  }
++
++  markResync(): void {
++    this.db
++      .prepare("insert or ignore into meta (key, value) values ('endpoint_resync', 1)")
++      .run();
++  }
++
+   event(id: string): EventRecord | undefined {
+     const row = this.db.prepare("select * from events where id = ?").get(id) as
+       | Record<string, unknown>
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/bus.py week6/app/services/router/bus.py
+--- clean-app/services/router/bus.py	2026-11-26 10:01:16.144267697 +0000
++++ week6/app/services/router/bus.py	2026-11-26 21:15:01.073176291 +0000
+@@ -62,7 +62,7 @@
+     }
+ 
+ 
+-def endpoint_body(endpoint_id, merchant, url, secret, types, enabled, version):
++def endpoint_body(endpoint_id, merchant, url, secret, types, enabled, version, v2_seq=None):
+     if not isinstance(types, list) or not all(isinstance(t, str) for t in types):
+         raise Malformed("event types must be a list of strings")
+     for type_ in types:
+@@ -76,6 +76,7 @@
+         "event_types": types,
+         "enabled": bool(enabled),
+         "version": version,
++        "v2_seq": v2_seq,
+     }
+ 
+ 
+@@ -141,6 +142,7 @@
+             need(ep, "secret", str),
+             need(ep, "types", list),
+             need(ep, "active", bool),
++            0,
+             seq,
+         )
+         return "api.v2", str(seq), "endpoint", body
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/routing.py week6/app/services/router/routing.py
+--- clean-app/services/router/routing.py	2026-11-26 10:01:16.144267697 +0000
++++ week6/app/services/router/routing.py	2026-11-26 21:15:01.073589101 +0000
+@@ -103,7 +103,14 @@
+ 
+ def apply_endpoint(db, log, now, endpoint):
+     old = db.execute("select * from endpoints where id = ?", (endpoint["id"],)).fetchone()
+-    if old is not None and endpoint["version"] <= old["version"]:
++    v2_seq = endpoint.get("v2_seq")
++    if old is not None and v2_seq is not None:
++        # Version 2 carries no endpoint version: it only orders itself among version 2 messages,
++        # and never overrides an endpoint the api has versioned.
++        stale = old["version"] > 0 or (old["v2_seq"] is not None and v2_seq <= old["v2_seq"])
++    else:
++        stale = old is not None and endpoint["version"] <= old["version"]
++    if stale:
+         log.write("endpoint.stale", endpoint=endpoint["id"], version=endpoint["version"])
+         return
+     was_enabled = bool(old["enabled"]) if old is not None else None
+@@ -111,11 +118,11 @@
+     if not endpoint["enabled"] and was_enabled is not False:
+         disabled_at = now
+     db.execute(
+-        "insert into endpoints (id, merchant_id, url, secret, event_types, enabled, version, disabled_at) "
+-        "values (?, ?, ?, ?, ?, ?, ?, ?) "
++        "insert into endpoints (id, merchant_id, url, secret, event_types, enabled, version, disabled_at, v2_seq) "
++        "values (?, ?, ?, ?, ?, ?, ?, ?, ?) "
+         "on conflict (id) do update set url = excluded.url, secret = excluded.secret, "
+         "event_types = excluded.event_types, enabled = excluded.enabled, version = excluded.version, "
+-        "disabled_at = excluded.disabled_at",
++        "disabled_at = excluded.disabled_at, v2_seq = excluded.v2_seq",
+         (
+             endpoint["id"],
+             endpoint["merchant_id"],
+@@ -125,6 +132,7 @@
+             int(endpoint["enabled"]),
+             endpoint["version"],
+             None if endpoint["enabled"] else disabled_at,
++            v2_seq,
+         ),
+     )
+     log.write(
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/store.py week6/app/services/router/store.py
+--- clean-app/services/router/store.py	2026-11-26 10:01:16.144267697 +0000
++++ week6/app/services/router/store.py	2026-11-26 21:15:01.072565810 +0000
+@@ -77,10 +77,29 @@
+     db.execute("pragma journal_mode = wal")
+     db.execute("pragma synchronous = normal")
+     db.executescript(SCHEMA)
++    repair_v2_versions(db)
+     db.commit()
+     return db
+ 
+ 
++def repair_v2_versions(db):
++    """One-time: version 2 messages used their sequence number as the endpoint version, which
++    left endpoints at a version no api change can reach. Such endpoints go back to version 0
++    (the api re-publishes its current endpoints once, which then apply)."""
++    cols = [r[1] for r in db.execute("pragma table_info(endpoints)")]
++    if "v2_seq" not in cols:
++        db.execute("alter table endpoints add column v2_seq integer")
++    if db.execute("select 1 from meta where key = 'v2_version_repair'").fetchone():
++        return
++    db.execute(
++        "update endpoints set v2_seq = version, version = 0 where version in "
++        "(select cast(ident as integer) from bus_seen where producer = 'api.v2') "
++        "and version > 0 and exists (select 1 from bus_seen where producer = 'api.v2' "
++        "and cast(ident as integer) = endpoints.version)"
++    )
++    db.execute("insert into meta (key, value) values ('v2_version_repair', 1)")
++
++
+ def next_id(db, prefix):
+     """Allocate an opaque id. The counter is part of the caller's transaction."""
+     db.execute(
