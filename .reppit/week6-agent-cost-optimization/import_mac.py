@@ -25,10 +25,14 @@ for line in open(os.path.join(HERE, "mac-runs.tsv")):
         cats[name] = {"passed": int(done), "total": int(total), "failed": []}
     usage = {"requests": int(requests), "cost_usd": float(cost), "input": int(tokens_in), "output": int(tokens_out),
              "cache_read": int(cache_read), "cache_write": int(cache_write), "cache_write_1h": 0}
+    # model is "name" or "name:cost+name:cost" when two models shared the run; token counts are the run's totals
+    parts = [part.split(":") for part in model.split("+")]
+    model = "+".join(part[0] for part in parts)
+    cost_by_model = {part[0]: float(part[1]) for part in parts if len(part) > 1}
     score = {"categories": cats, "repair": float(repair)}
     score["impact"] = float(impact) if kind == "practice" else {"impact": float(impact)}
     summary = {"passed": passed == "PASS", "score": score, "seconds": float(seconds), "cost_usd": float(cost),
-               "requests": int(requests), "by_model": {model: usage}, "machine": "mac"}
+               "requests": int(requests), "by_model": {model: usage}, "cost_by_model": cost_by_model, "machine": "mac"}
     if kind == "practice":
         folder = os.path.join(HERE, "runs", "mac-" + run)
         index.append(f"{label}\tmac-{run}")

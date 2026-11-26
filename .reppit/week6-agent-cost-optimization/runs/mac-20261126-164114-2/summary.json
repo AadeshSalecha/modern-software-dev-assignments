@@ -35,5 +35,6 @@
       "cache_write_1h": 0
     }
   },
+  "cost_by_model": {},
   "machine": "mac"
 }
