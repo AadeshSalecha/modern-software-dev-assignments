@@ -31,6 +31,10 @@ DESCRIPTIONS = collections.OrderedDict(
         ("haiku-main-sonnet-rescue", "A-v4 with `claude-haiku-5-5` as the main agent and Sonnet only if the gate fails."),
         ("codex-luna", "A-v4 with Codex and `gpt-6-luna` for the whole session (run on the Mac)."),
         ("codex-terra", "A-v4 with Codex and `gpt-6.1-terra` for the whole session (run on the Mac)."),
+        ("A-v5", "A-v4 plus the hand-over check in the gate, random port choice and one prompt sentence (commit 4450fb7)."),
+        ("codex-terra-v5", "A-v5 with Codex and `gpt-6.1-terra` for the whole session (Mac)."),
+        ("codex-luna-v5", "A-v5 with Codex and `gpt-6-luna` for the whole session (Mac)."),
+        ("luna-main-terra-rescue", "A-v5 with `gpt-6-luna` as the main agent and `gpt-6.1-terra` only if the gate fails (Mac)."),
         ("split-luna-report-terra", "Codex: `gpt-6-luna` writes the report in parallel while `gpt-6.1-terra` repairs (Mac)."),
         ("split-luna-report-sonnet", "`gpt-6-luna` (Codex) writes the report in parallel while Sonnet repairs (Mac)."),
         ("luna-main-sonnet-rescue", "`gpt-6-luna` (Codex) as the main agent and Sonnet only if the gate fails (Mac)."),
@@ -42,10 +46,15 @@ def load(run):
     folder = os.path.join(HERE, "runs", run)
     summary = json.load(open(os.path.join(folder, "summary.json")))
     usage = collections.Counter()
-    for line in open(os.path.join(folder, "usage.jsonl")):
-        row = json.loads(line)
-        if row.get("metered"):
-            usage.update({k: row["usage"].get(k, 0) for k in KINDS})
+    log = os.path.join(folder, "usage.jsonl")
+    if os.path.exists(log):
+        for line in open(log):
+            row = json.loads(line)
+            if row.get("metered"):
+                usage.update({k: row["usage"].get(k, 0) for k in KINDS})
+    else:  # runs brought over from another machine carry only the summary
+        for totals in (summary.get("by_model") or {}).values():
+            usage.update({k: totals.get(k, 0) for k in KINDS})
     return summary, usage
 
 
@@ -85,10 +94,14 @@ def transfer_section():
 
 def main():
     groups = collections.OrderedDict()
-    for line in open(os.path.join(HERE, "runs", "index.tsv")):
-        if line.strip():
-            label, run = line.split()
-            groups.setdefault(label, []).append(run)
+    for index in ("index.tsv", "index-mac.tsv"):
+        path = os.path.join(HERE, "runs", index)
+        if not os.path.exists(path):
+            continue
+        for line in open(path):
+            if line.strip():
+                label, run = line.split()
+                groups.setdefault(label, []).append(run)
     order = [label for label in DESCRIPTIONS if label in groups] + [label for label in groups if label not in DESCRIPTIONS]
 
     out = [
