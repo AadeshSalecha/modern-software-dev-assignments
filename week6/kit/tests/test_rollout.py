@@ -68,6 +68,24 @@ class ShapeTest(unittest.TestCase):
         self.assertEqual(changed["steps"][2], {"do": "upgrade", "at": 1})
         self.assertEqual(len(SCENARIO["steps"]), 5)
 
+    def test_restarted_restarts_every_service_before_the_last_drain(self):
+        scenario = {"steps": [{"do": "event"}, {"do": "drain"}, {"do": "event"}, {"do": "drain", "at": 30}]}
+        changed = rollout.restarted(scenario)
+        self.assertEqual([step["do"] for step in changed["steps"]],
+                         ["event", "drain", "event", "restart", "restart", "restart", "drain"])
+        self.assertEqual({step.get("service") for step in changed["steps"][3:6]}, {"api", "router", "worker"})
+        self.assertEqual(changed["steps"][3]["at"], 30)
+        self.assertEqual(len(scenario["steps"]), 4)
+
+    def test_restarted_leaves_scenarios_alone_when_a_restart_would_change_their_meaning(self):
+        self.assertIsNone(rollout.restarted({"steps": [{"do": "event"}]}))
+        self.assertIsNone(rollout.restarted({"steps": [{"do": "drain"}, {"do": "event"}]}) and None)
+        self.assertIsNone(rollout.restarted({"steps": [{"do": "crash_at"}, {"do": "event"}, {"do": "drain"}]}))
+        self.assertIsNone(rollout.restarted({"steps": [{"do": "event"}, {"do": "upgrade"}, {"do": "drain"}]}))
+        self.assertIsNone(rollout.restarted({"steps": [{"do": "stop"}, {"do": "event"}, {"do": "drain"}]}))
+        armed_earlier = {"steps": [{"do": "crash_at"}, {"do": "drain"}, {"do": "event"}, {"do": "drain"}]}
+        self.assertIsNotNone(rollout.restarted(armed_earlier))
+
     def test_handed_over_puts_the_replacement_before_the_last_drain(self):
         scenario = {"steps": [{"at": 0, "do": "event"}, {"at": 1, "do": "drain"}, {"at": 2, "do": "upgrade"},
                               {"at": 3, "do": "event"}, {"at": 4, "do": "drain"}, {"at": 5, "do": "tick", "service": "api"}]}

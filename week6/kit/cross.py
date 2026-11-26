@@ -112,11 +112,14 @@ def judge_repairs(roots, deadline):
     specs = []
     for author, file_name, path, scenario in valid:
         late = rollout.handed_over(scenario)
+        again = rollout.restarted(scenario)
         for name in usable:
             if name != author:
                 specs.append(((name, author, file_name, "as written", path), scenario, "new", apps[name]))
             if late is not None:
                 specs.append(((name, author, file_name, "handed over before the last drain", path), late, "new", apps[name]))
+            if again is not None:
+                specs.append(((name, author, file_name, "every service restarted before the last drain", path), again, "new", apps[name]))
     for path in sorted(glob.glob(os.path.join(rollout.OLD_APP, "scenarios", "*.json"))):
         scenario = rollout.load(path)
         for name in usable:

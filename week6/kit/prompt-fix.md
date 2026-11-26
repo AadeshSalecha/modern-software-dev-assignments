@@ -9,7 +9,9 @@ For each failing run:
 - If it shows a requirement of the ticket or a rule in `app/contracts` that your repair
   misses, change your repair until it passes. "Handed over before the last drain" means the
   shipped release took every step up to the last drain and your change only finished: what
-  the shipped release left behind has to be dealt with by your change.
+  the shipped release left behind has to be dealt with by your change. "Every service
+  restarted before the last drain" means what your change kept only in a process's memory
+  was lost: keep it in the service's store.
 - If it asks for something that neither the ticket nor a contract requires, leave your
   repair as it is and say which sentence you rely on.
 

@@ -376,6 +376,29 @@ def handed_over(scenario):
     return changed
 
 
+def restarted(scenario):
+    """A copy in which api, router and worker are restarted just before the last drain: by then
+    whatever a service held only in memory is gone, as it is in production at any moment. None
+    if there is no such point, or if a restart there would change what the scenario means (a
+    crash point armed and waiting, a service stopped on purpose, a release replacement)."""
+    steps = [copy.deepcopy(step) for step in scenario["steps"]]
+    drains = [index for index, step in enumerate(steps) if step.get("do") == "drain"]
+    if not drains or drains[-1] == 0:
+        return None
+    last = drains[-1]
+    before = drains[-2] if len(drains) > 1 else -1
+    if any(step.get("do") in ("upgrade", "stop") for step in steps):
+        return None
+    if any(step.get("do") in ("crash_at", "restart") for step in steps[before + 1:last]):
+        return None
+    extra = [{"do": "restart", "service": service} for service in ("worker", "api", "router")]
+    if "at" in steps[last]:
+        extra[0]["at"] = steps[last]["at"]
+    changed = copy.deepcopy(scenario)
+    changed["steps"] = steps[:last] + extra + steps[last:]
+    return changed
+
+
 def upgrade_positions(scenario, limit=None):
     """Positions where replacing the release keeps the scenario's meaning: not right after a
     crash point is armed (the arming would be lost), and not after the last step."""

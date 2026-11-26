@@ -342,6 +342,9 @@ def scenario_checks(bins):
             late = rollout.handed_over(scenario)
             if late is not None:
                 specs.append(("handover", name, late, "new"))
+        again = rollout.restarted(scenario)
+        if again is not None:
+            specs.append(("restart", name, again, "new"))
 
     # One run first: if the working tree does not start or stops answering, say so once
     # instead of waiting for every scenario to time out.
@@ -358,6 +361,7 @@ def scenario_checks(bins):
         # Not a verdict on the code: a run that hangs fails on its own, by the per-run limit.
         soft.append(f"{skipped} of {len(outcomes)} scenario runs were not started here (time or ports ran out), "
                     "so they are unchecked. Run the ones that matter yourself with kit/rollout.py.")
+    failing = set()  # a scenario that fails as written needs no word about its variants
     for (group, label, _, _), outcome in zip(specs, outcomes):
         problems = outcome["problems"]
         if rollout.not_run(outcome):
@@ -375,7 +379,17 @@ def scenario_checks(bins):
                     "already seen the harm before that drain"
                 )
             continue
+        if group == "restart":
+            if problems and label not in failing:
+                soft.append(
+                    f"{label} passes as written but fails when api, router and worker are restarted just before "
+                    f"the last drain ({problems[0][:150]}). Any service can restart at any moment and several "
+                    "copies of api and worker run side by side: keep what your change relies on in the service's "
+                    "store, not in the process"
+                )
+            continue
         if problems:
+            failing.add(label)
             hard.append(f"{label} fails: " + problems[0])
             hard += ["  " + p for p in problems[1:4]] + outcome["digest"]
     if not own:
