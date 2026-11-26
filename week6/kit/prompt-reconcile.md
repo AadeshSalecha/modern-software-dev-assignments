@@ -1,7 +1,6 @@
 A second engineer worked on the same ticket on their own, without seeing your work. Their
-scenarios were then run on your repair and yours on theirs, and your repair is the one that
-will be handed in. Before it goes, use their work to find what yours still misses. Nobody
-will answer questions.
+scenarios were then run on your repair and yours on theirs. Before anything is handed in,
+use their work to find what your repair still misses. Nobody will answer questions.
 
 In `work/cross/` you now have:
 

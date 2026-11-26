@@ -14,14 +14,14 @@ another agent did the whole job on its own. What happens:
   reports   The files under out/ are compared value by value, ignoring the order of lists.
 
 Written to <out>/:
-  decision.env   BEST=a|b  BEST_FAILS=<n>  OTHER_FAILS=<n>  A_FAILS=<n>  B_FAILS=<n>
-                 OTHER_CHANGED=0|1  REPORTS=same|differ|only_a|only_b|none
-  fix.txt        for the better repair's author: the scenarios it still fails
+  decision.env   BEST=a|b  A_FAILS=<n>  B_FAILS=<n>  A_USABLE=0|1  B_USABLE=0|1
+                 A_CHANGED=0|1  B_CHANGED=0|1  REPORTS=same|differ|only_a|only_b|none
+  fix.txt        for the first workspace's author: the runs its repair fails
   reports.txt    how the two reports differ
   summary.txt    everything above, for the log
-Copied to <better workspace>/work/cross/, for its author to compare with: the other repair as
-a diff against the shipped release (other.diff), the other ledger, the other scenarios, and
-each run the better repair fails as the scenario that was played (run-<n>.json). The other report and its script go to
+Copied to <first workspace>/work/cross/, for its author to compare with: the other repair as a
+diff against the shipped release (other.diff), the other ledger, the other scenarios, and each
+run its own repair fails as the scenario that was played (run-<n>.json). The other report and its script go to
 <first workspace>/work/cross/.
 """
 
@@ -332,13 +332,17 @@ def main(argv=None):
         return 0
     state, report_lines = compare_reports(roots)
 
-    # What the better repair still fails, for its author.
-    fails = [f for f in scores[best]["fails"] if f["author"] != "-"]
-    target = os.path.join(roots[best], "work", "cross")
+    # For the main solver, whose session is resumed to compare the two repairs: the runs its
+    # own repair fails, each as the scenario that was played.
+    fails = scores["a"]["fails"]
+    target = os.path.join(roots["a"], "work", "cross")
     os.makedirs(target, exist_ok=True)
     fix = []
     for index, fail in enumerate(fails[:8], 1):
-        whose = {"shipped": "a scenario shipped with the release", best: "your own scenario"}.get(
+        if fail["author"] == "-":
+            fix.append(f"{index}. your repair does not build: {fail['problem']}")
+            continue
+        whose = {"shipped": "a scenario shipped with the release", "a": "your own scenario"}.get(
             fail["author"], "the other engineer's scenario")
         line = f"{index}. {whose} {fail['scenario']}, {fail['how']}: {fail['problem']}"
         if fail.get("played"):
@@ -365,15 +369,16 @@ def main(argv=None):
         handle.write("\n".join(report_lines) + "\n")
 
     try:
-        hand_over_material(roots[best], roots[other])
+        hand_over_material(roots["a"], roots["b"])
     except OSError as problem:
         notes.append(f"the other engineer's work could not be copied over: {problem}")
 
     with open(os.path.join(args.out, "decision.env"), "w", encoding="utf-8") as handle:
-        handle.write(f"BEST={best}\nBEST_FAILS={len(fails)}\nOTHER_FAILS={len(scores[other]['fails'])}\n"
+        handle.write(f"BEST={best}\n"
                      f"A_FAILS={len(scores['a']['fails'])}\nB_FAILS={len(scores['b']['fails'])}\n"
                      f"A_USABLE={int(scores['a']['usable'])}\nB_USABLE={int(scores['b']['usable'])}\n"
-                     f"OTHER_CHANGED={int(scores[other]['changed'])}\nREPORTS={state}\n")
+                     f"A_CHANGED={int(scores['a']['changed'])}\nB_CHANGED={int(scores['b']['changed'])}\n"
+                     f"REPORTS={state}\n")
     summary = describe(scores, best, notes)
     summary += [f"reports: {state}"] + ["  " + line for line in report_lines[:14]]
     with open(os.path.join(args.out, "summary.txt"), "w", encoding="utf-8") as handle:
