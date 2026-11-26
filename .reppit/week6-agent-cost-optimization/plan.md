@@ -24,6 +24,9 @@ under $0.75. Option B (staged pipeline, Haiku, Codex/GPT) gets its own plan afte
 | P4 | Cost = `practice.py` output (rate card) | User |
 | P5 | One instruction source: `AGENTS.md`; `CLAUDE.md` contains only `@AGENTS.md` | Claude Code ignores `AGENTS.md` when a `CLAUDE.md` exists; Codex reads `AGENTS.md`. One file to maintain, both harnesses served |
 | P6 | Sonnet stays the model for A; first lever is context size, not model | Baseline cost was 43% cache writes, 27% cache reads, 30% output |
+| P7 | The reproduction check (agent scenarios must fail on the old release) blocks at most 3 times, then is advisory | User, at plan approval |
+| P8 | The transfer check is decided after the 5-run results, not committed to now | User, at plan approval |
+| P9 | Spend on practice runs is not a constraint | User: runs are covered by their subscription |
 
 ## Measured facts the plan relies on (this container, 2026-11-26)
 
@@ -244,3 +247,16 @@ Stop and report after step 7, and again after step 9, before any Gradescope subm
 | `check.sh` too slow for 10 minutes | Scenario upgrade positions capped; measured in step 4; target under 40 s |
 | Agent trusts our `AGENTS.md` too much | It states the trust order and puts itself below contracts and code |
 | Experiment spend | About $0.3 to $0.7 per run on the user's account; steps 7 to 9 are roughly 25 runs |
+
+## Changes during implementation
+
+- Nested instruction files: only `app/AGENTS.md` gets a `CLAUDE.md` twin. The per-service files are
+  plain `AGENTS.md`, named explicitly from the root file, because Claude Code auto-loads nested
+  files only on a `Read`, and the baseline agent read almost everything through Bash.
+- `rollout.py` adds expectation forms that count what an endpoint received in total. The shipped
+  expectation forms are per event, so they cannot tell "one event" from "two events with one
+  delivery each"; the baseline agent hit exactly that limit.
+- `prepare.sh` guard is "refuse when `tools/starter/` exists" rather than "refuse inside git": the
+  grader and practice both remove that folder, and the grader's container might be a git checkout.
+- `run.sh` ends by moving `_deprecated/` content back and removing the overlay files, so the
+  workspace `app/` differs from the release only by the agent's own edits.

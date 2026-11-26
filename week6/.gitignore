@@ -6,3 +6,5 @@ __pycache__/
 state/
 node_modules/
 !lib/
+work/
+.pristine/
