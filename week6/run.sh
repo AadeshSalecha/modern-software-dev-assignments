@@ -28,7 +28,7 @@
 #   KIT_JUDGE    the session that decides between two different reports
 # Other switches for experiments: KIT_TOOLS, KIT_MAX_TURNS, KIT_NO_HOOK=1, KIT_NO_FOLLOWUP=1,
 # KIT_VARIANT=flags (the bare ticket with only the harness flags changed), KIT_SOLVE_END,
-# KIT_HARD_STOP, KIT_FIX_BUDGET, KIT_JUDGE_BUDGET, KIT_RECONCILE=fails.
+# KIT_HARD_STOP, KIT_FIX_BUDGET, KIT_JUDGE_BUDGET, KIT_RECONCILE=fails, KIT_KEEP_B=1.
 set -u
 
 TASK_FILE="${1:?usage: ./run.sh <task-file>}"
@@ -124,6 +124,10 @@ finish() {
   if [ "$PREPARED" -eq 1 ]; then
     stop_services
     kit/prepare.sh --restore
+  fi
+  # The second workspace is a copy of everything: what was worth keeping is in work/cross/.
+  if [ -n "$B_ROOT" ] && [ "$B_ROOT" != "$ROOT" ] && [ -d "$B_ROOT/kit" ] && [ "${KIT_KEEP_B:-}" != "1" ]; then
+    rm -rf "$B_ROOT"
   fi
 }
 trap finish EXIT
@@ -262,9 +266,10 @@ echo "run.sh: main solver ($MAIN) ended with status $? after $(elapsed) s"
 A_ENDED=$(elapsed)
 cat "$A_LOG"
 if [ -n "$SECOND" ]; then
-  # The second solver gets two more minutes (and at least 200 s in all): the main solver's
-  # session is resumed later, and its cached context is gone five minutes after its last turn.
-  b_left=120
+  # The second solver gets two and a half more minutes (and at least 200 s in all): the main
+  # solver's session is resumed later, and its cached context is gone five minutes after its
+  # last turn.
+  b_left=150
   [ $((A_ENDED + b_left)) -lt 200 ] && b_left=$((200 - A_ENDED))
   (
     sleep "$b_left"
