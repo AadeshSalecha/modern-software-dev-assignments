@@ -168,6 +168,15 @@ class EvidenceTest(unittest.TestCase):
         ).fetchall()
         self.assertEqual(rows, [("egress", 0), ("worker", 0)])
 
+    def test_attempts_and_leases_are_joined_across_files(self):
+        # att_1: the worker started and finished it with no answer; the proxy saw the same
+        row = self.one("SELECT delivery_id, worker_n, worker_status, egress_n, egress_status, status_conflict, sources "
+                       "FROM attempts WHERE attempt_id = 'att_1'")
+        self.assertEqual(row[:6], ("dlv_2222bbbb", 2, 0, 1, 0, 0))
+        self.assertEqual(sorted(row[6].split(",")), ["egress", "worker"])
+        # att_0 is known to the proxy only
+        self.assertEqual(self.one("SELECT sources, egress_status FROM attempts WHERE attempt_id = 'att_0'"), ("egress", 200))
+
     def test_snapshots_become_tables(self):
         self.assertEqual(self.one("SELECT state, snapshot_now FROM snapshot_deliveries"), ("queued", 1767225700))
         self.assertEqual(self.one("SELECT merchant_id FROM snapshot_endpoints"), ("m_one",))
@@ -203,6 +212,33 @@ class PacketLayoutTest(unittest.TestCase):
         db = self.build({"events.ndjson": ['{"ts":"2026-01-01T00:00:00Z","msg":"x","event":"evt_9"}']})
         self.assertEqual(db.execute("SELECT event FROM events_file").fetchall(), [("evt_9",)])
         self.assertEqual(db.execute("SELECT event_id FROM events").fetchall(), [("evt_9",)])
+
+
+class JoinedTest(unittest.TestCase):
+    def source(self, name, rows):
+        source = evidence.Source(name, "json")
+        source.rows = rows
+        return source
+
+    def test_an_id_used_for_two_deliveries_and_conflicting_statuses_are_flagged(self):
+        worker = self.source("worker", [
+            {"attempt": "att_x", "delivery": "dlv_1", "lease": "lse_1", "status": 200, "ts": 10},
+            {"attempt": "att_x", "delivery": "dlv_2", "lease": "lse_2", "status": 500, "ts": 50},
+        ])
+        egress = self.source("egress", [{"attempt": "att_x", "webhook_id": "dlv_1", "status": 200, "ts": 4}])
+        rows = evidence.joined_by([worker, egress], "attempt_id", ("lease_id",))
+        self.assertEqual(len(rows), 1)
+        row = rows[0]
+        self.assertEqual((row["n_deliveries"], row["worker_n"], row["worker_status"], row["egress_status"], row["status_conflict"]),
+                         (2, 2, "200/500", 200, 1))
+        self.assertEqual((row["worker_ts"], row["worker_ts_last"], row["egress_ts"]), (10, 50, 4))
+
+    def test_clock_gaps_take_the_tightest_kind_of_id(self):
+        a = self.source("a", [{"lease": f"lse_{i}", "event": f"evt_{i}", "ts": 100 + i} for i in range(30)])
+        b = self.source("b", [{"lease": f"lse_{i}", "event": f"evt_{i % 3}", "ts": 140 + i} for i in range(30)])
+        gaps = evidence.clock_gaps([a, b])
+        self.assertEqual(len(gaps), 1)
+        self.assertEqual((gaps[0]["file_a"], gaps[0]["file_b"], gaps[0]["via"], gaps[0]["median_s"]), ("a", "b", "lease", 40))
 
 
 class RulesTest(unittest.TestCase):

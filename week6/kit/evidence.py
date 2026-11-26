@@ -47,9 +47,11 @@ ALIASES = {
     "attempt_id": ("attempt_id", "attempt"),
     "merchant_id": ("merchant_id", "merchant"),
     "status": ("status", "http_status"),
+    "lease_id": ("lease_id", "lease"),
 }
 KIND_COLUMNS = ("msg", "op", "kind")
-RESERVED_TABLES = {"events", "deliveries", "responses", "skipped", "event_facts", "delivery_facts", "snapshots"}
+RESERVED_TABLES = {"events", "deliveries", "responses", "skipped", "event_facts", "delivery_facts", "snapshots",
+                   "attempts", "leases"}
 ISO = re.compile(r"^(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d):(\d\d)Z$")
 KEY = re.compile(r"^([A-Za-z_][\w.\-]*)=(.*)$", re.S)
 INT = re.compile(r"^-?\d+$")
@@ -548,6 +550,96 @@ def build_views(db, tables):
     return made
 
 
+def joined_by(sources, fact, extras):
+    """One record per value of `fact` (per attempt, per lease), with what each file says about it.
+
+    For every file that names the id: how many records, the first and last time on that file's
+    clock, and the HTTP statuses it gives. `extras` are single-valued fields taken from whichever
+    record carries them. An id used for more than one delivery gets one row per delivery.
+    """
+    found, names = {}, []
+    for source in sources:
+        used = False
+        for row in source.rows:
+            ident = first_present(row, ALIASES[fact])
+            if not isinstance(ident, str):
+                continue
+            used = True
+            delivery = first_present(row, ALIASES["delivery_id"])
+            entry = found.setdefault(ident, {"deliveries": {}, "files": {}, "extras": {}})
+            if isinstance(delivery, str):
+                entry["deliveries"][delivery] = entry["deliveries"].get(delivery, 0) + 1
+            per = entry["files"].setdefault(source.name, {"n": 0, "first": None, "last": None, "status": []})
+            per["n"] += 1
+            ts = row.get("ts")
+            if ts is not None:
+                per["first"] = ts if per["first"] is None else min(per["first"], ts)
+                per["last"] = ts if per["last"] is None else max(per["last"], ts)
+            status = first_present(row, ALIASES["status"])
+            if status is not None and status not in per["status"]:
+                per["status"].append(status)
+            for extra in extras:
+                value = first_present(row, ALIASES.get(extra, (extra,)))
+                if value is not None:
+                    entry["extras"].setdefault(extra, value)
+        if used:
+            names.append(source.name)
+    rows = []
+    for ident, entry in found.items():
+        deliveries = sorted(entry["deliveries"], key=lambda d: -entry["deliveries"][d]) or [None]
+        row = {fact: ident, "delivery_id": deliveries[0], "n_deliveries": len(entry["deliveries"])}
+        for extra in extras:
+            row[extra] = entry["extras"].get(extra)
+        statuses = set()
+        for name in names:
+            per = entry["files"].get(name)
+            row[f"{name}_n"] = per["n"] if per else 0
+            row[f"{name}_ts"] = per["first"] if per else None
+            row[f"{name}_ts_last"] = per["last"] if per else None
+            if per and per["status"]:
+                row[f"{name}_status"] = per["status"][0] if len(per["status"]) == 1 else "/".join(map(str, per["status"]))
+                statuses.update(per["status"])
+            else:
+                row[f"{name}_status"] = None
+        row["sources"] = ",".join(name for name in names if name in entry["files"])
+        row["status_conflict"] = int(len(statuses) > 1)
+        rows.append(row)
+    return rows
+
+
+def clock_gaps(sources):
+    """How far apart two files' clocks put the first record of the same id (b minus a, seconds).
+    For each pair of files the kind of id with the tightest spread is kept."""
+    first = {}  # file -> kind -> id -> first ts
+    for source in sources:
+        for row in source.rows:
+            ts = row.get("ts")
+            if ts is None:
+                continue
+            for kind in ("attempt_id", "lease_id", "delivery_id", "event_id"):
+                ident = first_present(row, ALIASES[kind])
+                if isinstance(ident, str):
+                    seen = first.setdefault(source.name, {}).setdefault(kind, {})
+                    if ident not in seen or ts < seen[ident]:
+                        seen[ident] = ts
+    out, names = [], sorted(first)
+    for i, a in enumerate(names):
+        for b in names[i + 1 :]:
+            best = None
+            for kind in ("attempt_id", "lease_id", "delivery_id", "event_id"):
+                ids_a, ids_b = first[a].get(kind, {}), first[b].get(kind, {})
+                gaps = sorted(ids_b[k] - ids_a[k] for k in ids_a.keys() & ids_b.keys())
+                if len(gaps) < 20:
+                    continue
+                low, mid, high = gaps[len(gaps) // 10], gaps[len(gaps) // 2], gaps[(len(gaps) * 9) // 10]
+                if best is None or (high - low) < (best[5] - best[3]):
+                    best = (a, b, kind.replace("_id", ""), len(gaps), mid, low, high)
+            if best:
+                out.append({"file_a": best[0], "file_b": best[1], "via": best[2], "n": best[3],
+                            "median_s": best[4], "p10_s": best[5], "p90_s": best[6]})
+    return out
+
+
 def build(incident_dir, db_path):
     if not os.path.isdir(incident_dir):
         raise SystemExit(f"no evidence directory at {incident_dir}")
@@ -631,6 +723,16 @@ def build(incident_dir, db_path):
     for entry in other:
         db.execute("INSERT INTO _notes VALUES (?, ?)", ("packet", f"{entry} was not loaded (unknown kind of file)"))
     build_views(db, tables)
+    attempts = joined_by(sources, "attempt_id", ("lease_id", "attempt_no", "endpoint_id", "outcome"))
+    if attempts:
+        create_table(db, "attempts", attempts, lead=("attempt_id", "delivery_id"))
+    leases = joined_by(sources, "lease_id", ("worker", "attempt_no", "expires", "outcome", "returned"))
+    if leases:
+        create_table(db, "leases", leases, lead=("lease_id", "delivery_id"))
+    db.execute("CREATE TABLE _clock_gaps (file_a TEXT, file_b TEXT, via TEXT, n INTEGER, median_s INTEGER, p10_s INTEGER, p90_s INTEGER)")
+    db.executemany(
+        "INSERT INTO _clock_gaps VALUES (:file_a, :file_b, :via, :n, :median_s, :p10_s, :p90_s)", clock_gaps(sources)
+    )
     db.commit()
     db.close()
     return db_path
@@ -673,7 +775,7 @@ def print_schema(db):
     print("tables (one per file; `ts` is epoch seconds on that file's own clock, `ts_iso` the same as text)")
     names = [r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY rowid")]
     for name in names:
-        if name.startswith("_") or name in ("skipped", "events", "deliveries"):
+        if name.startswith("_") or name in ("skipped", "events", "deliveries", "attempts", "leases"):
             continue
         count = db.execute(f'SELECT count(*) FROM "{name}"').fetchone()[0]
         kinds = db.execute(
@@ -718,6 +820,25 @@ def print_schema(db):
         print("    columns: source delivery_id attempt_id status ts line_no")
         print("    rows per file: " + ", ".join(f"{source} {n}" for source, n in per))
     print("event_facts, delivery_facts  (views: the per-file rows behind `events` and `deliveries`)")
+    for table, ident in (("attempts", "attempt_id"), ("leases", "lease_id")):
+        if not has(db, table):
+            continue
+        columns = [r[1] for r in db.execute(f"PRAGMA table_info({table})")]
+        total, shared, conflicts = db.execute(
+            f"SELECT count(*), sum(n_deliveries > 1), sum(status_conflict) FROM {table}"
+        ).fetchone()
+        print(f"{table}  ({total} ids; {shared or 0} used for more than one delivery; {conflicts or 0} where files give "
+              "different statuses)")
+        print("    one row per id with, for each file that names it: <file>_n records, <file>_ts first and "
+              "<file>_ts_last last time on that file's clock, <file>_status")
+        print("    columns: " + " ".join(columns))
+    gaps = db.execute("SELECT file_a, file_b, via, n, median_s, p10_s, p90_s FROM _clock_gaps").fetchall() if has(db, "_clock_gaps") else []
+    if gaps:
+        print("clock gaps (first record of the same id, second file minus first; clocks are not synchronised):")
+        for a, b, via, n, mid, low, high in gaps:
+            plural = {"delivery": "deliveries"}.get(via, via + "s")
+            print(f"    {b} - {a}: {mid:+d} s  (80% between {low:+d} and {high:+d}; {n} {plural})")
+        print("    compare times inside one file where you can; across files only with these gaps in mind")
 
 
 def run_sql(db, query, limit):

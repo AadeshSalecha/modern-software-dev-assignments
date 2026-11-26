@@ -28,6 +28,13 @@ python3 kit/evidence.py schema
   only what the address of a request looked like.
 - `responses` (view): every record of an HTTP status for a delivery, from any file
   (`source`, `delivery_id`, `attempt_id`, `status`, `ts`). Status `0` means no answer.
+- `attempts` and `leases`: one row per attempt id and per lease id, with what each file says
+  about it side by side: `<file>_n` records, `<file>_ts` and `<file>_ts_last` on that file's
+  clock, `<file>_status`. `n_deliveries` above 1 means the id was used for more than one
+  delivery; `status_conflict` means two files give different statuses. Use these when the
+  question is about attempts, retries, leases or how often something was sent: one request
+  appears in several files and must be counted once.
+- Clock gaps between files are printed at the end of `work/evidence.txt`.
 - `skipped`: corrupted rows per file. A total over all files is `sum(corrupted_rows)`.
 
 ## What decides whether a report is right
@@ -41,7 +48,10 @@ python3 kit/evidence.py schema
    `deliveries` and `responses`, which already combine the files. "One file says so" is a
    smaller set than "it happened".
 3. **Order records by one file's own `ts`**, then `line_no`: lines arrive late and out of
-   order. Clocks differ between files by up to minutes; do not order across files.
+   order. Clocks differ between files by up to minutes. Where the ticket ties a time to one
+   service ("accepted by the api at", "leased at"), take both sides of the comparison from
+   that service's file; compare across files only after correcting by the printed gap, and
+   look at the records that fall within the gap's spread one by one.
 4. **Check for holes, and do not fill them.** A fact your definition needs may exist in a
    single file and be missing for some ids, because its row was cut. Count those ids.
    `app/contracts/evidence.md` promises that no fact a report depends on is missing from
