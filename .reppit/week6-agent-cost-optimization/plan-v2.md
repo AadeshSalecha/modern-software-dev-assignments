@@ -90,9 +90,11 @@ Steps 1 to 5 and 7 are done; step 6 is half done.
   step has run with real models, with a Claude model as the second solver.
 - What the runs do not show: in 6 of 21 runs the main repair failed a cross-check run, each
   time a hand-over variant, and each of those runs passed its judge. On these two incidents
-  the cross-check has not caught a real defect; the comparison session changed the main
-  repair in 2 of 6 runs for reasons a judge might test (a message type outside the v3 schema,
-  a clean-up that ran only at start-up).
+  the mechanical cross-check has not caught a real defect. The comparison session ran in 10
+  runs and changed the main repair in 7, for reasons a judge might test (a message type
+  outside the v3 schema, a clean-up that ran only at start-up, and on INC-2231 a disable from
+  the archive that would have been lost, which is the case the one failing Sonnet run had
+  missed).
 
 ## Out of scope
 

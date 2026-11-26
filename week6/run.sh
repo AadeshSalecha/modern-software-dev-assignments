@@ -40,10 +40,11 @@ SOLVE_END=${KIT_SOLVE_END:-300}        # solvers are stopped this many seconds a
 HARD_STOP=${KIT_HARD_STOP:-570}        # everything here is finished by then, 30 s before the grader's limit
 FIX_END=$((HARD_STOP - 130))           # the comparison session is stopped then, so its result can be checked
 # Spending lines, in dollars of estimated spend so far. Full cost credit ends at $0.75 and each
-# cent above costs about half a point. A comparison costs 5 to 7 cents, so it starts below
-# 0.64. A report decision costs about 15 cents, but two different reports mean one of them is
-# wrong and the report is a third of the correctness score, so it may start up to 0.70.
-FIX_BUDGET=${KIT_FIX_BUDGET:-0.64}
+# cent above costs about half a point. A comparison cost 4 to 17 cents in ten runs, so it
+# starts below 0.60. A report decision costs about 15 cents, but two different reports mean
+# one of them is wrong and the report is a third of the correctness score, so it may start
+# up to 0.70.
+FIX_BUDGET=${KIT_FIX_BUDGET:-0.60}
 JUDGE_BUDGET=${KIT_JUDGE_BUDGET:-0.70}
 RECONCILE=${KIT_RECONCILE:-always}     # always: compare the two repairs every time; fails: only when a run fails
 
