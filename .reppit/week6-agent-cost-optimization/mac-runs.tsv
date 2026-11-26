@@ -18,3 +18,5 @@ practice terra-main-sonnet-rescue 20261126-172200-1 PASS 1.0 1.0 0.0936 15 157.4
 practice terra-main-sonnet-rescue 20261126-172200-2 PASS 1.0 1.0 0.0965 17 157.0 9/9 10/10 2/2 35880 5273 684544 0 gpt-6.1-terra
 transfer sonnet-main-terra-rescue 20261126-172727-1 PASS 1.0 1.0 0.4126 23 249.6 9/9 9/9 4/4 46 19354 850686 53561 claude-sonnet-5-5
 practice from-zip 20261126-173232-1 PASS 1.0 1.0 0.2388 14 135.5 9/9 10/10 2/2 28 9342 421472 41279 claude-sonnet-5-5
+practice v2-sonnet-terra 20261126-212646-1 PASS 1.0 1.0 0.3304 27 167.9 9/9 10/10 2/2 37803 14043 935231 44972 claude-sonnet-5-5:0.2388+gpt-6.1-terra:0.0916
+practice v2-sonnet-terra 20261126-212646-2 PASS 1.0 1.0 0.3884 30 190.8 9/9 10/10 2/2 38440 17621 1141861 48464 claude-sonnet-5-5:0.2884+gpt-6.1-terra:0.1000

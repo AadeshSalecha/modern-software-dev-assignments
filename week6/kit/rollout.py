@@ -6,6 +6,9 @@
     python3 kit/rollout.py SCENARIO.json --upgrade-at 4   steps 1-4 on the release as shipped, then the
                                                           working tree takes over the same state
     python3 kit/rollout.py SCENARIO.json --upgrade-each   one run per upgrade position
+    python3 kit/rollout.py SCENARIO.json --handed-over    the release as shipped takes every step up to
+                                                          the last drain; the working tree only finishes
+    python3 kit/rollout.py SCENARIO.json --restarted      api, router and worker restart before the last drain
     options: --jobs N  --port-base P  --full  --json
 
 A scenario is what app/bin/replay takes (see app/bin/replaylib.py), plus:
@@ -476,6 +479,8 @@ def main(argv=None):
     parser.add_argument("--release", choices=("old", "new"), default="new")
     parser.add_argument("--upgrade-at", type=int)
     parser.add_argument("--upgrade-each", action="store_true")
+    parser.add_argument("--handed-over", action="store_true")
+    parser.add_argument("--restarted", action="store_true")
     parser.add_argument("--jobs", type=int, default=4)
     parser.add_argument("--port-base", type=int, default=10000)
     parser.add_argument("--full", action="store_true")
@@ -497,6 +502,13 @@ def main(argv=None):
                 specs.append((f"{short} [upgrade after step {position}]", with_upgrade(scenario, position), args.release))
         elif args.upgrade_at:
             specs.append((f"{short} [upgrade after step {args.upgrade_at}]", with_upgrade(scenario, args.upgrade_at), args.release))
+        elif args.handed_over or args.restarted:
+            changed = handed_over(scenario) if args.handed_over else restarted(scenario)
+            how = "handed over before the last drain" if args.handed_over else "every service restarted before the last drain"
+            if changed is None:
+                print(f"skip  {short}  has no such variant (no drain to put it before, or it would change the scenario's meaning)")
+                continue
+            specs.append((f"{short} [{how}]", changed, args.release))
         else:
             upgrades = any(step.get("do") == "upgrade" for step in scenario["steps"])
             mode = "release as shipped" if args.release == "old" else ("shipped, then working tree" if upgrades else "working tree")

@@ -376,7 +376,7 @@ def scenario_checks(bins):
                     f"{label} fails when the shipped release takes every step up to the last drain and your change "
                     f"only finishes ({problems[0][:150]}). That is a region mid-flight at roll-out: make your change "
                     "deal with what the shipped release left behind. The one reason not to is that the merchant had "
-                    "already seen the harm before that drain"
+                    f"already seen the harm before that drain. Repeat it with: python3 kit/rollout.py {label} --handed-over"
                 )
             continue
         if group == "restart":
@@ -385,7 +385,7 @@ def scenario_checks(bins):
                     f"{label} passes as written but fails when api, router and worker are restarted just before "
                     f"the last drain ({problems[0][:150]}). Any service can restart at any moment and several "
                     "copies of api and worker run side by side: keep what your change relies on in the service's "
-                    "store, not in the process"
+                    f"store, not in the process. Repeat it with: python3 kit/rollout.py {label} --restarted"
                 )
             continue
         if problems:

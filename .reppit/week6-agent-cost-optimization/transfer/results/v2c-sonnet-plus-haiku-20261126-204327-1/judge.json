@@ -1,0 +1,39 @@
+{
+ "passed": true,
+ "repair": 1.0,
+ "impact": {
+  "impact": 1.0,
+  "precision": 1.0,
+  "recall": 1.0,
+  "figures_right": 7,
+  "figures": 7,
+  "problem": null,
+  "reported": {
+   "endpoints": [
+    "ep_orchid_1",
+    "ep_quince_1",
+    "ep_violet_1"
+   ],
+   "entries": 86,
+   "skipped_rows": 88
+  }
+ },
+ "categories": {
+  "incident": {
+   "passed": 9,
+   "total": 9,
+   "failed": []
+  },
+  "regressions": {
+   "passed": 9,
+   "total": 9,
+   "failed": []
+  },
+  "compat": {
+   "passed": 4,
+   "total": 4,
+   "failed": []
+  }
+ },
+ "build_problem": null
+}

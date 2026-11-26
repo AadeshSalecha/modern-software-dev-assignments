@@ -42,6 +42,12 @@ DESCRIPTIONS = collections.OrderedDict(
         ("split-luna-report-terra", "Codex: `gpt-6-luna` writes the report in parallel while `gpt-6.1-terra` repairs (Mac)."),
         ("split-luna-report-sonnet", "`gpt-6-luna` (Codex) writes the report in parallel while Sonnet repairs (Mac)."),
         ("luna-main-sonnet-rescue", "`gpt-6-luna` (Codex) as the main agent and Sonnet only if the gate fails (Mac)."),
+        ("v2-sonnet-plus-sonnet-low", "After submission 1 (commit a26d96f): gate that blocks only on objective failures, attempt and lease tables, two solvers at once (Sonnet medium here, Sonnet low in a copy), cross-check, follow-ups only when a run fails or the reports differ."),
+        ("v2-sonnet-terra", "The same with `gpt-6.1-terra` (Codex) as the second solver, on the Mac (commit 9466643). No follow-up was needed in either run."),
+        ("v2-haiku-low-plus-sonnet", "The same with a weak main solver on purpose (Haiku, effort low) and Sonnet as the second, to see a follow-up fire (commit 9466643)."),
+        ("v2b-judge-exercise", "Sonnet main; a stand-in second solver hands in the main solver's report minus three entries, so the report decision (Sonnet, effort high) runs with a real model (commit 66c9cc4)."),
+        ("v2c-sonnet-plus-haiku", "Comparison session after every cross-check, kept only if no worse; one prompt sentence on every way into the defect; Sonnet main, Haiku medium second (commit 65eb375). Run 1 used both follow-ups."),
+        ("v2d-from-zip", "The zip for submission 2, unpacked, nothing set (commit b407568). No Codex in the container, so the second solver cannot start: the run shows that case."),
     ]
 )
 

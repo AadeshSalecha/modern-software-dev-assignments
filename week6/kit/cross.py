@@ -21,7 +21,7 @@ Written to <out>/:
   summary.txt    everything above, for the log
 Copied to <better workspace>/work/cross/, for its author to compare with: the other repair as
 a diff against the shipped release (other.diff), the other ledger, the other scenarios, and
-the scenarios the better repair fails. The other report and its script go to
+each run the better repair fails as the scenario that was played (run-<n>.json). The other report and its script go to
 <first workspace>/work/cross/.
 """
 
@@ -192,7 +192,7 @@ def judge_repairs(roots, deadline):
             continue
         if outcome["problems"]:
             scores[name]["fails"].append({"scenario": file_name, "author": author, "how": how, "path": path,
-                                          "problem": outcome["problems"][0][:200]})
+                                          "played": spec[1], "problem": outcome["problems"][0][:200]})
         else:
             scores[name]["passed"] += 1
     return scores, notes
@@ -338,16 +338,16 @@ def main(argv=None):
     os.makedirs(target, exist_ok=True)
     fix = []
     for index, fail in enumerate(fails[:8], 1):
-        name = fail["scenario"]
-        if fail["author"] not in ("shipped", best) and fail.get("path"):
-            name = f"{fail['author']}-{fail['scenario']}"
-            shutil.copy(fail["path"], os.path.join(target, name))
-            where = f"work/cross/{name}"
-        elif fail["author"] == "shipped":
-            where = f"app/scenarios/{fail['scenario']}"
-        else:
-            where = f"work/scenarios/{fail['scenario']}"
-        fix.append(f"{index}. {where} ({fail['how']}): {fail['problem']}")
+        whose = {"shipped": "a scenario shipped with the release", best: "your own scenario"}.get(
+            fail["author"], "the other engineer's scenario")
+        line = f"{index}. {whose} {fail['scenario']}, {fail['how']}: {fail['problem']}"
+        if fail.get("played"):
+            # The scenario exactly as it was played, variant included, so the run can be repeated.
+            name = f"run-{index}.json"
+            with open(os.path.join(target, name), "w", encoding="utf-8") as handle:
+                json.dump(fail["played"], handle, indent=1)
+            line += f"\n   the scenario as it was played is work/cross/{name}; repeat the run with: python3 kit/rollout.py work/cross/{name}"
+        fix.append(line)
     with open(os.path.join(args.out, "fix.txt"), "w", encoding="utf-8") as handle:
         handle.write("\n".join(fix) + ("\n" if fix else ""))
 

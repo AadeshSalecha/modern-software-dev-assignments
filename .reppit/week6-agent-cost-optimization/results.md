@@ -33,6 +33,12 @@ Rebuilt by `make_results.py`.
 | sonnet-main-terra-rescue | 2/2 | 1.00 | 1.00 | $0.274 | $0.24 to $0.31 | 16 | 149 s | 173 s |
 | forced-rescue-terra | 2/2 | 1.00 | 1.00 | $0.100 | $0.09 to $0.10 | 17 | 180 s | 185 s |
 | terra-main-sonnet-rescue | 2/2 | 1.00 | 1.00 | $0.095 | $0.09 to $0.10 | 16 | 157 s | 157 s |
+| v2-sonnet-plus-sonnet-low | 2/2 | 1.00 | 1.00 | $0.411 | $0.36 to $0.47 | 24 | 91 s | 107 s |
+| v2-sonnet-terra | 2/2 | 1.00 | 1.00 | $0.359 | $0.33 to $0.39 | 28 | 179 s | 191 s |
+| v2-haiku-low-plus-sonnet | 2/2 | 1.00 | 1.00 | $0.247 | $0.22 to $0.28 | 44 | 280 s | 348 s |
+| v2b-judge-exercise | 1/1 | 1.00 | 1.00 | $0.365 | $0.36 to $0.36 | 22 | 156 s | 156 s |
+| v2c-sonnet-plus-haiku | 2/2 | 1.00 | 1.00 | $0.395 | $0.31 to $0.47 | 44 | 299 s | 308 s |
+| v2d-from-zip | 1/1 | 1.00 | 1.00 | $0.243 | $0.24 to $0.24 | 13 | 113 s | 113 s |
 
 ## baseline
 
@@ -304,6 +310,58 @@ Rescue path exercised on purpose: the main agent names a model that does not exi
 | mac-20261126-172200-1 | PASS | 1.00 | 1.00 | $0.094 | 15 | 157 s | 9/9 | 10/10 | 2/2 | 5,217 | 615,680 | 0 |
 | mac-20261126-172200-2 | PASS | 1.00 | 1.00 | $0.097 | 17 | 157 s | 9/9 | 10/10 | 2/2 | 5,273 | 684,544 | 0 |
 
+## v2-sonnet-plus-sonnet-low
+
+After submission 1 (commit a26d96f): gate that blocks only on objective failures, attempt and lease tables, two solvers at once (Sonnet medium here, Sonnet low in a copy), cross-check, follow-ups only when a run fails or the reports differ.
+
+| Run | Result | Repair | Impact | Cost | Requests | Time | Incident | Regr. | Compat | Output | Cache read | Cache write |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 20261126-195529-1 | PASS | 1.00 | 1.00 | $0.466 | 24 | 107 s | 9/9 | 10/10 | 2/2 | 18,375 | 672,747 | 85,820 |
+| 20261126-195529-2 | PASS | 1.00 | 1.00 | $0.356 | 24 | 74 s | 9/9 | 10/10 | 2/2 | 13,684 | 586,449 | 64,235 |
+
+## v2-sonnet-terra
+
+The same with `gpt-6.1-terra` (Codex) as the second solver, on the Mac (commit 9466643). No follow-up was needed in either run.
+
+| Run | Result | Repair | Impact | Cost | Requests | Time | Incident | Regr. | Compat | Output | Cache read | Cache write |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| mac-20261126-212646-1 | PASS | 1.00 | 1.00 | $0.330 | 27 | 168 s | 9/9 | 10/10 | 2/2 | 14,043 | 935,231 | 44,972 |
+| mac-20261126-212646-2 | PASS | 1.00 | 1.00 | $0.388 | 30 | 191 s | 9/9 | 10/10 | 2/2 | 17,621 | 1,141,861 | 48,464 |
+
+## v2-haiku-low-plus-sonnet
+
+The same with a weak main solver on purpose (Haiku, effort low) and Sonnet as the second, to see a follow-up fire (commit 9466643).
+
+| Run | Result | Repair | Impact | Cost | Requests | Time | Incident | Regr. | Compat | Output | Cache read | Cache write |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 20261126-202646-1 | PASS | 1.00 | 1.00 | $0.277 | 56 | 348 s | 9/9 | 10/10 | 2/2 | 60,028 | 3,393,695 | 142,140 |
+| 20261126-202646-2 | PASS | 1.00 | 1.00 | $0.217 | 33 | 213 s | 9/9 | 10/10 | 2/2 | 33,672 | 1,501,927 | 103,855 |
+
+## v2b-judge-exercise
+
+Sonnet main; a stand-in second solver hands in the main solver's report minus three entries, so the report decision (Sonnet, effort high) runs with a real model (commit 66c9cc4).
+
+| Run | Result | Repair | Impact | Cost | Requests | Time | Incident | Regr. | Compat | Output | Cache read | Cache write |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 20261126-203900-1 | PASS | 1.00 | 1.00 | $0.365 | 22 | 156 s | 9/9 | 10/10 | 2/2 | 15,382 | 487,020 | 64,862 |
+
+## v2c-sonnet-plus-haiku
+
+Comparison session after every cross-check, kept only if no worse; one prompt sentence on every way into the defect; Sonnet main, Haiku medium second (commit 65eb375). Run 1 used both follow-ups.
+
+| Run | Result | Repair | Impact | Cost | Requests | Time | Incident | Regr. | Compat | Output | Cache read | Cache write |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 20261126-204327-1 | PASS | 1.00 | 1.00 | $0.475 | 43 | 308 s | 9/9 | 10/10 | 2/2 | 61,262 | 1,766,990 | 159,483 |
+| 20261126-204327-2 | PASS | 1.00 | 1.00 | $0.315 | 44 | 290 s | 9/9 | 10/10 | 2/2 | 52,472 | 2,035,730 | 123,928 |
+
+## v2d-from-zip
+
+The zip for submission 2, unpacked, nothing set (commit b407568). No Codex in the container, so the second solver cannot start: the run shows that case.
+
+| Run | Result | Repair | Impact | Cost | Requests | Time | Incident | Regr. | Compat | Output | Cache read | Cache write |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 20261126-210148-1 | PASS | 1.00 | 1.00 | $0.243 | 13 | 113 s | 9/9 | 10/10 | 2/2 | 8,859 | 381,754 | 46,394 |
+
 ## Transfer incident (INC-2231, endpoint changes ignored)
 
 A second incident built to test the setup on a ticket it was not designed around; see
@@ -323,6 +381,9 @@ A second incident built to test the setup on a ticket it was not designed around
 | sonnet-medium-v5 | 20261126-153044-1 | PASS | 1.0 | 1.0 | $0.448 | 28 | 234 s | 9/9 | 9/9 | 4/4 |
 | sonnet-medium-v5 | 20261126-153044-2 | PASS | 1.0 | 1.0 | $0.265 | 18 | 150 s | 9/9 | 9/9 | 4/4 |
 | sonnet-medium-v5 | 20261126-153044-3 | PASS | 1.0 | 1.0 | $0.300 | 19 | 146 s | 9/9 | 9/9 | 4/4 |
+| v2-sonnet-plus-haiku | 20261126-195841-1 | PASS | 1.0 | 1.0 | $0.423 | 53 | 342 s | 9/9 | 9/9 | 4/4 |
+| v2c-sonnet-plus-haiku | 20261126-204327-1 | PASS | 1.0 | 1.0 | $0.304 | 34 | 252 s | 9/9 | 9/9 | 4/4 |
+| v2c-sonnet-plus-haiku | 20261126-204327-2 | PASS | 1.0 | 1.0 | $0.524 | 67 | 388 s | 9/9 | 9/9 | 4/4 |
 
 ## Notes from reading the logs
 

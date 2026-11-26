@@ -12,8 +12,9 @@ In `work/cross/` you now have:
 
 Work in this order.
 
-1. **Failing runs**, listed at the end of this message. Files named `work/cross/…` there
-   are their scenarios, copied into your workspace. For each failing run: if it shows a
+1. **Failing runs**, listed at the end of this message. Each comes with the scenario
+   exactly as it was played (`work/cross/run-<n>.json`): run that file first and see it
+   fail. For each failing run: if it shows a
    requirement of the ticket or a rule in `app/contracts` that your repair misses, change
    your repair until it passes. "Handed over before the last drain" means the shipped
    release took every step up to the last drain and your change only finished: what the
