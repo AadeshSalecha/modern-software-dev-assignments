@@ -48,8 +48,11 @@ def price(card, model, usage):
     return sum(usage.get(kind, 0) * rate.get(kind, rate.get("cache_write", 0)) for kind in usage) / 1e6
 
 
-def cost_of(path, card):
-    """Dollars for one log file."""
+def cost_of(path, card, sessions=None):
+    """Dollars for one log file. `sessions` carries what has been counted per Claude session
+    across files: a resumed session reports the totals of the whole session again, so only
+    the increase belongs to the later file."""
+    sessions = {} if sessions is None else sessions
     name = os.path.basename(path).split(".")
     file_model = ".".join(name[2:-1]) if len(name) > 3 else ""
     total = 0.0
@@ -83,16 +86,21 @@ def cost_of(path, card):
                     "cache_write_1h": hour,
                 }, before + written)
             elif kind == "result" and isinstance(event.get("modelUsage"), dict):
-                # The end of a session: exact totals per model, in place of the estimates.
+                # The end of an invocation: exact totals per model for the session so far, in
+                # place of the estimates.
+                whole = 0.0
                 for model, used in event["modelUsage"].items():
                     hour = used.get("cacheCreationEphemeral1hInputTokens", 0)
-                    total += price(card, model, {
+                    whole += price(card, model, {
                         "input": used.get("inputTokens", 0),
                         "output": used.get("outputTokens", 0),
                         "cache_read": used.get("cacheReadInputTokens", 0),
                         "cache_write": used.get("cacheCreationInputTokens", 0) - hour,
                         "cache_write_1h": hour,
                     })
+                key = event.get("session_id") or f"{path}#{len(sessions)}"
+                total += max(whole - sessions.get(key, 0.0), 0.0)
+                sessions[key] = max(whole, sessions.get(key, 0.0))
                 pending = {}
             elif kind == "turn.completed" and isinstance(event.get("usage"), dict):
                 usage = event["usage"]
@@ -120,7 +128,8 @@ def main(argv):
     for path in paths:
         files += sorted(glob.glob(os.path.join(path, "*.jsonl"))) if os.path.isdir(path) else [path]
     card = rates()
-    costs = [(path, cost_of(path, card)) for path in files]
+    sessions = {}
+    costs = [(path, cost_of(path, card, sessions)) for path in files]
     total = sum(cost for _, cost in costs)
     if limit is not None:
         return 0 if total < limit else 1

@@ -14,15 +14,19 @@ another agent did the whole job on its own. What happens:
   reports   The files under out/ are compared value by value, ignoring the order of lists.
 
 Written to <out>/:
-  decision.env   BEST=a|b  BEST_FAILS=<n>  OTHER_FAILS=<n>  REPORTS=same|differ|only_a|only_b|none
+  decision.env   BEST=a|b  BEST_FAILS=<n>  OTHER_FAILS=<n>  A_FAILS=<n>  B_FAILS=<n>
+                 OTHER_CHANGED=0|1  REPORTS=same|differ|only_a|only_b|none
   fix.txt        for the better repair's author: the scenarios it still fails
   reports.txt    how the two reports differ
   summary.txt    everything above, for the log
-The failing scenarios are copied to <better workspace>/work/cross/, the other report and its
-script to <first workspace>/work/cross/.
+Copied to <better workspace>/work/cross/, for its author to compare with: the other repair as
+a diff against the shipped release (other.diff), the other ledger, the other scenarios, and
+the scenarios the better repair fails. The other report and its script go to
+<first workspace>/work/cross/.
 """
 
 import argparse
+import difflib
 import glob
 import json
 import os
@@ -48,24 +52,78 @@ def scenarios_of(root):
     return found
 
 
+SKIP_DIRS = ("__pycache__", ".build", "node_modules", "dist", "build")
+SKIP_FILES = ("AGENTS.md", "CLAUDE.md")
+DIFF_LIMIT = 60000  # characters of other.diff
+
+
+def service_files(base):
+    """Relative paths of the files under base/{api,router,worker}."""
+    found = set()
+    for service in ("api", "router", "worker"):
+        for folder, dirs, files in os.walk(os.path.join(base, service)):
+            dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
+            for name in files:
+                if name not in SKIP_FILES and not name.endswith((".pyc", ".db", ".sqlite")):
+                    found.add(os.path.relpath(os.path.join(folder, name), base))
+    return found
+
+
+def read_bytes(path):
+    try:
+        with open(path, "rb") as handle:
+            return handle.read()
+    except OSError:
+        return None
+
+
+def changed_files(root):
+    """Files under the workspace's services that differ from the shipped release: [(path, old, new)],
+    old or new None for a file that only one side has."""
+    old_base = os.path.join(A_ROOT, ".pristine", "app", "services")
+    new_base = os.path.join(root, "app", "services")
+    out = []
+    for path in sorted(service_files(old_base) | service_files(new_base)):
+        old, new = read_bytes(os.path.join(old_base, path)), read_bytes(os.path.join(new_base, path))
+        if old != new:
+            out.append((path, old, new))
+    return out
+
+
 def changed(root):
     """True if the workspace's services differ from the shipped release."""
-    old = os.path.join(A_ROOT, ".pristine", "app", "services")
-    for service in ("api", "router", "worker"):
-        for folder, dirs, files in os.walk(os.path.join(root, "app", "services", service)):
-            dirs[:] = [d for d in dirs if d not in ("__pycache__", ".build", "node_modules")]
-            for name in files:
-                if name in ("AGENTS.md", "CLAUDE.md"):
-                    continue
-                mine = os.path.join(folder, name)
-                theirs = os.path.join(old, os.path.relpath(mine, os.path.join(root, "app", "services")))
-                try:
-                    with open(mine, "rb") as f, open(theirs, "rb") as g:
-                        if f.read() != g.read():
-                            return True
-                except OSError:
-                    return True
-    return False
+    return bool(changed_files(root))
+
+
+def diff_text(root):
+    """The workspace's change to the services as a unified diff against the shipped release."""
+    parts = []
+    for path, old, new in changed_files(root):
+        try:
+            before = (old or b"").decode("utf-8").splitlines(keepends=True)
+            after = (new or b"").decode("utf-8").splitlines(keepends=True)
+        except UnicodeDecodeError:
+            parts.append(f"(binary file {path} differs)\n")
+            continue
+        parts.append("".join(difflib.unified_diff(
+            before, after, f"shipped/app/services/{path}", f"theirs/app/services/{path}", n=4)))
+    text = "".join(part if part.endswith("\n") or not part else part + "\n" for part in parts)
+    if len(text) > DIFF_LIMIT:
+        text = text[:DIFF_LIMIT] + "\n(cut here: the diff is longer)\n"
+    return text
+
+
+def hand_over_material(best_root, other_root):
+    """Put the other engineer's work where the better repair's author can read it."""
+    target = os.path.join(best_root, "work", "cross")
+    os.makedirs(os.path.join(target, "other-scenarios"), exist_ok=True)
+    with open(os.path.join(target, "other.diff"), "w", encoding="utf-8") as handle:
+        handle.write(diff_text(other_root) or "(the other engineer changed nothing under app/services)\n")
+    ledger = os.path.join(other_root, "work", "ledger.md")
+    if os.path.isfile(ledger):
+        shutil.copy(ledger, os.path.join(target, "other-ledger.md"))
+    for name, path, _ in scenarios_of(other_root):
+        shutil.copy(path, os.path.join(target, "other-scenarios", name))
 
 
 def judge_repairs(roots, deadline):
@@ -234,10 +292,24 @@ def compare_reports(roots):
 # --- main -----------------------------------------------------------------------------
 
 
+def describe(scores, best, notes):
+    lines = [f"repairs: better is {best}"]
+    for name in ("a", "b"):
+        score = scores[name]
+        lines.append(f"  {name}: {'usable' if score['usable'] else 'does not build'}, "
+                     f"{'changed' if score['changed'] else 'unchanged from the shipped release'}, "
+                     f"{score['passed']} runs passed, {len(score['fails'])} failed")
+        for fail in score["fails"][:6]:
+            lines.append(f"    - {fail['author']}'s {fail['scenario']} ({fail['how']}): {fail['problem'][:150]}")
+    return lines + ["  note: " + note for note in notes[:6]]
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--b", required=True)
     parser.add_argument("--out", default=os.path.join(A_ROOT, "work", "cross"))
+    parser.add_argument("--repairs-only", action="store_true",
+                        help="score the repairs again and write decision.env and summary.txt; copy nothing")
     args = parser.parse_args(argv)
     roots = {"a": A_ROOT, "b": os.path.abspath(args.b)}
     os.makedirs(args.out, exist_ok=True)
@@ -249,6 +321,15 @@ def main(argv=None):
         notes = [f"the repairs could not be compared ({type(problem).__name__}: {str(problem)[:160]}); a is kept unless it changed nothing"]
     best = better(scores)
     other = "b" if best == "a" else "a"
+    if args.repairs_only:
+        with open(os.path.join(args.out, "decision.env"), "w", encoding="utf-8") as handle:
+            handle.write(f"BEST={best}\nA_FAILS={len(scores['a']['fails'])}\nB_FAILS={len(scores['b']['fails'])}\n"
+                         f"A_USABLE={int(scores['a']['usable'])}\nB_USABLE={int(scores['b']['usable'])}\n")
+        summary = describe(scores, best, notes)
+        with open(os.path.join(args.out, "summary.txt"), "w", encoding="utf-8") as handle:
+            handle.write("\n".join(summary) + "\n")
+        print("\n".join(summary))
+        return 0
     state, report_lines = compare_reports(roots)
 
     # What the better repair still fails, for its author.
@@ -283,17 +364,17 @@ def main(argv=None):
     with open(os.path.join(args.out, "reports.txt"), "w", encoding="utf-8") as handle:
         handle.write("\n".join(report_lines) + "\n")
 
+    try:
+        hand_over_material(roots[best], roots[other])
+    except OSError as problem:
+        notes.append(f"the other engineer's work could not be copied over: {problem}")
+
     with open(os.path.join(args.out, "decision.env"), "w", encoding="utf-8") as handle:
-        handle.write(f"BEST={best}\nBEST_FAILS={len(fails)}\nOTHER_FAILS={len(scores[other]['fails'])}\nREPORTS={state}\n")
-    summary = [f"repairs: better is {best}"]
-    for name in ("a", "b"):
-        score = scores[name]
-        summary.append(f"  {name}: {'usable' if score['usable'] else 'does not build'}, "
-                       f"{'changed' if score['changed'] else 'unchanged from the shipped release'}, "
-                       f"{score['passed']} runs passed, {len(score['fails'])} failed")
-        for fail in score["fails"][:6]:
-            summary.append(f"    - {fail['author']}'s {fail['scenario']} ({fail['how']}): {fail['problem'][:150]}")
-    summary += ["  note: " + note for note in notes[:6]]
+        handle.write(f"BEST={best}\nBEST_FAILS={len(fails)}\nOTHER_FAILS={len(scores[other]['fails'])}\n"
+                     f"A_FAILS={len(scores['a']['fails'])}\nB_FAILS={len(scores['b']['fails'])}\n"
+                     f"A_USABLE={int(scores['a']['usable'])}\nB_USABLE={int(scores['b']['usable'])}\n"
+                     f"OTHER_CHANGED={int(scores[other]['changed'])}\nREPORTS={state}\n")
+    summary = describe(scores, best, notes)
     summary += [f"reports: {state}"] + ["  " + line for line in report_lines[:14]]
     with open(os.path.join(args.out, "summary.txt"), "w", encoding="utf-8") as handle:
         handle.write("\n".join(summary) + "\n")

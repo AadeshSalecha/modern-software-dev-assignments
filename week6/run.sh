@@ -11,13 +11,15 @@
 #                       harnesses and model families on purpose
 #   3. kit/cross.py     no model: every scenario either solver wrote is run on both repairs,
 #                       and the two reports are compared
-#   4. follow-up        if the better repair still fails something, its author gets the list;
-#                       if the reports differ, a fresh session decides between them
+#   4. follow-up        the better repair's author gets the other solver's change, ledger and
+#                       scenarios, and the runs its own repair fails, and settles each
+#                       difference by the ticket; its result is kept only if it is no worse.
+#                       If the reports differ, a fresh session decides between them
 #   5. install          the better repair and the decided report end up here;
 #                       kit/prepare.sh --restore puts app/ back in its shipped layout
 #
 # After step 2 this workspace already holds a complete answer; later steps only replace a
-# part of it when the replacement checks out. Steps 4 is skipped when time or money is short.
+# part of it when the replacement checks out. Step 4 is skipped when time or money is short.
 #
 # Settings, each "<harness>:<model>:<effort>" with harness claude or codex. The defaults are
 # what is submitted; the grader passes no environment, so it gets them.
@@ -26,17 +28,19 @@
 #   KIT_JUDGE    the session that decides between two different reports
 # Other switches for experiments: KIT_TOOLS, KIT_MAX_TURNS, KIT_NO_HOOK=1, KIT_NO_FOLLOWUP=1,
 # KIT_VARIANT=flags (the bare ticket with only the harness flags changed), KIT_SOLVE_END,
-# KIT_HARD_STOP, KIT_FIX_BUDGET, KIT_JUDGE_BUDGET.
+# KIT_HARD_STOP, KIT_FIX_BUDGET, KIT_JUDGE_BUDGET, KIT_RECONCILE=fails.
 set -u
 
 TASK_FILE="${1:?usage: ./run.sh <task-file>}"
 cd "$(dirname "$0")" || exit 1
 ROOT=$PWD
 STARTED=$(date +%s)
-SOLVE_END=${KIT_SOLVE_END:-330}       # solvers are stopped this many seconds after the start
-HARD_STOP=${KIT_HARD_STOP:-570}       # everything here is finished by then, 30 s before the grader's limit
-FIX_BUDGET=${KIT_FIX_BUDGET:-0.55}    # a fix session starts only below this estimated spend (dollars)
+SOLVE_END=${KIT_SOLVE_END:-300}        # solvers are stopped this many seconds after the start
+HARD_STOP=${KIT_HARD_STOP:-570}        # everything here is finished by then, 30 s before the grader's limit
+FIX_END=$((HARD_STOP - 130))           # the comparison session is stopped then, so its result can be checked
+FIX_BUDGET=${KIT_FIX_BUDGET:-0.55}     # a comparison session starts only below this estimated spend (dollars)
 JUDGE_BUDGET=${KIT_JUDGE_BUDGET:-0.62} # and a report decision only below this
+RECONCILE=${KIT_RECONCILE:-always}     # always: compare the two repairs every time; fails: only when a run fails
 
 MAIN="${KIT_MAIN:-claude:claude-sonnet-5-5:medium}"
 SECOND="${KIT_SECOND-codex:gpt-6.1-terra:medium}"
@@ -255,10 +259,23 @@ fi
 A_LOG=$(log_for a "$MAIN")
 agent "$MAIN" start $((SOLVE_END - $(elapsed))) all "$PROMPT" >"$A_LOG" 2>&1
 echo "run.sh: main solver ($MAIN) ended with status $? after $(elapsed) s"
+A_ENDED=$(elapsed)
 cat "$A_LOG"
 if [ -n "$SECOND" ]; then
+  # The second solver gets two more minutes (and at least 200 s in all): the main solver's
+  # session is resumed later, and its cached context is gone five minutes after its last turn.
+  b_left=120
+  [ $((A_ENDED + b_left)) -lt 200 ] && b_left=$((200 - A_ENDED))
+  (
+    sleep "$b_left"
+    kill_tree "$B_PID"
+  ) >/dev/null 2>&1 &
+  B_TIMER=$!
   wait "$B_PID"
   echo "run.sh: second solver ($SECOND) ended with status $? after $(elapsed) s; its output follows"
+  pkill -P "$B_TIMER" 2>/dev/null
+  kill "$B_TIMER" 2>/dev/null
+  wait "$B_TIMER" 2>/dev/null
   BACKGROUND=""
   cat "$B_LOG"
 fi
@@ -267,6 +284,9 @@ stop_services
 # --- 3. cross-check, 4. follow-up, 5. install ---------------------------------------------
 BEST=a
 BEST_FAILS=0
+A_FAILS=0
+B_FAILS=0
+OTHER_CHANGED=0
 REPORTS=same
 if [ -n "$SECOND" ]; then
   limited 140 python3 kit/cross.py --b "$B_ROOT" >work/cross/log.txt 2>&1
@@ -276,34 +296,119 @@ if [ -n "$SECOND" ]; then
   if [ -s work/cross/decision.env ]; then
     BEST=$(grep '^BEST=' work/cross/decision.env | cut -d= -f2)
     BEST_FAILS=$(grep '^BEST_FAILS=' work/cross/decision.env | cut -d= -f2)
+    A_FAILS=$(grep '^A_FAILS=' work/cross/decision.env | cut -d= -f2)
+    B_FAILS=$(grep '^B_FAILS=' work/cross/decision.env | cut -d= -f2)
+    OTHER_CHANGED=$(grep '^OTHER_CHANGED=' work/cross/decision.env | cut -d= -f2)
     REPORTS=$(grep '^REPORTS=' work/cross/decision.env | cut -d= -f2)
   fi
   case "$BEST" in a | b) ;; *) BEST=a ;; esac
   case "$BEST_FAILS" in '' | *[!0-9]*) BEST_FAILS=0 ;; esac
+  case "$A_FAILS" in '' | *[!0-9]*) A_FAILS=0 ;; esac
+  case "$B_FAILS" in '' | *[!0-9]*) B_FAILS=0 ;; esac
 
   FIX_PID=""
+  JUDGE_PID=""
   if [ "${KIT_NO_FOLLOWUP:-}" != "1" ]; then
-    # The better repair's author gets the runs it still fails.
-    if [ "$BEST_FAILS" -gt 0 ] && affordable "$FIX_BUDGET" 380; then
+    # 4a. Two different reports: a fresh session decides. The first report is kept in case it fails.
+    if [ "$REPORTS" = "differ" ] && affordable "$JUDGE_BUDGET" $((HARD_STOP - 140)); then
+      mkdir -p work/cross/out-a && cp out/* work/cross/out-a/ 2>/dev/null
+      JUDGE_LOG=$(log_for judge "$JUDGE")
+      judge_prompt="$(compose kit/prompt-adjudicate.md work/cross/reports.txt)"
+      (KIT_NO_HOOK=1 agent "$JUDGE" start $((HARD_STOP - 40 - $(elapsed))) judge "$judge_prompt") >"$JUDGE_LOG" 2>&1 &
+      JUDGE_PID=$!
+      BACKGROUND="$JUDGE_PID"
+    fi
+
+    # 4b. The better repair's author gets the other solver's change, ledger and scenarios, and
+    #     the runs its own repair fails. What it hands back is kept only if it checks out.
+    want_fix=0
+    [ "$BEST_FAILS" -gt 0 ] && want_fix=1
+    [ "$RECONCILE" = "always" ] && [ "$OTHER_CHANGED" = "1" ] && want_fix=1
+    # Money is kept back for a report decision that has started, and for a session whose
+    # cached context has expired by now (a resumed session then pays to write it again).
+    fix_line=$FIX_BUDGET
+    [ -n "$JUDGE_PID" ] && fix_line=$(python3 -c "print($FIX_BUDGET - 0.10)")
+    if [ "$BEST" = "a" ] && [ $(($(elapsed) - A_ENDED)) -gt 230 ]; then
+      fix_line=$(python3 -c "print($fix_line - 0.15)")
+    fi
+    if [ "$want_fix" -eq 1 ] && affordable "$fix_line" $((FIX_END - 80)); then
       if [ "$BEST" = "a" ]; then
         fix_root=$ROOT
         fix_spec=$MAIN
+        fails_before=$A_FAILS
       else
         fix_root=$B_ROOT
         fix_spec=$SECOND
+        fails_before=$B_FAILS
       fi
-      fix_prompt="$(cat kit/prompt-fix.md work/cross/fix.txt)"
+      rm -rf work/cross/before
+      mkdir -p work/cross/before
+      for service in api router worker; do
+        cp -R "$fix_root/app/services/$service" work/cross/before/ 2>/dev/null
+      done
+      (cd "$fix_root" && limited 60 kit/check.sh --only repair) >work/cross/gate-before.txt 2>&1
+      gate_before=$?
+      stop_services
+      fix_prompt="$(cat kit/prompt-reconcile.md work/cross/fix.txt 2>/dev/null)"
+      [ -s work/cross/fix.txt ] || fix_prompt="$fix_prompt
+(none: your repair passes every run)"
       FIX_LOG=$(log_for fix "$fix_spec")
-      (cd "$fix_root" && agent "$fix_spec" resume $((HARD_STOP - 60 - $(elapsed))) all "$fix_prompt") >"$FIX_LOG" 2>&1 &
+      (cd "$fix_root" && agent "$fix_spec" resume $((FIX_END - $(elapsed))) all "$fix_prompt") >"$FIX_LOG" 2>&1 &
       FIX_PID=$!
-      BACKGROUND="$FIX_PID"
+      BACKGROUND="$BACKGROUND $FIX_PID"
     fi
-    # Two different reports: a fresh session decides. The first report is kept in case it fails.
-    if [ "$REPORTS" = "differ" ] && affordable "$JUDGE_BUDGET" 430; then
-      mkdir -p work/cross/out-a && cp out/* work/cross/out-a/ 2>/dev/null
-      JUDGE_LOG=$(log_for judge "$JUDGE")
-      KIT_NO_HOOK=1 agent "$JUDGE" start $((HARD_STOP - 50 - $(elapsed))) judge \
-        "$(compose kit/prompt-adjudicate.md work/cross/reports.txt)" >"$JUDGE_LOG" 2>&1
+    if [ -n "$FIX_PID" ]; then
+      wait "$FIX_PID"
+      echo "run.sh: comparison session ($fix_spec, repair $BEST) ended with status $? after $(elapsed) s"
+      cat "$FIX_LOG"
+      # Keep its result only if the repair is no worse than before: it still builds, the gate
+      # has not started failing, and it fails no more runs than it did. Unchecked is not kept.
+      keep=0
+      verdict="there was no time left to check it"
+      if [ "$(elapsed)" -lt $((HARD_STOP - 100)) ]; then
+        (cd "$fix_root" && limited 50 kit/check.sh --only repair) >work/cross/gate-after.txt 2>&1
+        gate_after=$?
+        mkdir -p work/cross/after
+        limited $((HARD_STOP - 15 - $(elapsed))) python3 kit/cross.py --b "$B_ROOT" --repairs-only \
+          --out work/cross/after >work/cross/log-after.txt 2>&1
+        head -8 work/cross/log-after.txt
+        fails_after=""
+        usable_after=""
+        if [ "$BEST" = "a" ]; then mark=A; else mark=B; fi
+        if [ -s work/cross/after/decision.env ]; then
+          fails_after=$(grep "^${mark}_FAILS=" work/cross/after/decision.env | cut -d= -f2)
+          usable_after=$(grep "^${mark}_USABLE=" work/cross/after/decision.env | cut -d= -f2)
+        fi
+        case "$fails_after" in '' | *[!0-9]*) fails_after="" ;; esac
+        if [ -z "$fails_after" ]; then
+          verdict="the check of the result did not finish"
+        elif [ "$usable_after" != "1" ]; then
+          verdict="it no longer builds"
+        elif [ "$gate_before" -eq 0 ] && [ "$gate_after" -ne 0 ]; then
+          verdict="kit/check.sh passed before and fails now"
+        elif [ "$fails_after" -gt "$fails_before" ]; then
+          verdict="it fails $fails_after runs, up from $fails_before"
+        else
+          keep=1
+          verdict="it builds, the gate is no worse, and it fails $fails_after runs (before: $fails_before)"
+        fi
+      fi
+      stop_services
+      if [ "$keep" -eq 1 ]; then
+        echo "run.sh: keeping the compared repair: $verdict"
+      else
+        echo "run.sh: going back to the repair as it was before the comparison: $verdict"
+        for service in api router worker; do
+          if [ -d "work/cross/before/$service" ]; then
+            rm -rf "work/cross/dropped-$service"
+            mv "$fix_root/app/services/$service" "work/cross/dropped-$service" 2>/dev/null
+            cp -R "work/cross/before/$service" "$fix_root/app/services/$service"
+          fi
+        done
+      fi
+    fi
+    if [ -n "$JUDGE_PID" ]; then
+      wait "$JUDGE_PID"
       echo "run.sh: report decision ($JUDGE) ended with status $? after $(elapsed) s"
       cat "$JUDGE_LOG"
       for report in work/cross/out-a/*.json; do
@@ -314,24 +419,7 @@ if [ -n "$SECOND" ]; then
         fi
       done
     fi
-    if [ -n "$FIX_PID" ]; then
-      wait "$FIX_PID"
-      echo "run.sh: fix session ended with status $? after $(elapsed) s"
-      BACKGROUND=""
-      cat "$FIX_LOG"
-      stop_services
-      # Has the fix changed which repair is better?
-      if [ "$(elapsed)" -lt $((HARD_STOP - 110)) ]; then
-        limited 100 python3 kit/cross.py --b "$B_ROOT" --out work/cross/after >work/cross/log-after.txt 2>&1
-        if [ -s work/cross/after/decision.env ]; then
-          BEST=$(grep '^BEST=' work/cross/after/decision.env | cut -d= -f2)
-          echo "run.sh: after the fix the better repair is $BEST"
-          head -12 work/cross/log-after.txt
-        fi
-        stop_services
-        case "$BEST" in a | b) ;; *) BEST=a ;; esac
-      fi
-    fi
+    BACKGROUND=""
   fi
 
   if [ "$REPORTS" = "only_b" ]; then
