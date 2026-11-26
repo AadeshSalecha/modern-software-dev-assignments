@@ -13,7 +13,11 @@ Work in this order, in as few steps as you can. Send independent commands togeth
    now. What you learn here about when and where the incident happened is your first lead.
 3. **Diagnose.** Treat each diagnosis or suggestion in the ticket as a lead and test it
    against the contracts and the code. Read `.claude/skills/replay-scenarios/SKILL.md` and
-   reproduce the defect with a scenario that fails on the shipped release.
+   reproduce the defect with a scenario that fails on the shipped release. Then, before you
+   repair anything, look for every other way into the same defect: the same decision is
+   usually made in more than one place (in another service, once per bus message version,
+   again on a retry, a resend, an expired lease or a restart). Add a ledger line for each
+   way in that the ticket's wording covers; the first one you found is rarely the only one.
 4. **Repair** in `app/services`, as small a change as covers every ledger line. Prove each
    behaviour with a scenario in `work/scenarios/`, one of them replacing the release
    part-way. `kit/check.sh` passing shows only what the shipped scenarios cover: every case
