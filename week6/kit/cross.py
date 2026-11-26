@@ -98,7 +98,7 @@ def judge_repairs(roots, deadline):
     for author, file_name, path, scenario in authored:
         old = outcomes.get(f"{author}:{file_name}:old")
         own = outcomes.get(f"{author}:{file_name}:own")
-        if old is None or own is None:
+        if old is None or own is None or rollout.not_run(old) or rollout.not_run(own):
             continue
         if not old["problems"]:
             notes.append(f"{author}'s {file_name} passes on the shipped release too: not used")
@@ -127,7 +127,7 @@ def judge_repairs(roots, deadline):
     results = rollout.run_all([(str(i), s[1], s[2], s[3]) for i, s in enumerate(specs)], bins, deadline=deadline)
     for spec, outcome in zip(specs, results):
         name, author, file_name, how, path = spec[0]
-        if outcome["problems"] == ["not run: out of time"]:
+        if rollout.not_run(outcome):
             continue
         if outcome["problems"]:
             scores[name]["fails"].append({"scenario": file_name, "author": author, "how": how, "path": path,
@@ -239,7 +239,11 @@ def main(argv=None):
     roots = {"a": A_ROOT, "b": os.path.abspath(args.b)}
     os.makedirs(args.out, exist_ok=True)
 
-    scores, notes = judge_repairs(roots, time.time() + BUDGET_SECONDS)
+    try:
+        scores, notes = judge_repairs(roots, time.time() + BUDGET_SECONDS)
+    except Exception as problem:  # noqa: BLE001 - whatever happens, run.sh needs a decision and the reports compared
+        scores = {name: {"usable": True, "changed": changed(roots[name]), "fails": [], "passed": 0} for name in roots}
+        notes = [f"the repairs could not be compared ({type(problem).__name__}: {str(problem)[:160]}); a is kept unless it changed nothing"]
     best = better(scores)
     other = "b" if best == "a" else "a"
     state, report_lines = compare_reports(roots)

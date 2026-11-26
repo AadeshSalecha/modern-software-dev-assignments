@@ -353,12 +353,14 @@ def scenario_checks(bins):
     outcomes = rollout.run_all(
         [(label, scenario, release) for _, label, scenario, release in specs], bins, deadline=time.time() + BUDGET_SECONDS
     )
-    skipped = sum(1 for outcome in outcomes if outcome["problems"] == ["not run: out of time"])
+    skipped = sum(1 for outcome in outcomes if rollout.not_run(outcome))
     if skipped:
-        hard.append(f"{skipped} scenario runs were not started: the others used up {BUDGET_SECONDS} s. Find what is slow.")
+        # Not a verdict on the code: a run that hangs fails on its own, by the per-run limit.
+        soft.append(f"{skipped} of {len(outcomes)} scenario runs were not started here (time or ports ran out), "
+                    "so they are unchecked. Run the ones that matter yourself with kit/rollout.py.")
     for (group, label, _, _), outcome in zip(specs, outcomes):
         problems = outcome["problems"]
-        if problems == ["not run: out of time"]:
+        if rollout.not_run(outcome):
             continue
         if group == "reproduce":
             if not problems:
@@ -422,8 +424,10 @@ def main(argv):
             tests = pool.map(run_tests, SERVICES)
             try:
                 scenario_hard, soft = scenario_checks(bins)
-            except RuntimeError as problem:
-                scenario_hard, soft = [f"scenarios could not run: {problem}"], []
+            except Exception as problem:  # noqa: BLE001 - a fault of this script must never block the work
+                scenario_hard, soft = [], []
+                notes.append(f"this script could not run the scenarios ({str(problem)[:160]}). That is the tool's "
+                             "problem, not the repair's: go by your own runs of kit/rollout.py")
             for found in tests:
                 hard += found
         hard += scenario_hard

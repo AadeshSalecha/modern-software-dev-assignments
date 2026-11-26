@@ -85,16 +85,22 @@ def stop_everything(signum=None, frame=None):
 
 
 def free_port_base(start, taken):
-    # Tried in random order: two runners started at the same moment (another command of the same
-    # agent, a judge) would otherwise both probe the first base and collide.
-    bases = list(range(start, start + 2000, 10))
+    """A port base no deployment is listening on. Tried in random order over a wide range: two
+    runners started at the same moment would otherwise both probe the first base and collide.
+
+    The probe sets SO_REUSEADDR, as the services themselves do. Without it a port stays "in use"
+    for a minute after the server on it is killed, and a few busy minutes of scenario runs make
+    every base look taken.
+    """
+    bases = list(range(start, start + 20000, 10))
     random.shuffle(bases)
-    for base in bases:
+    for base in bases[:400]:
         if base in taken:
             continue
         try:
             for offset in replaylib.OFFSET.values():
                 with socket.socket() as probe:
+                    probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                     probe.bind(("127.0.0.1", base + offset))
         except OSError:
             continue
@@ -394,10 +400,11 @@ def build(apps):
     return bins
 
 
-def run_all(jobs_spec, bins, jobs=4, port_base=7400, deadline=None):
+def run_all(jobs_spec, bins, jobs=4, port_base=10000, deadline=None):
     """jobs_spec: list of (label, scenario, release) or (label, scenario, release, new_app).
     Returns list of dicts in the same order. Runs that have not started by `deadline` (a
-    time.time() value) are reported as not run."""
+    time.time() value), or that found no ports, are reported with one problem that starts
+    with "not run:". Use not_run() to tell them from failures."""
     taken, choosing = set(), threading.Lock()
 
     def one(spec):
@@ -405,9 +412,12 @@ def run_all(jobs_spec, bins, jobs=4, port_base=7400, deadline=None):
         new_app = spec[3] if len(spec) > 3 else None
         if deadline is not None and time.time() > deadline:
             return {"label": label, "name": scenario.get("name", ""), "problems": ["not run: out of time"], "digest": [], "result": None}
-        with choosing:
-            base = free_port_base(port_base, taken)
-            taken.add(base)
+        try:
+            with choosing:
+                base = free_port_base(port_base, taken)
+                taken.add(base)
+        except RuntimeError as problem:  # the machine's fault, not the scenario's
+            return {"label": label, "name": scenario.get("name", ""), "problems": [f"not run: {problem}"], "digest": [], "result": None}
         try:
             result, errors = play(scenario, release, bins, base, new_app)
         finally:
@@ -422,6 +432,11 @@ def run_all(jobs_spec, bins, jobs=4, port_base=7400, deadline=None):
         return [one(spec) for spec in jobs_spec]
     with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
         return list(pool.map(one, jobs_spec))
+
+
+def not_run(outcome):
+    """True for a run that never started (out of time, no ports): it says nothing about the code."""
+    return len(outcome["problems"]) == 1 and outcome["problems"][0].startswith("not run:")
 
 
 def load(path):
@@ -439,7 +454,7 @@ def main(argv=None):
     parser.add_argument("--upgrade-at", type=int)
     parser.add_argument("--upgrade-each", action="store_true")
     parser.add_argument("--jobs", type=int, default=4)
-    parser.add_argument("--port-base", type=int, default=7400)
+    parser.add_argument("--port-base", type=int, default=10000)
     parser.add_argument("--full", action="store_true")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
