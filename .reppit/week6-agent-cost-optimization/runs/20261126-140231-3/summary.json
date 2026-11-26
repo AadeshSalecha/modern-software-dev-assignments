@@ -1,0 +1,50 @@
+{
+  "passed": true,
+  "score": {
+    "categories": {
+      "incident": {
+        "passed": 9,
+        "total": 9,
+        "failed": []
+      },
+      "regressions": {
+        "passed": 10,
+        "total": 10,
+        "failed": []
+      },
+      "compat": {
+        "passed": 2,
+        "total": 2,
+        "failed": []
+      }
+    },
+    "repair": 1.0,
+    "impact": 1.0,
+    "precision": 1.0,
+    "recall": 1.0,
+    "totals_right": 6,
+    "totals": 6,
+    "seconds": 5.7
+  },
+  "exit_code": 0,
+  "timed_out": false,
+  "seconds": 231.9,
+  "error": null,
+  "cost_usd": 0.036437504999999995,
+  "requests": 23,
+  "rejected": [
+    "endpoint_not_available"
+  ],
+  "upstream_errors": 0,
+  "by_model": {
+    "claude-haiku-5-5": {
+      "requests": 23,
+      "cost_usd": 0.036437504999999995,
+      "input": 46,
+      "output": 35714,
+      "cache_read": 1042003,
+      "cache_write": 65247,
+      "cache_write_1h": 0
+    }
+  }
+}

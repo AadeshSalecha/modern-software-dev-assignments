@@ -1,0 +1,58 @@
+{
+  "passed": false,
+  "score": {
+    "categories": {
+      "incident": {
+        "passed": 8,
+        "total": 9,
+        "failed": [
+          {
+            "name": "a repeat that is being sent when the release is replaced is not retried",
+            "problems": [
+              "pay_1 -> ep_a: delivered as 2 events, expected 1",
+              "a payment reaches an endpoint as a second event"
+            ]
+          }
+        ]
+      },
+      "regressions": {
+        "passed": 10,
+        "total": 10,
+        "failed": []
+      },
+      "compat": {
+        "passed": 2,
+        "total": 2,
+        "failed": []
+      }
+    },
+    "repair": 0.8889,
+    "impact": 1.0,
+    "precision": 1.0,
+    "recall": 1.0,
+    "totals_right": 6,
+    "totals": 6,
+    "seconds": 5.6
+  },
+  "exit_code": 0,
+  "timed_out": false,
+  "seconds": 248.9,
+  "error": null,
+  "cost_usd": 0.041406530000000004,
+  "requests": 27,
+  "rejected": [
+    "endpoint_not_available"
+  ],
+  "upstream_errors": 0,
+  "by_model": {
+    "claude-haiku-5-5": {
+      "requests": 27,
+      "cost_usd": 0.041406530000000004,
+      "input": 54,
+      "output": 34903,
+      "cache_read": 1499313,
+      "cache_write": 71652,
+      "cache_write_1h": 0
+    }
+  }
+}
