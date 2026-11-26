@@ -1,0 +1,10 @@
+- [x] An endpoint change made through the API takes effect (enable/disable, secret, url) — scenario disable_after_v2
+- [x] ...and stays in effect whatever older messages arrive afterwards (v2 archive message, older v3) — disable_after_v2, v2_archive_only
+- [x] Changes already made that did not take effect take effect after the release, nobody re-makes them — upgrade_resync
+- [x] Archive backfill keeps running; v1 and v2 messages keep working, including for archive-only endpoints — v2_archive_only, kit/check.sh
+- [x] Same release for every region: repair uses only the services' own stores (api resync from its endpoints table) — upgrade_resync
+- [x] out/impact.json: switched-off endpoints, switch-off time = latest on->off accepted, deliveries with 2xx for events accepted after — work/report.py
+- [x] totals_minor per currency, only currencies present; skipped_rows = 88 — work/report.py
+- [x] Holds for new traffic — disable_after_v2
+- [x] Shipped state carrying the defect: router endpoints.version inflated by v2 seq, and dropped endpoint.changed messages; api republishes endpoints once (meta marker), router tracks v3_version — upgrade_resync with restart
+- [x] Older bus messages still work — v2_archive_only, kit/check.sh

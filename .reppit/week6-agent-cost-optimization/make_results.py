@@ -25,6 +25,15 @@ DESCRIPTIONS = collections.OrderedDict(
         ("A-v2-low", "A-v2 with `--effort low`."),
         ("haiku-low", "A-v2 with `claude-haiku-5-5` and `--effort low`."),
         ("A-v2-emptyhome", "A-v2 with HOME pointed at an empty directory, as in the grader."),
+        ("A-v3", "After the independent review (commit 94f7d88): bounded run.sh, skippable contract checks, reworded skills."),
+        ("A-v4", "A-v3 plus the report rule on missing facts and no advertised check skipping (commit c39352d). The submitted default."),
+        ("split-haiku-report", "A-v4 with the report written by `claude-haiku-5-5` in parallel while Sonnet only repairs."),
+        ("haiku-main-sonnet-rescue", "A-v4 with `claude-haiku-5-5` as the main agent and Sonnet only if the gate fails."),
+        ("codex-luna", "A-v4 with Codex and `gpt-6-luna` for the whole session (run on the Mac)."),
+        ("codex-terra", "A-v4 with Codex and `gpt-6.1-terra` for the whole session (run on the Mac)."),
+        ("split-luna-report-terra", "Codex: `gpt-6-luna` writes the report in parallel while `gpt-6.1-terra` repairs (Mac)."),
+        ("split-luna-report-sonnet", "`gpt-6-luna` (Codex) writes the report in parallel while Sonnet repairs (Mac)."),
+        ("luna-main-sonnet-rescue", "`gpt-6-luna` (Codex) as the main agent and Sonnet only if the gate fails (Mac)."),
     ]
 )
 
@@ -38,6 +47,40 @@ def load(run):
         if row.get("metered"):
             usage.update({k: row["usage"].get(k, 0) for k in KINDS})
     return summary, usage
+
+
+def transfer_section():
+    """Runs on the transfer incident, from transfer/results/<label>-<stamp>-<n>/summary.json."""
+    folder = os.path.join(HERE, "transfer", "results")
+    if not os.path.isdir(folder):
+        return []
+    groups = collections.OrderedDict()
+    for name in sorted(os.listdir(folder)):
+        path = os.path.join(folder, name, "summary.json")
+        if os.path.exists(path):
+            groups.setdefault(name.rsplit("-", 3)[0], []).append((name, json.load(open(path))))
+    out = [
+        "",
+        "## Transfer incident (INC-2231, endpoint changes ignored)",
+        "",
+        "A second incident built to test the setup on a ticket it was not designed around; see",
+        "`transfer/README.md`. Scored by `transfer/inc-2231/judge.py` with the assignment's formulas.",
+        "",
+        "| Setup | Run | Result | Repair | Impact | Cost | Requests | Time | Incident | Regr. | Compat |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+    ]
+    for label, runs in groups.items():
+        for name, summary in runs:
+            score = summary["score"]
+            cats = score.get("categories", {})
+            cell = lambda key: f"{cats[key]['passed']}/{cats[key]['total']}" if key in cats else "-"
+            impact = (score.get("impact") or {}).get("impact")
+            out.append(
+                f"| {label} | {name[len(label) + 1:]} | {'PASS' if summary['passed'] else 'FAIL'} | {score.get('repair')} | "
+                f"{impact} | ${summary['cost_usd']:.3f} | {summary['requests']} | {summary['seconds']:.0f} s | "
+                f"{cell('incident')} | {cell('regressions')} | {cell('compat')} |"
+            )
+    return out
 
 
 def main():
@@ -102,6 +145,8 @@ def main():
         ]
         if failed or notes:
             detail += ["", "Failures:"] + failed + notes
+    transfer = transfer_section()
+    detail += transfer
     notes_path = os.path.join(HERE, "results-notes.md")
     tail = ["", open(notes_path).read().rstrip()] if os.path.exists(notes_path) else []
     with open(os.path.join(HERE, "results.md"), "w") as handle:

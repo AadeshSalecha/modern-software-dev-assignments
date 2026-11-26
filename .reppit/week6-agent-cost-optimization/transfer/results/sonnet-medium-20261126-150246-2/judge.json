@@ -1,0 +1,49 @@
+{
+ "passed": false,
+ "repair": 0.8889,
+ "impact": {
+  "impact": 1.0,
+  "precision": 1.0,
+  "recall": 1.0,
+  "figures_right": 7,
+  "figures": 7,
+  "problem": null,
+  "reported": {
+   "endpoints": [
+    "ep_orchid_1",
+    "ep_quince_1",
+    "ep_violet_1"
+   ],
+   "entries": 86,
+   "skipped_rows": 88
+  }
+ },
+ "categories": {
+  "incident": {
+   "passed": 8,
+   "total": 9,
+   "failed": [
+    {
+     "name": "an endpoint the deployed release took an archive message for can be switched off after the release is replaced",
+     "problems": [
+      "step 1 (endpoint.create) failed: step endpoint.create got 409: {'error': 'endpoint exists'}",
+      "  router stderr:     self.server_activate()",
+      "  router stderr:     ~~~~~~~~~~~~~~~~~~~~^^",
+      "  router stderr:   File \"/usr/local/lib/python3.13/socketserver.py\", line 487, in server_activate"
+     ]
+    }
+   ]
+  },
+  "regressions": {
+   "passed": 9,
+   "total": 9,
+   "failed": []
+  },
+  "compat": {
+   "passed": 4,
+   "total": 4,
+   "failed": []
+  }
+ },
+ "build_problem": null
+}

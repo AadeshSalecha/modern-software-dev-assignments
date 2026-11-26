@@ -1,0 +1,10 @@
+- [x] API endpoint change (enabled/secret/url) takes effect in router and stays after older (v2 archive) messages — scenario endpoint_update_survives_archive
+- [x] Not undone by older messages arriving afterwards — same scenario, v2 after v3 update
+- [x] Previously ineffective changes take effect after release without re-making them — scenario upgrade_applies_lost_changes
+- [x] v1/v2 bus messages keep working, including archive-only endpoints — scenario archive_only_endpoint
+- [x] Same release works in every region (repair uses services' own stores) — api republishes its endpoints
+- [x] out/impact.json per ticket definitions — work/report.py
+- [x] skipped_rows = corrupted rows — sum(skipped)
+- [x] Standing: new traffic holds — scenarios
+- [x] Standing: shipped state carrying defect: router endpoints rows with archive-seq versions (4117 etc.), dealt by flag + api republish at start, idempotent
+- [x] Standing: older bus messages still work — archive_only_endpoint, kit/check.sh

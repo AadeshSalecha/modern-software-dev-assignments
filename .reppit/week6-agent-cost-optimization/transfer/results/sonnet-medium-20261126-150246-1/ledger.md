@@ -1,0 +1,8 @@
+- [x] Endpoint change via API takes effect (disable stops deliveries) — work/scenarios/inc2231.json
+- [x] Stays in effect whatever older messages (v2 archive) arrive afterwards — same scenario, v2 bus after update
+- [x] Already-made changes that did not take effect apply after release — upgrade scenario
+- [x] v1 and v2 bus messages keep working, incl. archive-only endpoints — scenario archive-only (v2 create, then v2 update by seq)
+- [x] Report out/impact.json: switched-off endpoints, 2xx deliveries after switch-off, totals, skipped_rows — work/report.py
+- [x] New traffic holds
+- [x] Shipped state with defect: router endpoints whose version holds a v2 seq (migrated), api republishes endpoints once
+- [x] Older bus messages still work

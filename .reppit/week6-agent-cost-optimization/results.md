@@ -162,6 +162,17 @@ A-v2 with HOME pointed at an empty directory, as in the grader.
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 20261126-141558-1 | PASS | 1.00 | 1.00 | $0.210 | 10 | 101 s | 9/9 | 10/10 | 2/2 | 8,075 | 262,449 | 41,274 |
 
+## Transfer incident (INC-2231, endpoint changes ignored)
+
+A second incident built to test the setup on a ticket it was not designed around; see
+`transfer/README.md`. Scored by `transfer/inc-2231/judge.py` with the assignment's formulas.
+
+| Setup | Run | Result | Repair | Impact | Cost | Requests | Time | Incident | Regr. | Compat |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| sonnet-medium | 20261126-150246-1 | PASS | 1.0 | 1.0 | $0.364 | 25 | 179 s | 9/9 | 9/9 | 4/4 |
+| sonnet-medium | 20261126-150246-2 | PASS | 1.0 | 1.0 | $0.270 | 14 | 136 s | 9/9 | 9/9 | 4/4 |
+| sonnet-medium | 20261126-150246-3 | FAIL | 0.9231 | 1.0 | $0.281 | 19 | 187 s | 9/9 | 9/9 | 3/4 |
+
 ## Notes from reading the logs
 
 - **Baseline.** Cache writes were billed at the 1-hour rate ($4.00/M), about 43% of each run. All

@@ -1,0 +1,108 @@
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/api/src/main.ts week6/app/services/api/src/main.ts
+--- clean-app/services/api/src/main.ts	2026-11-26 10:01:16.143626922 +0000
++++ week6/app/services/api/src/main.ts	2026-11-26 15:09:06.991464569 +0000
+@@ -339,6 +339,29 @@
+   });
+ });
+ 
++// INC-2231: the router dropped endpoint changes as stale (a version-2 archive message had
++// inflated its version). Once per store, publish every endpoint's current state again.
++try {
++store.transaction(() => {
++  const done = store.db
++    .prepare("select value from meta where key = 'resync_endpoints_2231'")
++    .get();
++  if (done) return;
++  const rows = store.db
++    .prepare("select id from endpoints order by id")
++    .all() as unknown as { id: string }[];
++  for (const row of rows) {
++    const endpoint = store.endpoint(row.id);
++    if (endpoint) store.enqueue("endpoint.changed", now(), { endpoint });
++  }
++  store.db
++    .prepare("insert into meta (key, value) values ('resync_endpoints_2231', 1)")
++    .run();
++});
++} catch {
++  // another replica is doing it
++}
++
+ server.listen(portBase + 1, "127.0.0.1", () =>
+   log("api.started", { release: RELEASE }),
+ );
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/bus.py week6/app/services/router/bus.py
+--- clean-app/services/router/bus.py	2026-11-26 10:01:16.144267697 +0000
++++ week6/app/services/router/bus.py	2026-11-26 15:08:57.387974798 +0000
+@@ -133,7 +133,8 @@
+         return "api.v2", str(seq), "event", body
+     if kind == "endpoint":
+         ep = need(msg, "endpoint", dict)
+-        # Version 2 had no endpoint versions. The sequence number orders them.
++        # Version 2 has no endpoint versions and its numbering is separate from version 3's,
++        # so it must never claim a version: it only describes endpoints the router lacks.
+         body = endpoint_body(
+             need(ep, "id", str),
+             need(ep, "merchant", str),
+@@ -141,8 +142,9 @@
+             need(ep, "secret", str),
+             need(ep, "types", list),
+             need(ep, "active", bool),
+-            seq,
++            0,
+         )
++        body["legacy"] = True
+         return "api.v2", str(seq), "endpoint", body
+     raise Malformed("unknown kind")
+ 
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/routing.py week6/app/services/router/routing.py
+--- clean-app/services/router/routing.py	2026-11-26 10:01:16.144267697 +0000
++++ week6/app/services/router/routing.py	2026-11-26 15:08:57.389742189 +0000
+@@ -103,7 +103,8 @@
+ 
+ def apply_endpoint(db, log, now, endpoint):
+     old = db.execute("select * from endpoints where id = ?", (endpoint["id"],)).fetchone()
+-    if old is not None and endpoint["version"] <= old["version"]:
++    legacy = endpoint.get("legacy", False)
++    if old is not None and (legacy or endpoint["version"] <= old["v3_version"]):
+         log.write("endpoint.stale", endpoint=endpoint["id"], version=endpoint["version"])
+         return
+     was_enabled = bool(old["enabled"]) if old is not None else None
+@@ -111,11 +112,11 @@
+     if not endpoint["enabled"] and was_enabled is not False:
+         disabled_at = now
+     db.execute(
+-        "insert into endpoints (id, merchant_id, url, secret, event_types, enabled, version, disabled_at) "
+-        "values (?, ?, ?, ?, ?, ?, ?, ?) "
++        "insert into endpoints (id, merchant_id, url, secret, event_types, enabled, version, disabled_at, v3_version) "
++        "values (?, ?, ?, ?, ?, ?, ?, ?, ?) "
+         "on conflict (id) do update set url = excluded.url, secret = excluded.secret, "
+         "event_types = excluded.event_types, enabled = excluded.enabled, version = excluded.version, "
+-        "disabled_at = excluded.disabled_at",
++        "disabled_at = excluded.disabled_at, v3_version = excluded.v3_version",
+         (
+             endpoint["id"],
+             endpoint["merchant_id"],
+@@ -125,6 +126,7 @@
+             int(endpoint["enabled"]),
+             endpoint["version"],
+             None if endpoint["enabled"] else disabled_at,
++            0 if legacy else endpoint["version"],
+         ),
+     )
+     log.write(
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/store.py week6/app/services/router/store.py
+--- clean-app/services/router/store.py	2026-11-26 10:01:16.144267697 +0000
++++ week6/app/services/router/store.py	2026-11-26 15:08:57.388456240 +0000
+@@ -77,6 +77,11 @@
+     db.execute("pragma journal_mode = wal")
+     db.execute("pragma synchronous = normal")
+     db.executescript(SCHEMA)
++    columns = [r[1] for r in db.execute("pragma table_info(endpoints)")]
++    if "v3_version" not in columns:
++        # Highest version-3 (api) version applied. Stored `version` of rows written by earlier
++        # releases may carry a version-2 sequence number, so it is not trusted: start at 0.
++        db.execute("alter table endpoints add column v3_version integer not null default 0")
+     db.commit()
+     return db
+ 
