@@ -1,0 +1,307 @@
+diff -ruN -x .build -x state -x __pycache__ clean-app/CHANGELOG.md week6/app/CHANGELOG.md
+--- clean-app/CHANGELOG.md	2026-11-26 10:01:16.135190632 +0000
++++ week6/app/CHANGELOG.md	2026-11-26 15:50:34.782129072 +0000
+@@ -2,6 +2,12 @@
+ 
+ Dates are the day a release finished rolling out to production.
+ 
++## Unreleased (INC-2231)
++
++- router: an endpoint's version is compared only with versions the api assigned (version 3 messages). A version 2 `endpoint` message carries a sequence number, not an api version; it orders only against other version 2 messages, only for endpoints the api has not spoken for, and never overrides the api. Previously such a message raised the stored version (to its `seq`), so every later change from the api was dropped as stale, and a late one could undo a change the api had accepted.
++- router: the `endpoints` table gains `api_version`. Existing rows get 0, so the next version 3 message for an endpoint always applies.
++- api: on its first start after this release the api publishes every endpoint's current configuration once (`meta` key `resync:INC-2231`), so changes the router dropped take effect without merchants repeating them. Touches api and router, hence this note.
++
+ ## 2.3.1 (2026-08-14)
+ 
+ - router: workaround for INC-2188 behind a flag, `SWITCHYARD_INC2188_WORKAROUND`, on unless set to `off`.
+diff -ruN -x .build -x state -x __pycache__ clean-app/scenarios/04_endpoint_changes.json week6/app/scenarios/04_endpoint_changes.json
+--- clean-app/scenarios/04_endpoint_changes.json	1970-01-01 00:00:00.000000000 +0000
++++ week6/app/scenarios/04_endpoint_changes.json	2026-11-26 15:48:40.375522158 +0000
+@@ -0,0 +1,18 @@
++{
++  "name": "an endpoint change takes effect and archived messages do not undo it",
++  "steps": [
++    {"at": 0, "do": "endpoint.create", "id": "ep_shop", "merchant": "m_acme"},
++    {"at": 0, "do": "endpoint.create", "id": "ep_ledger", "merchant": "m_acme"},
++    {"at": 1, "do": "bus", "message": {"v": 2, "seq": 4117, "kind": "endpoint", "endpoint": {"id": "ep_shop", "merchant": "m_acme", "url": "{receiver}/hooks/archive", "secret": "whsec_dGVzdA==", "types": ["*"], "active": true}}},
++    {"at": 2, "do": "endpoint.update", "id": "ep_shop", "path": "/hooks/new", "secret": "whsec_bmV3c2VjcmV0"},
++    {"at": 2, "do": "endpoint.update", "id": "ep_ledger", "enabled": false},
++    {"at": 3, "do": "drain"},
++    {"at": 10, "do": "bus", "message": {"v": 2, "seq": 9000, "kind": "endpoint", "endpoint": {"id": "ep_ledger", "merchant": "m_acme", "url": "{receiver}/hooks/ep_ledger", "secret": "whsec_dGVzdA==", "types": ["*"], "active": true}}},
++    {"at": 11, "do": "event", "ref": "e1", "merchant": "m_acme", "type": "payment.captured", "amount_minor": 1250, "currency": "USD"},
++    {"at": 12, "do": "drain"}
++  ],
++  "expect": [
++    {"delivery": {"event": "e1", "endpoint": "ep_shop"}, "state": "delivered", "receipts": 1, "path": ["/hooks/new"], "secrets": ["whsec_bmV3c2VjcmV0"]},
++    {"delivery": {"event": "e1", "endpoint": "ep_ledger"}, "count": 0}
++  ]
++}
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/api/src/main.ts week6/app/services/api/src/main.ts
+--- clean-app/services/api/src/main.ts	2026-11-26 10:01:16.143626922 +0000
++++ week6/app/services/api/src/main.ts	2026-11-26 15:48:25.324258078 +0000
+@@ -339,6 +339,10 @@
+   });
+ });
+ 
++const resynced = store.transaction(() =>
++  store.resyncEndpoints("resync:INC-2231", now()),
++);
++
+ server.listen(portBase + 1, "127.0.0.1", () =>
+-  log("api.started", { release: RELEASE }),
++  log("api.started", { release: RELEASE, endpoints_resynced: resynced }),
+ );
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/api/src/store.ts week6/app/services/api/src/store.ts
+--- clean-app/services/api/src/store.ts	2026-11-26 10:01:16.143626922 +0000
++++ week6/app/services/api/src/store.ts	2026-11-26 15:48:29.229147430 +0000
+@@ -153,6 +153,29 @@
+     this.enqueue("endpoint.changed", now, { endpoint });
+   }
+ 
++  endpoints(): Endpoint[] {
++    const rows = this.db
++      .prepare("select id from endpoints order by id")
++      .all() as unknown as { id: string }[];
++    return rows.map((row) => this.endpoint(row.id) as Endpoint);
++  }
++
++  // Publish every endpoint's current configuration again, once per release
++  // (`marker`). Earlier releases had routers that dropped endpoint changes
++  // (INC-2231); a router row written by those releases is replaced by the next
++  // message from the api for that endpoint.
++  // Call inside a transaction. Returns the number of endpoints published.
++  resyncEndpoints(marker: string, now: number): number {
++    const done = this.db
++      .prepare("select 1 from meta where key = ?")
++      .get(marker);
++    if (done) return 0;
++    this.db.prepare("insert into meta (key, value) values (?, 1)").run(marker);
++    const all = this.endpoints();
++    for (const endpoint of all) this.enqueue("endpoint.changed", now, { endpoint });
++    return all.length;
++  }
++
+   event(id: string): EventRecord | undefined {
+     const row = this.db.prepare("select * from events where id = ?").get(id) as
+       | Record<string, unknown>
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/api/test/store.test.ts week6/app/services/api/test/store.test.ts
+--- clean-app/services/api/test/store.test.ts	2026-11-26 10:01:16.143777295 +0000
++++ week6/app/services/api/test/store.test.ts	2026-11-26 15:48:49.278558456 +0000
+@@ -174,3 +174,21 @@
+   assert.equal(store.pending()[0].seq, pending[151].seq);
+   assert.equal(store.summary().outbox_rejected, 1);
+ });
++
++test("every endpoint is published again once, at its current version", () => {
++  const store = freshStore();
++  store.transaction(() => store.saveEndpoint(endpoint("ep_a", 1), 1793577600));
++  store.transaction(() => store.saveEndpoint(endpoint("ep_a", 2), 1793577700));
++  store.transaction(() => store.saveEndpoint(endpoint("ep_b", 1), 1793577800));
++  const before = store.pending().length;
++  assert.equal(store.transaction(() => store.resyncEndpoints("m", 1793578000)), 2);
++  assert.equal(store.transaction(() => store.resyncEndpoints("m", 1793578100)), 0);
++  const added = store.pending().slice(before);
++  assert.deepEqual(
++    added.map((row) => {
++      const sent = JSON.parse(row.data).endpoint;
++      return [sent.id, sent.version];
++    }),
++    [["ep_a", 2], ["ep_b", 1]],
++  );
++});
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/bus.py week6/app/services/router/bus.py
+--- clean-app/services/router/bus.py	2026-11-26 10:01:16.144267697 +0000
++++ week6/app/services/router/bus.py	2026-11-26 15:48:14.337865956 +0000
+@@ -62,7 +62,7 @@
+     }
+ 
+ 
+-def endpoint_body(endpoint_id, merchant, url, secret, types, enabled, version):
++def endpoint_body(endpoint_id, merchant, url, secret, types, enabled, version, source="api"):
+     if not isinstance(types, list) or not all(isinstance(t, str) for t in types):
+         raise Malformed("event types must be a list of strings")
+     for type_ in types:
+@@ -76,6 +76,9 @@
+         "event_types": types,
+         "enabled": bool(enabled),
+         "version": version,
++        # "api": version is the api's own endpoint version. "v2": version is a version-2
++        # sequence number, which says nothing about the api's numbering.
++        "source": source,
+     }
+ 
+ 
+@@ -133,7 +136,8 @@
+         return "api.v2", str(seq), "event", body
+     if kind == "endpoint":
+         ep = need(msg, "endpoint", dict)
+-        # Version 2 had no endpoint versions. The sequence number orders them.
++        # Version 2 had no endpoint versions. The sequence number orders version 2 messages
++        # among themselves only; it is not comparable with an api version.
+         body = endpoint_body(
+             need(ep, "id", str),
+             need(ep, "merchant", str),
+@@ -142,6 +146,7 @@
+             need(ep, "types", list),
+             need(ep, "active", bool),
+             seq,
++            source="v2",
+         )
+         return "api.v2", str(seq), "endpoint", body
+     raise Malformed("unknown kind")
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/routing.py week6/app/services/router/routing.py
+--- clean-app/services/router/routing.py	2026-11-26 10:01:16.144267697 +0000
++++ week6/app/services/router/routing.py	2026-11-26 15:48:25.330549321 +0000
+@@ -101,21 +101,40 @@
+         create_delivery(db, log, now, event["id"], endpoint["id"])
+ 
+ 
++def is_stale(old, endpoint):
++    """Whether a message about an endpoint is older than what the router already has.
++
++    The api numbers its own endpoint changes (version 3 messages). That numbering is
++    authoritative: once the api has spoken for an endpoint, archived version 2 messages,
++    whose sequence numbers are a different numbering, cannot change it. Version 2 messages
++    order among themselves, and only for endpoints the api has not spoken for.
++    """
++    if old is None:
++        return False
++    api_version = old["api_version"]
++    if endpoint.get("source", "api") == "v2":
++        if api_version > 0:
++            return True
++        return endpoint["version"] <= old["version"]
++    return endpoint["version"] <= api_version
++
++
+ def apply_endpoint(db, log, now, endpoint):
+     old = db.execute("select * from endpoints where id = ?", (endpoint["id"],)).fetchone()
+-    if old is not None and endpoint["version"] <= old["version"]:
++    if is_stale(old, endpoint):
+         log.write("endpoint.stale", endpoint=endpoint["id"], version=endpoint["version"])
+         return
++    api_version = 0 if endpoint.get("source", "api") == "v2" else endpoint["version"]
+     was_enabled = bool(old["enabled"]) if old is not None else None
+     disabled_at = old["disabled_at"] if old is not None else None
+     if not endpoint["enabled"] and was_enabled is not False:
+         disabled_at = now
+     db.execute(
+-        "insert into endpoints (id, merchant_id, url, secret, event_types, enabled, version, disabled_at) "
+-        "values (?, ?, ?, ?, ?, ?, ?, ?) "
++        "insert into endpoints (id, merchant_id, url, secret, event_types, enabled, version, disabled_at, "
++        "api_version) values (?, ?, ?, ?, ?, ?, ?, ?, ?) "
+         "on conflict (id) do update set url = excluded.url, secret = excluded.secret, "
+         "event_types = excluded.event_types, enabled = excluded.enabled, version = excluded.version, "
+-        "disabled_at = excluded.disabled_at",
++        "disabled_at = excluded.disabled_at, api_version = excluded.api_version",
+         (
+             endpoint["id"],
+             endpoint["merchant_id"],
+@@ -125,6 +144,7 @@
+             int(endpoint["enabled"]),
+             endpoint["version"],
+             None if endpoint["enabled"] else disabled_at,
++            api_version,
+         ),
+     )
+     log.write(
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/store.py week6/app/services/router/store.py
+--- clean-app/services/router/store.py	2026-11-26 10:01:16.144267697 +0000
++++ week6/app/services/router/store.py	2026-11-26 15:48:25.330130892 +0000
+@@ -23,7 +23,8 @@
+     event_types text not null,
+     enabled integer not null,
+     version integer not null,
+-    disabled_at integer
++    disabled_at integer,
++    api_version integer not null default 0
+ );
+ create table if not exists events (
+     id text primary key,
+@@ -77,10 +78,26 @@
+     db.execute("pragma journal_mode = wal")
+     db.execute("pragma synchronous = normal")
+     db.executescript(SCHEMA)
++    migrate(db)
+     db.commit()
+     return db
+ 
+ 
++def migrate(db):
++    """Bring a database written by an older release up to date.
++
++    api_version is the endpoint version assigned by the api (version 3 messages); 0 means
++    the api has not said anything about the endpoint. Earlier releases compared the
++    version-2 sequence numbers carried by archived messages with api versions, so the
++    version stored for an endpoint touched by the archive cannot be trusted. Rows from
++    those releases get api_version 0 and are overwritten by the next version 3 message
++    for the endpoint (the api republishes every endpoint on its first start after the fix).
++    """
++    columns = {row[1] for row in db.execute("pragma table_info(endpoints)")}
++    if "api_version" not in columns:
++        db.execute("alter table endpoints add column api_version integer not null default 0")
++
++
+ def next_id(db, prefix):
+     """Allocate an opaque id. The counter is part of the caller's transaction."""
+     db.execute(
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/tests/test_routing.py week6/app/services/router/tests/test_routing.py
+--- clean-app/services/router/tests/test_routing.py	2026-11-26 10:01:16.144527648 +0000
++++ week6/app/services/router/tests/test_routing.py	2026-11-26 15:48:40.372472162 +0000
+@@ -1,5 +1,8 @@
+ import unittest
+ 
++import routing
++import store
++
+ from helpers import Harness
+ 
+ 
+@@ -38,6 +41,47 @@
+         row = self.r.db.execute("select url, version from endpoints where id = 'ep_a'").fetchone()
+         self.assertEqual((row["url"], row["version"]), ("http://127.0.0.1:9/new", 3))
+ 
++    def archived(self, id_, seq, url, enabled=True):
++        # What a version 2 endpoint message becomes (bus.parse_v2).
++        routing.apply(self.r.db, self.r.log, self.r.now(), "endpoint", {
++            "id": id_, "merchant_id": "m_acme", "url": url, "secret": "whsec_dGVzdA==",
++            "event_types": ["*"], "enabled": enabled, "version": seq, "source": "v2",
++        })  # fmt: skip
++        self.r.db.commit()
++
++    def row(self, id_):
++        return self.r.db.execute("select url, enabled, version from endpoints where id = ?", (id_,)).fetchone()
++
++    def test_an_archived_sequence_number_does_not_block_the_apis_changes(self):
++        self.r.endpoint("ep_a", version=1, url="http://127.0.0.1:9/one")
++        self.archived("ep_a", 4117, "http://127.0.0.1:9/archive")
++        self.r.endpoint("ep_a", version=2, url="http://127.0.0.1:9/two", enabled=False)
++        row = self.row("ep_a")
++        self.assertEqual((row["url"], row["enabled"], row["version"]), ("http://127.0.0.1:9/two", 0, 2))
++
++    def test_an_archived_message_does_not_undo_the_apis_changes(self):
++        self.r.endpoint("ep_a", version=2, enabled=False)
++        self.archived("ep_a", 5302, "http://127.0.0.1:9/archive", enabled=True)
++        self.assertEqual(self.row("ep_a")["enabled"], 0)
++
++    def test_archived_messages_order_among_themselves(self):
++        self.archived("ep_old", 10, "http://127.0.0.1:9/ten")
++        self.archived("ep_old", 12, "http://127.0.0.1:9/twelve")
++        self.archived("ep_old", 11, "http://127.0.0.1:9/eleven")
++        self.assertEqual(self.row("ep_old")["url"], "http://127.0.0.1:9/twelve")
++
++    def test_the_api_takes_over_an_endpoint_that_only_the_archive_knew(self):
++        self.archived("ep_old", 4117, "http://127.0.0.1:9/archive")
++        self.r.endpoint("ep_old", version=1, url="http://127.0.0.1:9/api")
++        self.assertEqual(self.row("ep_old")["url"], "http://127.0.0.1:9/api")
++
++    def test_rows_from_an_older_release_accept_the_apis_next_message(self):
++        self.r.endpoint("ep_a", version=4117, url="http://127.0.0.1:9/poisoned")
++        self.r.db.execute("update endpoints set api_version = 0")
++        store.migrate(self.r.db)
++        self.r.endpoint("ep_a", version=2, url="http://127.0.0.1:9/two")
++        self.assertEqual(self.row("ep_a")["url"], "http://127.0.0.1:9/two")
++
+     def test_many_events_each_get_their_own_delivery(self):
+         self.r.endpoint("ep_a")
+         for n in range(150):

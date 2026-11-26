@@ -1,0 +1,9 @@
+- [x] Endpoint change via API takes effect (router applies api versions) — work/scenarios/stale.json
+- [x] Stays in effect after older messages (v2 replay with larger seq) — stale.json, seq 4118 after upgrade
+- [x] Already-made changes take effect after release, no re-making — api resyncs endpoints once on start; stale.json upgrade step
+- [x] v1/v2 bus messages keep working, incl. archive-only endpoints — v2 endpoint applied when no row; kit/check.sh
+- [x] Same release for every region: repair uses only service stores — api/router stores
+- [x] out/impact.json — work/report.py
+- [x] New traffic holds — stale.json
+- [x] Shipped state dealt with: router endpoints.version holding v2 seq; resync + api_version column (idempotent)
+- [x] Older bus messages still work — check.sh

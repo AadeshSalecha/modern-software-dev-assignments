@@ -1,0 +1,106 @@
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/api/src/store.ts week6/app/services/api/src/store.ts
+--- clean-app/services/api/src/store.ts	2026-11-26 10:01:16.143626922 +0000
++++ week6/app/services/api/src/store.ts	2026-11-26 15:38:02.437564825 +0000
+@@ -77,6 +77,31 @@
+     this.db.exec("pragma journal_mode = wal");
+     this.db.exec("pragma synchronous = normal");
+     this.db.exec(SCHEMA);
++    this.resyncEndpoints();
++  }
++
++  // INC-2231: the router dropped endpoint changes as stale. Publish each endpoint's
++  // current state once; the marker and the messages commit together.
++  resyncEndpoints(): void {
++    this.transaction(() => {
++      const done = this.db
++        .prepare("select 1 from meta where key = 'resync_2231'")
++        .get();
++      if (done) return;
++      const rows = this.db
++        .prepare("select id from endpoints order by id")
++        .all() as unknown as { id: string }[];
++      for (const row of rows) {
++        const endpoint = this.endpoint(row.id);
++        if (endpoint)
++          this.enqueue("endpoint.changed", Math.floor(Date.now() / 1000), {
++            endpoint,
++          });
++      }
++      this.db
++        .prepare("insert into meta (key, value) values ('resync_2231', 1)")
++        .run();
++    });
+   }
+ 
+   transaction<T>(work: () => T): T {
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/bus.py week6/app/services/router/bus.py
+--- clean-app/services/router/bus.py	2026-11-26 10:01:16.144267697 +0000
++++ week6/app/services/router/bus.py	2026-11-26 15:38:02.438190797 +0000
+@@ -143,6 +143,7 @@
+             need(ep, "active", bool),
+             seq,
+         )
++        body["source"] = "v2"
+         return "api.v2", str(seq), "endpoint", body
+     raise Malformed("unknown kind")
+ 
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/routing.py week6/app/services/router/routing.py
+--- clean-app/services/router/routing.py	2026-11-26 10:01:16.144267697 +0000
++++ week6/app/services/router/routing.py	2026-11-26 15:38:09.359568076 +0000
+@@ -103,19 +103,28 @@
+ 
+ def apply_endpoint(db, log, now, endpoint):
+     old = db.execute("select * from endpoints where id = ?", (endpoint["id"],)).fetchone()
+-    if old is not None and endpoint["version"] <= old["version"]:
+-        log.write("endpoint.stale", endpoint=endpoint["id"], version=endpoint["version"])
+-        return
++    v2 = endpoint.get("source") == "v2"
++    if old is not None:
++        # v2 numbers (sequence) and api versions are separate: a v2 message never
++        # overrides what the api has said, and v3 compares only with api versions.
++        if v2:
++            stale = old["api_version"] > 0 or endpoint["version"] <= old["version"]
++        else:
++            stale = endpoint["version"] <= old["api_version"]
++        if stale:
++            log.write("endpoint.stale", endpoint=endpoint["id"], version=endpoint["version"])
++            return
+     was_enabled = bool(old["enabled"]) if old is not None else None
+     disabled_at = old["disabled_at"] if old is not None else None
+     if not endpoint["enabled"] and was_enabled is not False:
+         disabled_at = now
+     db.execute(
+-        "insert into endpoints (id, merchant_id, url, secret, event_types, enabled, version, disabled_at) "
+-        "values (?, ?, ?, ?, ?, ?, ?, ?) "
++        "insert into endpoints (id, merchant_id, url, secret, event_types, enabled, version, disabled_at, api_version) "
++        "values (?, ?, ?, ?, ?, ?, ?, ?, ?) "
+         "on conflict (id) do update set url = excluded.url, secret = excluded.secret, "
+         "event_types = excluded.event_types, enabled = excluded.enabled, version = excluded.version, "
+-        "disabled_at = excluded.disabled_at",
++        "disabled_at = excluded.disabled_at, "
++        "api_version = excluded.api_version",
+         (
+             endpoint["id"],
+             endpoint["merchant_id"],
+@@ -125,6 +134,7 @@
+             int(endpoint["enabled"]),
+             endpoint["version"],
+             None if endpoint["enabled"] else disabled_at,
++            0 if v2 else endpoint["version"],
+         ),
+     )
+     log.write(
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/store.py week6/app/services/router/store.py
+--- clean-app/services/router/store.py	2026-11-26 10:01:16.144267697 +0000
++++ week6/app/services/router/store.py	2026-11-26 15:38:02.437929838 +0000
+@@ -77,6 +77,10 @@
+     db.execute("pragma journal_mode = wal")
+     db.execute("pragma synchronous = normal")
+     db.executescript(SCHEMA)
++    columns = [row[1] for row in db.execute("pragma table_info(endpoints)")]
++    if "api_version" not in columns:
++        # 0 = no api (v3) version known yet; `version` may hold a v2 sequence number.
++        db.execute("alter table endpoints add column api_version integer not null default 0")
+     db.commit()
+     return db
+ 

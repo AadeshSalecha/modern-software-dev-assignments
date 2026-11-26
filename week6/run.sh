@@ -124,6 +124,8 @@ agent() { # agent <harness:model:effort> <start|resume> <seconds> <stage> <promp
         --permission-mode bypassPermissions
         --output-format stream-json --verbose
       )
+      local began status
+      began=$(date +%s)
       if [ "$mode" = "resume" ] && [ -s "work/.session.$stage" ]; then
         KIT_STAGE="$stage" limited "$seconds" claude -p "$prompt" --resume "$(cat "work/.session.$stage")" \
           --max-turns 30 "${flags[@]}"
@@ -132,12 +134,33 @@ agent() { # agent <harness:model:effort> <start|resume> <seconds> <stage> <promp
         KIT_STAGE="$stage" limited "$seconds" claude -p "$prompt" --session-id "$(cat "work/.session.$stage")" \
           --max-turns "${KIT_MAX_TURNS:-90}" "${flags[@]}"
       fi
+      status=$?
+      if [ "$status" -ne 0 ] && [ $(($(date +%s) - began)) -lt 20 ]; then
+        # It stopped at once: most likely a flag this version of the harness does not know.
+        # Run the invocation the assignment guarantees.
+        echo "run.sh: claude exited $status within 20 s; running it again with the basic flags"
+        rm -f "work/.session.$stage"
+        KIT_STAGE="$stage" limited $((seconds - 20)) claude -p "$prompt" --model "$model" \
+          --permission-mode bypassPermissions --output-format stream-json --verbose
+        status=$?
+      fi
+      return $status
       ;;
     codex)
       # Codex reads the root AGENTS.md by itself. It has no stop hook here; the gate below
       # and the second session stand in for it.
+      local began status
+      began=$(date +%s)
       KIT_STAGE="$stage" limited "$seconds" codex exec -m "$model" -c "model_reasoning_effort=\"$effort\"" \
         --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check --json "$prompt"
+      status=$?
+      if [ "$status" -ne 0 ] && [ $(($(date +%s) - began)) -lt 20 ]; then
+        echo "run.sh: codex exited $status within 20 s; running it again with the basic flags"
+        KIT_STAGE="$stage" limited $((seconds - 20)) codex exec -m "$model" \
+          --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check "$prompt"
+        status=$?
+      fi
+      return $status
       ;;
     *)
       echo "run.sh: unknown harness in '$spec'" >&2

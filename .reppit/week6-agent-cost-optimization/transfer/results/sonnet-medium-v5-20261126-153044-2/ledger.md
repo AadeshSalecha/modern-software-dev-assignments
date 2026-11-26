@@ -1,0 +1,8 @@
+- [x] API endpoint change takes effect (disable, secret, url) after archive v2 versions: archive_version.json (old fails)
+- [x] Stays in effect when older/archive v2 messages arrive afterwards: archive_version.json b2
+- [x] Previously-ineffective changes take effect after release (upgrade resyncs api endpoints once): archive_version.json upgrade + restart
+- [x] v1 and v2 messages keep working, including archive-only endpoints: archive_version.json ep_old, b3
+- [x] Report out/impact.json via work/report.py (switch-off = latest on->off change; 2xx; event accepted after; skipped_rows)
+- [x] Standing: new traffic holds: archive_version.json e1
+- [x] Standing: shipped state carrying defect = router endpoint rows with archive-number versions and dropped changes; api resends each endpoint's current state once (meta flag)
+- [x] Standing: older bus messages still work: v1/v2 via kit/check.sh

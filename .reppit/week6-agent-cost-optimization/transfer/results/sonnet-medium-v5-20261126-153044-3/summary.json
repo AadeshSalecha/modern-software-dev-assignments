@@ -1,0 +1,63 @@
+{
+  "passed": true,
+  "score": {
+    "passed": true,
+    "repair": 1.0,
+    "impact": {
+      "impact": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "figures_right": 7,
+      "figures": 7,
+      "problem": null,
+      "reported": {
+        "endpoints": [
+          "ep_orchid_1",
+          "ep_quince_1",
+          "ep_violet_1"
+        ],
+        "entries": 86,
+        "skipped_rows": 88
+      }
+    },
+    "categories": {
+      "incident": {
+        "passed": 9,
+        "total": 9,
+        "failed": []
+      },
+      "regressions": {
+        "passed": 9,
+        "total": 9,
+        "failed": []
+      },
+      "compat": {
+        "passed": 4,
+        "total": 4,
+        "failed": []
+      }
+    },
+    "build_problem": null
+  },
+  "exit_code": 0,
+  "timed_out": false,
+  "seconds": 146.4,
+  "error": null,
+  "cost_usd": 0.29950479999999996,
+  "requests": 19,
+  "rejected": [
+    "endpoint_not_available"
+  ],
+  "upstream_errors": 0,
+  "by_model": {
+    "claude-sonnet-5-5": {
+      "requests": 19,
+      "cost_usd": 0.29950479999999996,
+      "input": 38,
+      "output": 13830,
+      "cache_read": 593088,
+      "cache_write": 40728,
+      "cache_write_1h": 0
+    }
+  }
+}
