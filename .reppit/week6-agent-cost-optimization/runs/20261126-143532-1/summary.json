@@ -1,0 +1,50 @@
+{
+  "passed": false,
+  "score": {
+    "categories": {
+      "incident": {
+        "passed": 9,
+        "total": 9,
+        "failed": []
+      },
+      "regressions": {
+        "passed": 10,
+        "total": 10,
+        "failed": []
+      },
+      "compat": {
+        "passed": 2,
+        "total": 2,
+        "failed": []
+      }
+    },
+    "repair": 1.0,
+    "impact": 0.5698,
+    "precision": 0.283,
+    "recall": 0.283,
+    "totals_right": 6,
+    "totals": 6,
+    "seconds": 5.2
+  },
+  "exit_code": 0,
+  "timed_out": false,
+  "seconds": 111.3,
+  "error": null,
+  "cost_usd": 0.25814360000000003,
+  "requests": 14,
+  "rejected": [
+    "endpoint_not_available"
+  ],
+  "upstream_errors": 0,
+  "by_model": {
+    "claude-sonnet-5-5": {
+      "requests": 14,
+      "cost_usd": 0.25814360000000003,
+      "input": 28,
+      "output": 10183,
+      "cache_read": 427251,
+      "cache_write": 45413,
+      "cache_write_1h": 0
+    }
+  }
+}

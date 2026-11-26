@@ -24,7 +24,8 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[2]
 WEEK = REPO / "week6"
 INCIDENT = HERE / "inc-2231"
-sys.path.insert(0, str(WEEK / "tools"))
+TOOLS_WEEK = WEEK  # tools and rate card always come from this repository
+sys.path.insert(0, str(TOOLS_WEEK / "tools"))
 import costs  # noqa: E402
 import harness  # noqa: E402
 import runner  # noqa: E402
@@ -50,7 +51,7 @@ def one_run(index, args, stamp):
         shutil.copytree(INCIDENT / "incident", workspace / "incident")
         shutil.copy(INCIDENT / "task.md", workspace / "task.md")
         clean = temp / "clean-app"
-        shutil.copytree(WEEK / "app", clean, ignore=SKIP)
+        shutil.copytree(TOOLS_WEEK / "app", clean, ignore=SKIP)
         home = temp / "home"
         gateway_url = f"http://127.0.0.1:{args.port}"
 
@@ -64,7 +65,7 @@ def one_run(index, args, stamp):
         codex_login = CODEX_LOGIN if not give_keys["openai"] and CODEX_LOGIN.is_file() else None
         harness.write_codex_config(home, gateway_url, login=codex_login)
 
-        gateway = runner.start_gateway(args.port, WEEK / "rate_card.json", usage_log, max_cost=2.0,
+        gateway = runner.start_gateway(args.port, TOOLS_WEEK / "rate_card.json", usage_log, max_cost=2.0,
                                        allow_login=codex_login is not None)  # fmt: skip
         print(f"run {index}: running ./run.sh task.md on INC-2231 ...", flush=True)
         try:
@@ -107,7 +108,11 @@ def main():
     parser.add_argument("--label", default="default")
     parser.add_argument("--port", type=int, default=8797)
     parser.add_argument("--timeout", type=float, default=600)
+    parser.add_argument("--week", help="another week6 folder to run (for example a checkout of the baseline)")
     args = parser.parse_args()
+    if args.week:
+        global WEEK
+        WEEK = Path(args.week).resolve()
     stamp = time.strftime("%Y%m%d-%H%M%S")
     records = [one_run(index, args, stamp) for index in range(1, args.runs + 1)]
     print(f"{sum(r['passed'] for r in records)} of {len(records)} passed; "

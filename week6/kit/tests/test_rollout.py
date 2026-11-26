@@ -68,6 +68,16 @@ class ShapeTest(unittest.TestCase):
         self.assertEqual(changed["steps"][2], {"do": "upgrade", "at": 1})
         self.assertEqual(len(SCENARIO["steps"]), 5)
 
+    def test_handed_over_puts_the_replacement_before_the_last_drain(self):
+        scenario = {"steps": [{"at": 0, "do": "event"}, {"at": 1, "do": "drain"}, {"at": 2, "do": "upgrade"},
+                              {"at": 3, "do": "event"}, {"at": 4, "do": "drain"}, {"at": 5, "do": "tick", "service": "api"}]}
+        changed = rollout.handed_over(scenario)
+        self.assertEqual([step["do"] for step in changed["steps"]], ["event", "drain", "event", "upgrade", "drain", "tick"])
+        self.assertEqual(changed["steps"][3], {"do": "upgrade", "at": 4})
+        self.assertEqual(len(scenario["steps"]), 6)
+        self.assertIsNone(rollout.handed_over({"steps": [{"do": "event"}]}))
+        self.assertIsNone(rollout.handed_over({"steps": [{"do": "drain"}, {"do": "event"}]}))
+
     def test_endpoint_paths(self):
         self.assertEqual(rollout.endpoint_paths(SCENARIO), {"ep_a": {"/hooks/ep_a"}, "ep_b": {"/in/b"}})
 

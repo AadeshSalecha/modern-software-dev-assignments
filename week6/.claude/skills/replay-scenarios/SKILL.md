@@ -80,6 +80,7 @@ Expectations:
    second time: follow the `upgrade` with a `restart`.
 4. **Cover the near misses**: inputs next to the defect's trigger that must keep working
    exactly as before. Take them from the contract clauses your change touches.
-5. Put them in `work/scenarios/`. `kit/check.sh` runs them on both releases and runs the
-   shipped scenarios with the release replaced after each step, which catches a store your
-   change can no longer open.
+5. Put them in `work/scenarios/`. `kit/check.sh` runs them on both releases, runs each once
+   more with the shipped release taking every step up to the last drain and your change only
+   finishing, and runs the shipped scenarios with the release replaced after each step,
+   which catches a store your change can no longer open.

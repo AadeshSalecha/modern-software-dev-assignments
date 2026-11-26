@@ -18,7 +18,9 @@ Work in this order, in as few steps as you can. Send independent commands togeth
    fails on the shipped release.
 3. **Repair** in `app/services`, as small a change as covers every ledger line. Prove each
    behaviour with a scenario in `work/scenarios/`, one of them replacing the release
-   part-way.
+   part-way. `kit/check.sh` passing shows only what the shipped scenarios cover: every case
+   the ticket names, each "including …" on its own, needs a scenario that exercises exactly
+   that case. A requirement you could not meet is a failed job, not a note for the summary.
 4. **Check.** Run `kit/check.sh --only repair`. Fix what it reports, tick each ledger line
    you have actually verified, and stop. It runs again when you stop and sends you back if
    it fails.

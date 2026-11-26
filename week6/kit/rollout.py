@@ -39,6 +39,7 @@ import concurrent.futures
 import copy
 import json
 import os
+import random
 import shutil
 import signal
 import socket
@@ -84,7 +85,11 @@ def stop_everything(signum=None, frame=None):
 
 
 def free_port_base(start, taken):
-    for base in range(start, start + 2000, 10):
+    # Tried in random order: two runners started at the same moment (another command of the same
+    # agent, a judge) would otherwise both probe the first base and collide.
+    bases = list(range(start, start + 2000, 10))
+    random.shuffle(bases)
+    for base in bases:
         if base in taken:
             continue
         try:
@@ -343,6 +348,23 @@ def with_upgrade(scenario, after):
     if at is not None:
         step["at"] = at
     steps.insert(after, step)
+    return changed
+
+
+def handed_over(scenario):
+    """A copy in which the shipped release takes every step up to the last drain and the working
+    tree only finishes: what a region looks like when the change is rolled out over work the
+    shipped release has accepted but not completed. None if the scenario has no such point."""
+    steps = [copy.deepcopy(step) for step in scenario["steps"] if step.get("do") != "upgrade"]
+    drains = [index for index, step in enumerate(steps) if step.get("do") == "drain"]
+    if not drains or drains[-1] == 0:
+        return None
+    last = drains[-1]
+    step = {"do": "upgrade"}
+    if "at" in steps[last]:
+        step["at"] = steps[last]["at"]
+    changed = copy.deepcopy(scenario)
+    changed["steps"] = steps[:last] + [step] + steps[last:]
     return changed
 
 

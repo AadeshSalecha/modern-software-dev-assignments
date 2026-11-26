@@ -14,6 +14,8 @@ Checks, in order:
   scenarios   every scenario in work/scenarios/ passes on the working tree
   reproduce   those scenarios fail on the shipped release, and one of them replaces the release
               part-way (asked for at most 3 times, then only noted)
+  handover    each of those scenarios also passes when the shipped release takes every step up
+              to the last drain and the working tree only finishes (asked like `reproduce`)
   crash       each service has the same numbered crash points as the shipped release
   report      every out/ file the ticket names exists and has the keys and nesting of the
               ticket's example; a value of another kind than the example's (text for a number)
@@ -315,6 +317,9 @@ def scenario_checks(bins):
         specs.append(("scenarios", name, scenario, "new"))
         if have_old:
             specs.append(("reproduce", name, scenario, "old"))
+            late = rollout.handed_over(scenario)
+            if late is not None:
+                specs.append(("handover", name, late, "new"))
 
     # One run first: if the working tree does not start or stops answering, say so once
     # instead of waiting for every scenario to time out.
@@ -336,6 +341,15 @@ def scenario_checks(bins):
         if group == "reproduce":
             if not problems:
                 soft.append(f"{label} also passes on the shipped release, so it does not show the defect")
+            continue
+        if group == "handover":
+            if problems:
+                soft.append(
+                    f"{label} fails when the shipped release takes every step up to the last drain and your change "
+                    f"only finishes ({problems[0][:150]}). That is a region mid-flight at roll-out. Make your change "
+                    "deal with what the shipped release left; if the harm was already complete before that drain, "
+                    "say so in the ledger"
+                )
             continue
         if problems:
             hard.append(f"{label} fails: " + problems[0])

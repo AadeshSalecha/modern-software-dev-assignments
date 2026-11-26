@@ -20,6 +20,10 @@ Rebuilt by `make_results.py`.
 | A-v2-low | 2/3 | 1.00 | 0.91 | $0.185 | $0.17 to $0.20 | 12 | 91 s | 96 s |
 | haiku-low | 2/3 | 0.96 | 1.00 | $0.045 | $0.04 to $0.06 | 29 | 262 s | 306 s |
 | A-v2-emptyhome | 1/1 | 1.00 | 1.00 | $0.210 | $0.21 to $0.21 | 10 | 101 s | 101 s |
+| A-v3 | 4/5 | 1.00 | 0.91 | $0.213 | $0.19 to $0.26 | 12 | 98 s | 111 s |
+| A-v4 | 5/5 | 1.00 | 1.00 | $0.197 | $0.19 to $0.21 | 12 | 88 s | 91 s |
+| split-haiku-report | 3/3 | 1.00 | 1.00 | $0.196 | $0.19 to $0.20 | 23 | 94 s | 103 s |
+| haiku-main-sonnet-rescue | 3/3 | 1.00 | 1.00 | $0.093 | $0.05 to $0.15 | 38 | 375 s | 458 s |
 
 ## baseline
 
@@ -161,6 +165,53 @@ A-v2 with HOME pointed at an empty directory, as in the grader.
 | Run | Result | Repair | Impact | Cost | Requests | Time | Incident | Regr. | Compat | Output | Cache read | Cache write |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 20261126-141558-1 | PASS | 1.00 | 1.00 | $0.210 | 10 | 101 s | 9/9 | 10/10 | 2/2 | 8,075 | 262,449 | 41,274 |
+
+## A-v3
+
+After the independent review (commit 94f7d88): bounded run.sh, skippable contract checks, reworded skills.
+
+| Run | Result | Repair | Impact | Cost | Requests | Time | Incident | Regr. | Compat | Output | Cache read | Cache write |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 20261126-143532-1 | FAIL | 1.00 | 0.57 | $0.258 | 14 | 111 s | 9/9 | 10/10 | 2/2 | 10,183 | 427,251 | 45,413 |
+| 20261126-143532-2 | PASS | 1.00 | 1.00 | $0.188 | 10 | 88 s | 9/9 | 10/10 | 2/2 | 7,876 | 236,974 | 34,321 |
+| 20261126-143532-3 | PASS | 1.00 | 1.00 | $0.205 | 12 | 98 s | 9/9 | 10/10 | 2/2 | 8,581 | 328,209 | 34,674 |
+| 20261126-143532-4 | PASS | 1.00 | 1.00 | $0.223 | 13 | 102 s | 9/9 | 10/10 | 2/2 | 8,714 | 376,942 | 39,157 |
+| 20261126-143532-5 | PASS | 1.00 | 1.00 | $0.192 | 9 | 89 s | 9/9 | 10/10 | 2/2 | 7,994 | 220,967 | 35,856 |
+
+Failures:
+- 20261126-143532-1: impact figures 6/6 right, precision 0.283, recall 0.283
+
+## A-v4
+
+A-v3 plus the report rule on missing facts and no advertised check skipping (commit c39352d). The submitted default.
+
+| Run | Result | Repair | Impact | Cost | Requests | Time | Incident | Regr. | Compat | Output | Cache read | Cache write |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 20261126-145135-1 | PASS | 1.00 | 1.00 | $0.215 | 12 | 91 s | 9/9 | 10/10 | 2/2 | 8,539 | 299,030 | 39,698 |
+| 20261126-145135-2 | PASS | 1.00 | 1.00 | $0.195 | 11 | 87 s | 9/9 | 10/10 | 2/2 | 7,598 | 290,747 | 35,960 |
+| 20261126-145135-3 | PASS | 1.00 | 1.00 | $0.195 | 13 | 89 s | 9/9 | 10/10 | 2/2 | 7,680 | 335,857 | 33,924 |
+| 20261126-145135-4 | PASS | 1.00 | 1.00 | $0.188 | 11 | 83 s | 9/9 | 10/10 | 2/2 | 7,594 | 274,534 | 33,956 |
+| 20261126-145135-5 | PASS | 1.00 | 1.00 | $0.193 | 11 | 90 s | 9/9 | 10/10 | 2/2 | 7,625 | 271,143 | 35,700 |
+
+## split-haiku-report
+
+A-v4 with the report written by `claude-haiku-5-5` in parallel while Sonnet only repairs.
+
+| Run | Result | Repair | Impact | Cost | Requests | Time | Incident | Regr. | Compat | Output | Cache read | Cache write |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 20261126-145927-1 | PASS | 1.00 | 1.00 | $0.191 | 21 | 82 s | 9/9 | 10/10 | 2/2 | 17,836 | 428,140 | 63,224 |
+| 20261126-145927-2 | PASS | 1.00 | 1.00 | $0.196 | 24 | 96 s | 9/9 | 10/10 | 2/2 | 24,235 | 545,317 | 65,150 |
+| 20261126-145927-3 | PASS | 1.00 | 1.00 | $0.202 | 25 | 103 s | 9/9 | 10/10 | 2/2 | 26,372 | 632,542 | 75,198 |
+
+## haiku-main-sonnet-rescue
+
+A-v4 with `claude-haiku-5-5` as the main agent and Sonnet only if the gate fails.
+
+| Run | Result | Repair | Impact | Cost | Requests | Time | Incident | Regr. | Compat | Output | Cache read | Cache write |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 20261126-150427-1 | PASS | 1.00 | 1.00 | $0.147 | 46 | 458 s | 9/9 | 10/10 | 2/2 | 59,437 | 2,638,957 | 116,419 |
+| 20261126-150427-2 | PASS | 1.00 | 1.00 | $0.048 | 23 | 268 s | 9/9 | 10/10 | 2/2 | 47,583 | 1,252,135 | 91,524 |
+| 20261126-150427-3 | PASS | 1.00 | 1.00 | $0.085 | 44 | 398 s | 9/9 | 10/10 | 2/2 | 71,850 | 3,437,826 | 118,260 |
 
 ## Transfer incident (INC-2231, endpoint changes ignored)
 
