@@ -46,7 +46,9 @@ python3 kit/evidence.py schema
    trust the result.
 5. **Exactness.** Complete ids; one entry per the key the ticket names; every id the entry
    asks for; whole numbers as whole numbers; only keys with something to report where the
-   ticket says to leave out the rest.
+   ticket says to leave out the rest. For each figure, re-read the sentence that defines it
+   and add up over exactly the things it names: a report's entries, the distinct events
+   behind them and their deliveries are three different sets.
 6. **Look before you write.** Print the result's size and its breakdown by merchant or
    endpoint, and follow two or three rows by hand through the per-file tables.
 

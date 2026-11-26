@@ -25,6 +25,10 @@ HARD_STOP=565     # nothing new starts after this many seconds
 # buys nothing and costs 60% more per token written.
 export FORCE_PROMPT_CACHING_5M=1
 export DISABLE_AUTOUPDATER=1
+# The Go toolchain and the harness both need a home directory to keep their caches in.
+if [ -z "${HOME:-}" ]; then
+  mkdir -p "$PWD/work/home" && export HOME="$PWD/work/home"
+fi
 
 limited() { # limited <seconds> <command...>: stop the command when the time is up
   local seconds=$1
