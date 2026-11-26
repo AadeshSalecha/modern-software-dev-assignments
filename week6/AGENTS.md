@@ -37,8 +37,8 @@ Both have to be completely right; partly right counts for little.
 Each service directory has an `AGENTS.md` with a line-numbered map of its files, its crash
 points and its test command. Read it before you open the service, then read by line range.
 
-Not about the incident, do not open: `assignment.md`, `writeup.md`, `tools/`, `run.sh`,
-`rate_card.json`.
+Not about the incident, do not open: `assignment.md`, `writeup.md`, `tools/`, `runs/`,
+`run.sh`, `rate_card.json`.
 
 ## How the system runs in production
 
@@ -46,9 +46,11 @@ Not about the incident, do not open: `assignment.md`, `writeup.md`, `tools/`, `r
   region**. Each service keeps its store across the replacement (api: SQLite with events,
   endpoints and the outbox; router: SQLite with deliveries, leases and attempts; worker: a
   journal), and messages are in flight while it happens. A repair therefore has to be right
-  for three things: traffic that arrives after it, state the shipped release already wrote,
-  and messages from older producers. Whatever the new release does to old state must be
-  safe to run again on every start.
+  for traffic that arrives after it and for messages from older producers, and you have to
+  ask what the shipped release has already written. If some of that state carries the
+  defect, the new release has to deal with it, in a step that is safe to run again on every
+  start. If none does, add nothing for it: work on old state that the defect does not need
+  is only a risk.
 - The evidence covers one region. Other regions hold other data, so the repair must find
   what it needs in the services' own stores, never in the evidence.
 - api runs as several replicas, the router as one, workers as several, and any of them can

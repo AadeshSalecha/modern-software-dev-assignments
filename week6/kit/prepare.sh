@@ -69,10 +69,18 @@ if [ "${1:-}" = "--restore" ]; then
 fi
 
 mkdir -p work/scenarios out
+version_of() { # version_of <tool> <command to print its version>
+  if command -v "$1" >/dev/null 2>&1; then
+    eval "$2" 2>/dev/null | head -1
+  else
+    echo "NOT INSTALLED"
+  fi
+}
 {
-  echo "toolchain: python $(python3 -c 'import platform; print(platform.python_version())' 2>&1)," \
-    "node $(node -v 2>&1 | head -1), $(go version 2>&1 | head -1 | cut -d' ' -f3-4)"
+  echo "toolchain: python $(version_of python3 'python3 -c "import platform; print(platform.python_version())"')," \
+    "node $(version_of node 'node -v'), go $(version_of go 'go version | cut -d" " -f3')"
 } >work/start.txt
+rm -f work/.no_harness
 
 # 1. The release as shipped, for comparison and for rollout checks.
 if [ ! -d .pristine/app ] && [ -d app/services ]; then
@@ -100,10 +108,22 @@ if [ -d app ] && [ ! -f "$MOVED" ]; then
         echo "release as shipped: all ${#shipped[@]} scenarios in app/scenarios pass (nothing was set aside)" >>work/start.txt
       else
         set_aside
-        {
-          echo "release as shipped: scenarios in app/scenarios do NOT all pass before any change:"
-          head -12 work/.shipped.txt
-        } >>work/start.txt
+        if grep -q "^ok " work/.shipped.txt; then
+          {
+            echo "release as shipped: some scenarios in app/scenarios do NOT pass before any change:"
+            head -12 work/.shipped.txt
+          } >>work/start.txt
+        else
+          # Not one scenario runs: the harness itself does not work here (a missing tool, most
+          # likely). The gate cannot use it, and nothing the agent does can change that.
+          : >work/.no_harness
+          {
+            echo "the replay harness does NOT run in this environment, so kit/rollout.py and the"
+            echo "scenario and test parts of kit/check.sh are unavailable. Reason:"
+            tail -3 work/.shipped.txt | cut -c1-300
+            echo "Work from the contracts and the code, and run whatever tests the tools present allow."
+          } >>work/start.txt
+        fi
       fi
     fi
   fi

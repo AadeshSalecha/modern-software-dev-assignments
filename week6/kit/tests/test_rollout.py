@@ -128,6 +128,17 @@ class InvariantTest(unittest.TestCase):
         found = self.problems([delivery("dlv_1")], [receipt(1, "/hooks/ep_a", "dlv_1", "evt_7")])
         self.assertIn("carries event evt_7", found[0])
 
+    def test_a_scenario_can_leave_a_check_out(self):
+        scenario = dict(SCENARIO, skip_checks=["settled"])
+        self.assertEqual(rollout.invariants(result([delivery("dlv_1", state="queued")], []), scenario), [])
+        scenario = dict(SCENARIO, skip_checks=["first_delivery"])
+        ok = [receipt(1, "/hooks/ep_a", "dlv_1", "evt_1"), receipt(2, "/hooks/ep_a", "dlv_2", "evt_1")]
+        self.assertEqual(rollout.invariants(result([delivery("dlv_1"), delivery("dlv_2")], ok), scenario), [])
+
+    def test_runs_past_the_deadline_are_reported_not_run(self):
+        outcomes = rollout.run_all([("late", SCENARIO, "new")], bins={}, deadline=0)
+        self.assertEqual(outcomes[0]["problems"], ["not run: out of time"])
+
     def test_services_and_exits(self):
         self.assertIn("worker is not running at the end", self.problems([], [], down=("worker",)))
         self.assertEqual(self.problems([], [], crashes=[{"service": "worker", "now": 1, "exit": 86}]), [])

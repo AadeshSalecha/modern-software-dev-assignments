@@ -5,8 +5,9 @@ Work in this order, in as few steps as you can. Send independent commands togeth
 1. **Ledger.** Write `work/ledger.md`: one `- [ ]` line for every requirement in the ticket,
    split so that each qualifier ("including …", "regardless of …", "even when …",
    "without …") has its own line, each ending with how you will check it (a scenario name, a
-   query, a command). Add the standing requirements from `AGENTS.md`: right for new traffic,
-   for state the shipped release left behind, and for older bus messages.
+   query, a command). Add three standing lines from `AGENTS.md`: it holds for new traffic;
+   what the shipped release has already written that carries the defect is dealt with (name
+   that state, or write "none" and add nothing for it); older bus messages still work.
 2. **Report.** Read `.claude/skills/evidence-report/SKILL.md`, then answer the ticket's
    report request from `work/evidence.db` with a script, and write the file under `out/`
    now. What you learn here about when and where the incident happened is your first lead.

@@ -8,5 +8,5 @@ ticket points here.
 - `legacy/`: the release 1 single-process dispatcher and its tests.
 - `router-next/`: an unfinished rewrite of the router, never deployed (was `services/router-next`).
 - `helm/`: the Helm chart used up to release 2.1 (was `deploy/helm`); `deploy/k8s` is what runs.
-- `old-AGENTS.md.txt`, `old-CLAUDE.md.txt`: this directory's former agent notes, written
-  for release 2.0. Wrong on most points; kept only as history.
+- `old-AGENTS.md.txt`, `old-CLAUDE.md.txt`: the agent notes shipped in `app/`. They may
+  describe an earlier release; check anything they say against `contracts/`.

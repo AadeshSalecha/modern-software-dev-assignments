@@ -270,3 +270,30 @@ Stop and report after step 7, and again after step 9, before any Gradescope subm
   `KIT_TOOLS`, `KIT_MAX_TURNS`, `KIT_NO_HOOK`, `KIT_NO_RESUME`, `KIT_VARIANT=flags`). The grader
   runs with an empty environment, so it always gets the defaults.
 - Steps 1 to 7 done on 2026-11-26. Results are in `results.md`.
+
+### After the independent review (2026-11-26, see `review.md`)
+
+- Stop-hook cap is 4 blocks in total (plan: 3). The reproduction check, and now also report
+  values of another kind than the ticket's example, block at most 3 times and are then only noted.
+- Resume condition is "fewer than 400 s gone" (plan: "more than 150 s remain"); the gate after
+  the session and the resume both run under a deadline counted from the start of `run.sh`.
+- `run.sh` no longer uses GNU `timeout` (it puts the child in its own process group, out of the
+  grader's reach). Children run in `run.sh`'s group with a watchdog; a TERM or INT trap stops the
+  child, stops replay services started from the workspace, and restores `app/`.
+- The gate runs all groups and reports them together (plan: stop at the first failing group),
+  after one run that shows whether the working tree starts at all. It has no separate `node`
+  or `py_compile` load check; starting the services in the scenarios covers that.
+- One scenario run is limited to 45 s and all runs together to 150 s, so a service that stops
+  answering cannot hold the gate.
+- `prepare.sh` writes `work/.no_harness` when not one shipped scenario runs (a missing
+  toolchain); the gate then checks only the report and the ledger.
+- Contract checks in `rollout.py` are named and a scenario can skip one (`"skip_checks"`), for
+  tickets that override a contract rule.
+- `evidence.py`: files that share a name are one table with a `file` column; subdirectories and
+  rotated names are loaded; a file named like a joined table gets `_file`; the endpoint read
+  from a request's address is `url_endpoint` and no longer feeds `deliveries.endpoint_id`.
+- Instruction wording: handling of state left by the shipped release is conditional ("name that
+  state, or write none and add nothing"); the near-miss list and two report examples were made
+  neutral; the note about the shipped `app/AGENTS.md` no longer asserts what it contains.
+- `make_submission.sh` (new, outside `week6/`) builds the zip without `runs/`, `out/`,
+  `tools/starter/`, caches and `writeup.md`.

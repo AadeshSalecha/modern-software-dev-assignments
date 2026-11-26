@@ -20,9 +20,16 @@ A scenario is what app/bin/replay takes (see app/bin/replaylib.py), plus:
                each also as min_... / max_...
 
 Besides the scenario's expectations, every run is checked against the contracts:
-services still running, no unexpected exit, nothing left queued or leased after a final
-drain, delivered only with a recorded 2xx, one first delivery per event and endpoint, and
-every request naming a known delivery, its event, and a valid signature.
+  running         api, router and worker are still up at the end
+  exits           no service exited except at an armed crash point
+  settled         nothing is left queued or leased after a final drain
+  delivered       a delivery is delivered only with a recorded 2xx
+  first_delivery  one first delivery per event and endpoint (a resend may add another)
+  requests        every request names a known delivery and its event, with a valid signature
+A scenario can leave checks out with "skip_checks": ["settled"]. Do that only where the
+ticket itself overrides the contract, and say so in the scenario's name.
+
+One run may take at most 45 s of wall-clock time.
 
 Exits 0 when every run is clean, 1 otherwise, 2 when the worker does not build.
 """
@@ -33,10 +40,12 @@ import copy
 import json
 import os
 import shutil
+import signal
 import socket
 import sys
 import tempfile
 import threading
+import time
 
 KIT = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(KIT)
@@ -50,6 +59,9 @@ import replaylib  # noqa: E402
 
 SCORED = ("api", "router", "worker")
 COUNTS = ("requests", "accepted", "events", "deliveries")
+CHECKS = ("running", "exits", "settled", "delivered", "first_delivery", "requests")
+RUN_SECONDS = int(os.environ.get("KIT_RUN_SECONDS", "45"))  # wall-clock limit for one run
+LIVE = set()  # deployments with processes running, so a signal can stop them
 
 
 class Deployment(replaylib.Deployment):
@@ -59,6 +71,16 @@ class Deployment(replaylib.Deployment):
         if service == "receiver":
             return [sys.executable, os.path.join(OLD_APP, "services", "receiver", "main.py")]
         return super().command(service)
+
+
+def stop_everything(signum=None, frame=None):
+    for dep in list(LIVE):
+        try:
+            dep.stop_all()
+        except Exception:  # noqa: BLE001 - nothing useful to do while shutting down
+            pass
+    if signum is not None:
+        os._exit(128 + signum)
 
 
 def free_port_base(start, taken):
@@ -93,6 +115,16 @@ def play(scenario, release, bins, port_base):
     state_dir = tempfile.mkdtemp(prefix="switchyard-")
     dep = Deployment(state_dir, port_base, app, bins[app])
     errors, result = [], None
+    overtime = threading.Event()
+
+    def give_up():
+        overtime.set()
+        dep.stop_all()
+
+    watchdog = threading.Timer(RUN_SECONDS, give_up)
+    watchdog.daemon = True
+    LIVE.add(dep)
+    watchdog.start()
     try:
         dep.set_clock(scenario.get("epoch", replaylib.EPOCH))
         dep.start_all()
@@ -110,21 +142,31 @@ def play(scenario, release, bins, port_base):
                 else:
                     run.step(step)
             except (RuntimeError, replaylib.ServiceDown, KeyError, TypeError, ValueError) as problem:
+                if overtime.is_set():
+                    break
                 errors.append(f"step {number} ({step.get('do')}) failed: {str(problem)[:300]}")
                 for service in SCORED:
                     if not dep.running(service):
                         errors += stderr_tail(state_dir, service)
                 break
+            if overtime.is_set():
+                break
+        if overtime.is_set():
+            return None, [f"timed out: the run did not finish in {RUN_SECONDS} s (a service stopped answering, or a drain never settles)"]
         result = run.result()
         for crash in dep.crashes:
             if crash.get("exit") != 86:
                 errors += stderr_tail(state_dir, crash["service"])
     except (RuntimeError, replaylib.ServiceDown) as problem:
+        if overtime.is_set():
+            return None, [f"timed out: the run did not finish in {RUN_SECONDS} s (a service stopped answering, or a drain never settles)"]
         errors.append(f"could not start: {str(problem)[:300]}")
         for service in SCORED:
             errors += stderr_tail(state_dir, service)
     finally:
+        watchdog.cancel()
         dep.stop_all()
+        LIVE.discard(dep)
         shutil.rmtree(state_dir, ignore_errors=True)
     return result, errors
 
@@ -190,7 +232,9 @@ def expectations(result, scenario):
 
 
 def invariants(result, scenario):
+    """Contract checks. A scenario may leave some out with "skip_checks": [names from CHECKS]."""
     out = []
+    skip = set(scenario.get("skip_checks") or [])
     steps = scenario["steps"]
     stopped = {}
     for step in steps:
@@ -201,10 +245,10 @@ def invariants(result, scenario):
         elif step.get("do") == "upgrade":
             stopped.clear()
     for service in SCORED:
-        if result["state"].get(service) is None and not stopped.get(service):
+        if "running" not in skip and result["state"].get(service) is None and not stopped.get(service):
             out.append(f"{service} is not running at the end")
     for crash in result["crashes"]:
-        if crash.get("exit") != 86:
+        if "exits" not in skip and crash.get("exit") != 86:
             out.append(f"{crash['service']} exited with status {crash.get('exit')} (not an armed crash point)")
 
     router = result["state"].get("router") or {}
@@ -216,7 +260,7 @@ def invariants(result, scenario):
     def label(delivery):
         return f"{refs.get(delivery['event_id'], delivery['event_id'])} -> {delivery['endpoint_id']} ({delivery['id']})"
 
-    final_drain = bool(steps) and steps[-1].get("do") == "drain" and "limit" not in steps[-1]
+    final_drain = bool(steps) and steps[-1].get("do") == "drain" and "limit" not in steps[-1] and "settled" not in skip
     firsts = {}
     answered = {}
     for receipt in result["received"]:
@@ -225,17 +269,17 @@ def invariants(result, scenario):
     for delivery in deliveries:
         if final_drain and delivery["state"] in ("queued", "leased") and enabled.get(delivery["endpoint_id"], True):
             out.append(f"{label(delivery)} is still {delivery['state']} after the final drain")
-        if delivery["state"] == "delivered" and not answered.get(delivery["id"]):
+        if "delivered" not in skip and delivery["state"] == "delivered" and not answered.get(delivery["id"]):
             out.append(f"{label(delivery)} is delivered but no request for it got a 2xx")
         if delivery.get("resend_of") is None:
             firsts.setdefault((delivery["event_id"], delivery["endpoint_id"]), []).append(delivery)
     for same in firsts.values():
-        if len(same) > 1:
+        if "first_delivery" not in skip and len(same) > 1:
             out.append(f"{label(same[0])} has {len(same)} first deliveries; only a resend may add one")
 
     secrets = result.get("secrets") or {}
     for receipt in result["received"]:
-        if not receipt["processed"]:
+        if not receipt["processed"] or "requests" in skip:
             continue
         delivery = by_id.get(receipt["headers"].get("webhook-id"))
         where = f"request {receipt['n']} to {receipt['path']}"
@@ -316,16 +360,22 @@ def build(apps):
     bins = {}
     for app in apps:
         if app not in bins:
-            bins[app] = replaylib.build_worker(app)
+            try:
+                bins[app] = replaylib.build_worker(app)
+            except OSError as problem:  # no go toolchain, or nowhere to write
+                raise RuntimeError(f"the worker cannot be built: {problem}") from None
     return bins
 
 
-def run_all(jobs_spec, bins, jobs=4, port_base=7400):
-    """jobs_spec: list of (label, scenario, release). Returns list of dicts in the same order."""
+def run_all(jobs_spec, bins, jobs=4, port_base=7400, deadline=None):
+    """jobs_spec: list of (label, scenario, release). Returns list of dicts in the same order.
+    Runs that have not started by `deadline` (a time.time() value) are reported as not run."""
     taken, choosing = set(), threading.Lock()
 
     def one(spec):
         label, scenario, release = spec
+        if deadline is not None and time.time() > deadline:
+            return {"label": label, "name": scenario.get("name", ""), "problems": ["not run: out of time"], "digest": [], "result": None}
         with choosing:
             base = free_port_base(port_base, taken)
             taken.add(base)
@@ -389,6 +439,7 @@ def main(argv=None):
     except RuntimeError as problem:
         print("\n".join(str(problem).splitlines()[:20]))
         return 2
+    signal.signal(signal.SIGTERM, stop_everything)
     outcomes = run_all(specs, bins, args.jobs, args.port_base)
     if args.json:
         print(json.dumps([{k: o[k] for k in ("label", "name", "problems")} for o in outcomes], indent=1))

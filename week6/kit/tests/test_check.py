@@ -28,24 +28,43 @@ EXAMPLE = {"items": [{"id": "x_…", "parts": ["p_…"]}], "sums": {"AAA": 0, "B
 class ShapeTest(unittest.TestCase):
     def test_a_matching_report(self):
         report = {"items": [{"id": "x_1", "parts": ["p_1", "p_2"]}], "sums": {"CCC": 12}, "count": 4}
-        self.assertEqual(check.shape(EXAMPLE, report), [])
-        self.assertEqual(check.shape(EXAMPLE, {"items": [], "sums": {}, "count": 0}), [])
+        self.assertEqual(check.shape(EXAMPLE, report), ([], []))
+        self.assertEqual(check.shape(EXAMPLE, {"items": [], "sums": {}, "count": 0}), ([], []))
 
     def test_keys_of_a_record_must_match_but_keys_of_a_map_are_free(self):
-        found = check.shape(EXAMPLE, {"items": [], "sums": {"ZZZ": 1}, "total": 0})
-        self.assertEqual(found, ['report: missing "count"', 'report: unexpected "total"'])
+        structure, values = check.shape(EXAMPLE, {"items": [], "sums": {"ZZZ": 1}, "total": 0})
+        self.assertEqual(structure, ['report: missing "count"', 'report: unexpected "total"'])
+        self.assertEqual(values, [])
 
-    def test_value_kinds(self):
-        report = {"items": [{"id": 5, "parts": "p_1"}], "sums": {"AAA": 1.5}, "count": True}
+    def test_wrong_nesting_is_structure(self):
+        structure, values = check.shape(EXAMPLE, {"items": {"id": "x"}, "sums": [1], "count": [0]})
         self.assertEqual(
-            check.shape(EXAMPLE, report),
+            structure,
             [
-                "report.items[0].id: expected text, found a whole number",
-                "report.items[0].parts: expected a list, found text",
-                "report.sums.AAA: expected a whole number, found a number",
-                "report.count: expected a whole number, found true/false",
+                "report.items: expected a list, found an object",
+                "report.sums: expected an object, found a list",
+                "report.count: expected a whole number, found a list",
             ],
         )
+        self.assertEqual(values, [])
+
+    def test_a_value_of_another_kind_is_only_a_question(self):
+        report = {"items": [{"id": 5, "parts": ["p_1"]}], "sums": {"AAA": 1.5}, "count": True}
+        structure, values = check.shape(EXAMPLE, report)
+        self.assertEqual(structure, [])
+        self.assertEqual(
+            values,
+            [
+                "report.items[0].id: the ticket's example has text, this is a whole number",
+                "report.sums.AAA: the ticket's example has a whole number, this is a number",
+                "report.count: the ticket's example has a whole number, this is true/false",
+            ],
+        )
+
+    def test_null_in_the_example_and_whole_numbers_for_decimals_are_fine(self):
+        example = {"note": None, "rate": 0.0}
+        self.assertEqual(check.shape(example, {"note": "anything", "rate": 1}), ([], []))
+        self.assertEqual(check.shape(example, {"note": None, "rate": 0.5}), ([], []))
 
     def test_named_outputs_pair_files_with_the_example_after_them(self):
         self.assertEqual(check.named_outputs(TICKET), [("out/summary.json", EXAMPLE), ("out/notes.txt", None)])

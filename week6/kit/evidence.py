@@ -20,6 +20,7 @@ What the loader does, and nothing more:
 It knows nothing about any particular incident.
 """
 
+import bisect
 import csv
 import gzip
 import json
@@ -48,10 +49,11 @@ ALIASES = {
     "status": ("status", "http_status"),
 }
 KIND_COLUMNS = ("msg", "op", "kind")
+RESERVED_TABLES = {"events", "deliveries", "responses", "skipped", "event_facts", "delivery_facts", "snapshots"}
 ISO = re.compile(r"^(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d):(\d\d)Z$")
 KEY = re.compile(r"^([A-Za-z_][\w.\-]*)=(.*)$", re.S)
 INT = re.compile(r"^-?\d+$")
-RESERVED = {"line_no", "copies", "ts", "ts_iso"}
+RESERVED = {"line_no", "copies", "ts", "ts_iso", "file"}
 
 
 def column(name):
@@ -175,7 +177,7 @@ def parse_log_line(line):
         row.setdefault("status", typed(bare[3]))
         tail = bare[2].rstrip("/").rsplit("/", 1)[-1].split("?")[0]
         if re.match(r"^ep_\w+$", tail):
-            row.setdefault("endpoint", tail)
+            row.setdefault("url_endpoint", tail)
     else:
         for number, value in enumerate(bare, 1):
             row[f"p{number}"] = typed(value)
@@ -193,10 +195,13 @@ def parse_csv_line(line):
 
 
 class Source:
-    def __init__(self, name, path, kind):
-        self.name, self.path, self.kind = name, path, kind
+    """One table: the file, or the files, that share a name (router.log, router.log.1)."""
+
+    def __init__(self, name, kind):
+        self.name, self.kind = name, kind
+        self.paths = []  # (path, name relative to the packet)
         self.rows = []  # dicts, each with line_no and copies
-        self.corrupted = 0
+        self.corrupted = {}  # relative name -> rows cut short
         self.duplicates = 0
         self.notes = []
 
@@ -205,61 +210,82 @@ def table_name(filename):
     return column(filename.split(".")[0])
 
 
+def classify(filename):
+    base = filename[:-3] if filename.endswith(".gz") else filename
+    base = re.sub(r"\.\d+$", "", base)  # a rotated file: router.log.1
+    if base.endswith((".ndjson", ".jsonl")):
+        return "json"
+    if base.endswith(".log"):
+        return "log"
+    if base.endswith(".csv"):
+        return "csv"
+    return None
+
+
 def discover(incident_dir):
-    sources, snapshots, other = [], [], []
-    for entry in sorted(os.listdir(incident_dir)):
-        path = os.path.join(incident_dir, entry)
-        if os.path.isdir(path):
-            for inner in sorted(os.listdir(path)):
-                inner_path = os.path.join(path, inner)
-                if entry == "snapshots" and inner.endswith(".json"):
-                    snapshots.append(inner_path)
-                else:
-                    other.append(os.path.join(entry, inner))
-            continue
-        base = entry[:-3] if entry.endswith(".gz") else entry
-        if base.endswith((".ndjson", ".jsonl")):
-            sources.append(Source(table_name(entry), path, "json"))
-        elif base.endswith(".log"):
-            sources.append(Source(table_name(entry), path, "log"))
-        elif base.endswith(".csv"):
-            sources.append(Source(table_name(entry), path, "csv"))
-        else:
-            other.append(entry)
-    return sources, snapshots, other
+    sources, snapshots, other = {}, [], []
+    for folder, dirs, files in os.walk(incident_dir):
+        dirs.sort()
+        inside = os.path.relpath(folder, incident_dir)
+        for entry in sorted(files):
+            path = os.path.join(folder, entry)
+            relative = entry if inside == "." else os.path.join(inside, entry)
+            if inside.split(os.sep)[0] == "snapshots" and entry.endswith(".json"):
+                snapshots.append(path)
+                continue
+            kind = classify(entry)
+            if kind is None:
+                other.append(relative)
+                continue
+            name = ("" if inside == "." else column(inside) + "_") + table_name(entry)
+            if name in RESERVED_TABLES or name.startswith(("snapshot_", "_")):
+                name += "_file"
+            if name in sources and sources[name].kind != kind:
+                name = f"{name}_{kind}"
+            sources.setdefault(name, Source(name, kind)).paths.append((path, relative))
+    return list(sources.values()), snapshots, other
 
 
 def load_lines(source):
     parse = parse_json_line if source.kind == "json" else parse_log_line
     seen = {}
-    for number, line in physical_lines(source.path):
-        row = parse(line)
-        if row is None:
-            source.corrupted += 1
-            continue
-        if line in seen:
-            seen[line]["copies"] += 1
-            source.duplicates += 1
-            continue
-        row["line_no"], row["copies"] = number, 1
-        seen[line] = row
-        source.rows.append(row)
+    for path, relative in source.paths:
+        source.corrupted.setdefault(relative, 0)
+        for number, line in physical_lines(path):
+            row = parse(line)
+            if row is None:
+                source.corrupted[relative] += 1
+                continue
+            if line in seen:
+                seen[line]["copies"] += 1
+                source.duplicates += 1
+                continue
+            row["line_no"], row["copies"] = number, 1
+            if len(source.paths) > 1:
+                row["file"] = relative
+            seen[line] = row
+            source.rows.append(row)
 
 
 def load_csv(source):
-    header, counts = None, {}
-    for number, line in physical_lines(source.path):
-        cells = parse_csv_line(line)
-        if header is None:
-            header = [column(c) for c in (cells or [])]
-            continue
-        if cells is None or len(cells) < len(header):
-            source.corrupted += 1
-            continue
-        row = {name: (value if value != "" else None) for name, value in zip(header, cells)}
-        row["line_no"] = number
-        counts.setdefault(line, []).append(row)
-        source.rows.append(row)
+    counts = {}
+    for path, relative in source.paths:
+        header = None
+        source.corrupted.setdefault(relative, 0)
+        for number, line in physical_lines(path):
+            cells = parse_csv_line(line)
+            if header is None:
+                header = [column(c) for c in (cells or [])]
+                continue
+            if cells is None or len(cells) < len(header):
+                source.corrupted[relative] += 1
+                continue
+            row = {name: (value if value != "" else None) for name, value in zip(header, cells)}
+            row["line_no"] = number
+            if len(source.paths) > 1:
+                row["file"] = relative
+            counts.setdefault(line, []).append(row)
+            source.rows.append(row)
     for same in counts.values():
         for row in same:
             row["copies"] = len(same)
@@ -318,13 +344,15 @@ def finish_export(source, known_deliveries, request_times, digits):
     """Resolve cut ids, convert amounts, and estimate the export's clock offset."""
     unresolved = cut = inexact = 0
     deltas = []
+    ordered = sorted(known_deliveries)
     for row in source.rows:
         raw = first_present(row, ("webhook_id", "delivery_id", "delivery"))
         resolved = None
         if raw in known_deliveries:
             resolved = raw
         elif raw:
-            matches = [d for d in known_deliveries if d.startswith(raw)]
+            at = bisect.bisect_left(ordered, raw)
+            matches = [d for d in ordered[at : at + 2] if d.startswith(raw)]
             if len(matches) == 1:
                 resolved, cut = matches[0], cut + 1
             else:
@@ -470,7 +498,8 @@ def build_views(db, tables):
         if delivery != "NULL":
             delivery_parts.append(
                 f"SELECT '{name}' AS source, {delivery} AS delivery_id, {event} AS event_id, "
-                f"{endpoint} AS endpoint_id, {any_of(columns, ('resend_of',))} AS resend_of, {ts} AS ts, "
+                f"{endpoint} AS endpoint_id, {any_of(columns, ('url_endpoint',))} AS url_endpoint, "
+                f"{any_of(columns, ('resend_of',))} AS resend_of, {ts} AS ts, "
                 f'{line} AS line_no FROM "{name}" WHERE {delivery} IS NOT NULL'
             )
             status = pick(columns, "status")
@@ -504,7 +533,8 @@ def build_views(db, tables):
         db.execute("CREATE VIEW delivery_facts AS " + " UNION ALL ".join(delivery_parts))
         db.execute(
             """CREATE TABLE deliveries AS SELECT delivery_id,
-                 max(event_id) AS event_id, max(endpoint_id) AS endpoint_id, max(resend_of) AS resend_of,
+                 max(event_id) AS event_id, max(endpoint_id) AS endpoint_id,
+                 max(url_endpoint) AS url_endpoint, max(resend_of) AS resend_of,
                  group_concat(DISTINCT source) AS sources,
                  (count(DISTINCT event_id) > 1 OR count(DISTINCT endpoint_id) > 1) AS conflict
                FROM delivery_facts GROUP BY delivery_id"""
@@ -569,7 +599,7 @@ def build(incident_dir, db_path):
     db.execute("CREATE TABLE skipped (file TEXT, corrupted_rows INTEGER)")
     db.executemany(
         "INSERT INTO skipped VALUES (?, ?)",
-        [(os.path.relpath(s.path, incident_dir), s.corrupted) for s in sources],
+        [(relative, count) for s in sources for relative, count in s.corrupted.items()],
     )
     db.execute("CREATE TABLE _kinds (source TEXT, kind_column TEXT, kind TEXT, n INTEGER, fields TEXT)")
     for source in sources:
@@ -664,7 +694,7 @@ def print_schema(db):
     print("joined across files (a `?` after a field above means only some rows have it)")
     for table, facts, id_column, columns in (
         ("events", "event_facts", "event_id", "event_id merchant_id type amount_minor currency sources conflict"),
-        ("deliveries", "delivery_facts", "delivery_id", "delivery_id event_id endpoint_id resend_of sources conflict"),
+        ("deliveries", "delivery_facts", "delivery_id", "delivery_id event_id endpoint_id url_endpoint resend_of sources conflict"),
     ):
         found = coverage(db, table, facts, id_column)
         if not found:
@@ -673,6 +703,15 @@ def print_schema(db):
         seen = ", ".join(f"{source} {n}" for source, n in per)
         print(f"{table}  ({total} ids; {conflicts or 0} with conflicting facts)  columns: {columns}")
         print(f"    ids seen per file: {seen}")
+        if table == "deliveries":
+            other = db.execute(
+                "SELECT count(*) FROM deliveries WHERE url_endpoint IS NOT NULL AND endpoint_id IS NOT NULL "
+                "AND url_endpoint <> endpoint_id"
+            ).fetchone()[0]
+            print(
+                "    `endpoint_id` comes from records that name the endpoint; `url_endpoint` is the last part of the "
+                f"address a request went to, when it looks like an endpoint id ({other} deliveries where the two differ)"
+            )
     if has(db, "responses"):
         per = db.execute("SELECT source, count(*) FROM responses GROUP BY source ORDER BY 2 DESC").fetchall()
         print("responses  (view: every row that carries a delivery and an HTTP status)")

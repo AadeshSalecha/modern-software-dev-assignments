@@ -13,7 +13,9 @@ Checks, in order:
   reproduce   those scenarios fail on the shipped release, and one of them replaces the release
               part-way (asked for at most 3 times, then only noted)
   crash       each service has the same numbered crash points as the shipped release
-  report      every out/ file the ticket names exists and has the shape of the ticket's example
+  report      every out/ file the ticket names exists and has the keys and nesting of the
+              ticket's example; a value of another kind than the example's (text for a number)
+              is asked about like `reproduce`, since the example may only be a placeholder
   ledger      work/ledger.md has no unchecked line
 
 Exit status 0: nothing blocks. 1: something does.
@@ -24,8 +26,10 @@ import glob
 import json
 import os
 import re
+import signal
 import subprocess
 import sys
+import time
 
 KIT = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(KIT)
@@ -35,6 +39,8 @@ import rollout  # noqa: E402
 SERVICES = ("api", "router", "worker")
 SOFT_LIMIT = 3
 SOFT_COUNTER = os.path.join(ROOT, "work", ".soft_blocks")
+NO_HARNESS = os.path.join(ROOT, "work", ".no_harness")
+BUDGET_SECONDS = 150  # for all scenario runs together
 CRASH = re.compile(r"\bcrash\((\d+)\)")
 
 
@@ -154,37 +160,57 @@ def is_map(example):
     return bool(example) and all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in example.values())
 
 
+def same_kind(example, actual):
+    if isinstance(example, float) and isinstance(actual, int) and not isinstance(actual, bool):
+        return True  # a whole number is a number
+    return kind(example) == kind(actual)
+
+
 def shape(example, actual, where="report", top=True):
-    """Problems where `actual` does not have the shape of `example`."""
+    """Compare `actual` with the ticket's example. Returns (structure, values).
+
+    structure: a missing or unexpected key, or a list/object/single value where another was shown.
+    values:    a single value of another kind than the example's (text for a number, 1.0 for 1).
+               The example may only be a placeholder there, so these are weaker evidence.
+    """
+    if example is None:
+        return [], []  # the example does not say
     if isinstance(example, dict):
         if not isinstance(actual, dict):
-            return [f"{where}: expected an object, found {kind(actual)}"]
+            return [f"{where}: expected an object, found {kind(actual)}"], []
         if not top and is_map(example):
             sample = next(iter(example.values()))
-            return [
-                f"{where}.{key}: expected {kind(sample)}, found {kind(value)}"
+            return [], [
+                f"{where}.{key}: the ticket's example has {kind(sample)}, this is {kind(value)}"
                 for key, value in actual.items()
-                if kind(value) != kind(sample)
+                if not same_kind(sample, value)
             ][:3]
-        out = [f"{where}: missing \"{key}\"" for key in example if key not in actual]
-        out += [f"{where}: unexpected \"{key}\"" for key in actual if key not in example]
+        structure = [f"{where}: missing \"{key}\"" for key in example if key not in actual]
+        structure += [f"{where}: unexpected \"{key}\"" for key in actual if key not in example]
+        values = []
         for key in example:
             if key in actual:
-                out += shape(example[key], actual[key], f"{where}.{key}", False)
-        return out
+                found = shape(example[key], actual[key], f"{where}.{key}", False)
+                structure += found[0]
+                values += found[1]
+        return structure, values
     if isinstance(example, list):
         if not isinstance(actual, list):
-            return [f"{where}: expected a list, found {kind(actual)}"]
-        out = []
+            return [f"{where}: expected a list, found {kind(actual)}"], []
+        structure, values = [], []
         if example:
             for index, item in enumerate(actual):
-                out += shape(example[0], item, f"{where}[{index}]", False)
-                if len(out) >= 3:
+                found = shape(example[0], item, f"{where}[{index}]", False)
+                structure += found[0]
+                values += found[1]
+                if len(structure) + len(values) >= 3:
                     break
-        return out[:3]
-    if kind(example) != kind(actual):
-        return [f"{where}: expected {kind(example)}, found {kind(actual)}"]
-    return []
+        return structure[:3], values[:3]
+    if isinstance(actual, (dict, list)):
+        return [f"{where}: expected {kind(example)}, found {kind(actual)}"], []
+    if not same_kind(example, actual):
+        return [], [f"{where}: the ticket's example has {kind(example)}, this is {kind(actual)}"]
+    return [], []
 
 
 def named_outputs(task_text):
@@ -209,16 +235,17 @@ def named_outputs(task_text):
 
 
 def check_report(task_path):
+    """Returns (hard, soft) problems with the out/ files the ticket names."""
     try:
         with open(task_path, encoding="utf-8") as handle:
             task_text = handle.read()
     except OSError:
-        return []
-    out = []
+        return [], []
+    hard, soft = [], []
     for path, example in named_outputs(task_text):
         full = os.path.join(ROOT, path)
         if not os.path.isfile(full):
-            out.append(f"{path} does not exist yet")
+            hard.append(f"{path} does not exist yet")
             continue
         if not path.endswith(".json"):
             continue
@@ -226,11 +253,13 @@ def check_report(task_path):
             with open(full, encoding="utf-8") as handle:
                 actual = json.load(handle)
         except ValueError as problem:
-            out.append(f"{path} is not valid JSON: {problem}")
+            hard.append(f"{path} is not valid JSON: {problem}")
             continue
         if example is not None:
-            out += [p.replace("report", path, 1) for p in shape(example, actual)][:6]
-    return out
+            structure, values = shape(example, actual)
+            hard += [p.replace("report", path, 1) for p in structure][:6]
+            soft += [p.replace("report", path, 1) + " (change it only if the ticket's wording agrees)" for p in values][:3]
+    return hard, soft
 
 
 def check_ledger():
@@ -280,16 +309,23 @@ def scenario_checks(bins):
         if have_old:
             specs.append(("reproduce", name, scenario, "old"))
 
-    # One run first: if the working tree does not even start, say so once instead of waiting
-    # for every scenario to time out.
+    # One run first: if the working tree does not start or stops answering, say so once
+    # instead of waiting for every scenario to time out.
     canary = next((spec for spec in specs if spec[3] == "new"), None)
     if canary:
         first = rollout.run_all([canary[1:]], bins)[0]
-        if any(p.startswith("could not start") for p in first["problems"]):
-            return ["the working tree does not start: " + first["problems"][0]] + first["problems"][1:8], []
-    outcomes = rollout.run_all([(label, scenario, release) for _, label, scenario, release in specs], bins)
+        if any(p.startswith(("could not start", "timed out")) for p in first["problems"]):
+            return ["the working tree does not run " + canary[1] + ": " + first["problems"][0]] + first["problems"][1:8], []
+    outcomes = rollout.run_all(
+        [(label, scenario, release) for _, label, scenario, release in specs], bins, deadline=time.time() + BUDGET_SECONDS
+    )
+    skipped = sum(1 for outcome in outcomes if outcome["problems"] == ["not run: out of time"])
+    if skipped:
+        hard.append(f"{skipped} scenario runs were not started: the others used up {BUDGET_SECONDS} s. Find what is slow.")
     for (group, label, _, _), outcome in zip(specs, outcomes):
         problems = outcome["problems"]
+        if problems == ["not run: out of time"]:
+            continue
         if group == "reproduce":
             if not problems:
                 soft.append(f"{label} also passes on the shipped release, so it does not show the defect")
@@ -322,24 +358,31 @@ def main(argv):
         if arg == "--task" and index + 1 < len(argv):
             task = argv[index + 1]
 
-    hard, soft = [], []
-    try:
-        bins = rollout.build({rollout.OLD_APP, rollout.NEW_APP})
-    except RuntimeError as problem:
-        print("BLOCKING\nbuild: " + "\n  ".join(str(problem).splitlines()[:16]))
-        return 1
-
-    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
-        tests = pool.map(run_tests, SERVICES)
+    hard, soft, notes = [], [], []
+    signal.signal(signal.SIGTERM, rollout.stop_everything)
+    if os.path.exists(NO_HARNESS):
+        # prepare.sh found that the shipped release cannot be run here (see work/start.txt).
+        # Nothing the agent does can change that, so only the files it writes are checked.
+        notes.append("the services cannot be run in this environment (work/start.txt); only the report and ledger are checked")
+    else:
         try:
-            scenario_hard, soft = scenario_checks(bins)
+            bins = rollout.build({rollout.OLD_APP, rollout.NEW_APP})
         except RuntimeError as problem:
-            scenario_hard, soft = [f"scenarios could not run: {problem}"], []
-        for found in tests:
-            hard += found
-    hard += scenario_hard
-    hard += check_crash_points()
-    hard += check_report(task)
+            print("BLOCKING\nbuild: " + "\n  ".join(str(problem).splitlines()[:16]))
+            return 1
+        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
+            tests = pool.map(run_tests, SERVICES)
+            try:
+                scenario_hard, soft = scenario_checks(bins)
+            except RuntimeError as problem:
+                scenario_hard, soft = [f"scenarios could not run: {problem}"], []
+            for found in tests:
+                hard += found
+        hard += scenario_hard
+        hard += check_crash_points()
+    report_hard, report_soft = check_report(task)
+    hard += report_hard
+    soft += report_soft
     hard += check_ledger()
 
     asked = soft_count()
@@ -359,8 +402,10 @@ def main(argv):
             lines += soft
     if soft and not soft_blocks:
         lines += ["NOTED (no longer blocking)"] + soft
-    if not lines:
-        lines.append("check: all clear")
+    if notes:
+        lines += ["NOTED"] + notes
+    if not (hard or soft_blocks):
+        lines.insert(0, "check: all clear" if not (soft or notes) else "check: nothing blocking")
     if len(lines) > 40:
         lines = lines[:39] + [f"... {len(lines) - 39} more lines"]
     print("\n".join(lines))

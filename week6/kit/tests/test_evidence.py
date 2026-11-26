@@ -116,8 +116,15 @@ class EvidenceTest(unittest.TestCase):
 
     def test_request_lines_keep_status_endpoint_and_error(self):
         self.assertEqual(
-            self.one("SELECT method, status, endpoint, webhook_id, err FROM egress WHERE attempt = 'att_1'"),
+            self.one("SELECT method, status, url_endpoint, webhook_id, err FROM egress WHERE attempt = 'att_1'"),
             ("POST", 0, "ep_one_1", "dlv_2222bbbb", "upstream_reset"),
+        )
+
+    def test_the_address_of_a_request_does_not_decide_the_endpoint(self):
+        # dlv_1111aaaa: the router names its endpoint; the address agrees and is kept apart
+        self.assertEqual(
+            self.one("SELECT endpoint_id, url_endpoint FROM deliveries WHERE delivery_id = 'dlv_1111aaaa'"),
+            ("ep_one_1", "ep_one_1"),
         )
 
     def test_export_ids_amounts_and_statuses(self):
@@ -164,6 +171,38 @@ class EvidenceTest(unittest.TestCase):
     def test_snapshots_become_tables(self):
         self.assertEqual(self.one("SELECT state, snapshot_now FROM snapshot_deliveries"), ("queued", 1767225700))
         self.assertEqual(self.one("SELECT merchant_id FROM snapshot_endpoints"), ("m_one",))
+
+
+class PacketLayoutTest(unittest.TestCase):
+    def build(self, files):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        incident = os.path.join(tmp.name, "incident")
+        for name, lines in files.items():
+            path = os.path.join(incident, name)
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w", encoding="utf-8") as handle:
+                handle.write("\n".join(lines) + "\n")
+        db = sqlite3.connect(evidence.build(incident, os.path.join(tmp.name, "work", "evidence.db")))
+        self.addCleanup(db.close)
+        return db
+
+    def test_files_that_share_a_name_are_one_table(self):
+        line = "2026-01-01T00:00:0%dZ level=info msg=delivery.created delivery=dlv_%d event=evt_1 endpoint=ep_1"
+        db = self.build({"router.log": [line % (1, 1), "2026-01-01T00:00:02Z level=info msg=x del"],
+                         "router.log.1": [line % (3, 2), line % (1, 1)],
+                         "more/router.log": [line % (4, 3)]})
+        self.assertEqual(db.execute("SELECT delivery, file, copies FROM router ORDER BY delivery").fetchall(),
+                         [("dlv_1", "router.log", 2), ("dlv_2", "router.log.1", 1)])
+        self.assertEqual(db.execute("SELECT delivery FROM more_router").fetchall(), [("dlv_3",)])
+        self.assertEqual(dict(db.execute("SELECT file, corrupted_rows FROM skipped")),
+                         {"router.log": 1, "router.log.1": 0, os.path.join("more", "router.log"): 0})
+        self.assertEqual(db.execute("SELECT count(*) FROM deliveries").fetchone(), (3,))
+
+    def test_a_file_named_like_a_joined_table_does_not_break_the_build(self):
+        db = self.build({"events.ndjson": ['{"ts":"2026-01-01T00:00:00Z","msg":"x","event":"evt_9"}']})
+        self.assertEqual(db.execute("SELECT event FROM events_file").fetchall(), [("evt_9",)])
+        self.assertEqual(db.execute("SELECT event_id FROM events").fetchall(), [("evt_9",)])
 
 
 class RulesTest(unittest.TestCase):

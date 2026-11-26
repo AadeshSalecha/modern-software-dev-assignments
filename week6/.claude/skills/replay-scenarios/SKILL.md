@@ -15,7 +15,9 @@ python3 kit/rollout.py app/scenarios/*.json --upgrade-each  # shipped scenarios,
 ```
 
 Output is one line per run, plus the problems and a digest of deliveries and requests when
-it fails. Every run is also checked against the contracts (see `kit/rollout.py --help`).
+it fails. Every run is also checked against the contracts (`kit/rollout.py --help` lists
+the checks). Where the ticket itself overrides a contract rule, a scenario can leave that
+check out with `"skip_checks": ["settled"]`; do not use it for anything else.
 
 ## Format
 
@@ -67,15 +69,15 @@ Expectations:
    (`"drop"`) with the clock moved past a lease or a retry, a message applied twice or in an
    older version, an endpoint changed while work is queued.
 2. **Then make it pass** on your working tree.
-3. **Replace the release part-way.** Write at least one scenario with an `upgrade` step
-   placed after the shipped release has written the state the ticket cares about and before
-   that state has finished playing out, with expectations for what must happen to it under
-   your change. This is the case every region is in when your change is rolled out. Run it
-   twice in a row on the same idea (an `upgrade`, later a `restart`) if your change does
-   work at start-up: it must do nothing more the second time.
-4. **Cover the near misses**: inputs that look like the defect's trigger but must keep
-   working as before (the same input from another merchant or for another endpoint,
-   optional fields left out, an explicit resend).
+3. **Replace the release part-way.** Write at least one scenario with an `upgrade` step:
+   every region is mid-flight when your change is rolled out. If the shipped release
+   writes state that carries the defect, put the step after that state exists and before it
+   has finished playing out, and expect what the ticket wants to happen to it. If it leaves
+   no such state, the step can go anywhere and the scenario shows that the repaired
+   behaviour holds afterwards. A change that does work at start-up must do nothing more the
+   second time: follow the `upgrade` with a `restart`.
+4. **Cover the near misses**: inputs next to the defect's trigger that must keep working
+   exactly as before. Take them from the contract clauses your change touches.
 5. Put them in `work/scenarios/`. `kit/check.sh` runs them on both releases and runs the
    shipped scenarios with the release replaced after each step, which catches a store your
    change can no longer open.
