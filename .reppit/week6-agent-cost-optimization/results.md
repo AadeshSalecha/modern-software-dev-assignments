@@ -27,7 +27,7 @@ Rebuilt by `make_results.py`.
 | codex-luna | 0/1 | 0.44 | 1.00 | $0.010 | $0.01 to $0.01 | 12 | 111 s | 111 s |
 | codex-terra | 2/2 | 1.00 | 1.00 | $0.102 | $0.08 to $0.12 | 14 | 140 s | 140 s |
 | A-v5 | 3/3 | 1.00 | 1.00 | $0.230 | $0.21 to $0.24 | 12 | 102 s | 107 s |
-| from-zip | 1/1 | 1.00 | 1.00 | $0.250 | $0.25 to $0.25 | 13 | 116 s | 116 s |
+| from-zip | 2/2 | 1.00 | 1.00 | $0.244 | $0.24 to $0.25 | 14 | 126 s | 136 s |
 | codex-terra-v5 | 3/3 | 1.00 | 1.00 | $0.101 | $0.09 to $0.11 | 16 | 170 s | 187 s |
 | codex-luna-v5 | 1/2 | 0.72 | 1.00 | $0.029 | $0.02 to $0.03 | 38 | 328 s | 375 s |
 | sonnet-main-terra-rescue | 2/2 | 1.00 | 1.00 | $0.274 | $0.24 to $0.31 | 16 | 149 s | 173 s |
@@ -256,6 +256,7 @@ A-v5 plus the flag fallback, run from an unpacked copy of the submission zip.
 | Run | Result | Repair | Impact | Cost | Requests | Time | Incident | Regr. | Compat | Output | Cache read | Cache write |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 20261126-155525-1 | PASS | 1.00 | 1.00 | $0.250 | 13 | 116 s | 9/9 | 10/10 | 2/2 | 9,891 | 382,250 | 45,171 |
+| mac-20261126-173232-1 | PASS | 1.00 | 1.00 | $0.239 | 14 | 136 s | 9/9 | 10/10 | 2/2 | 9,342 | 421,472 | 41,279 |
 
 ## codex-terra-v5
 
