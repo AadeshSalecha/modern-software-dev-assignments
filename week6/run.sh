@@ -34,8 +34,9 @@
 #   KIT_JUDGE    the session that decides between different reports
 #   KIT_SECOND_FALLBACK, KIT_THIRD_FALLBACK   what runs if those two do not get going
 # Other switches for experiments: KIT_TOOLS, KIT_MAX_TURNS, KIT_NO_HOOK=1, KIT_NO_FOLLOWUP=1,
-# KIT_VARIANT=flags (the bare ticket with only the harness flags changed) or report (only the
-# report, by one session), KIT_SOLVE_END,
+# KIT_VARIANT=flags (the bare ticket with only the harness flags changed), report (only the
+# report, by one session with the kit) or raw-report (only the session that derives the report
+# from the raw files), KIT_SOLVE_END,
 # KIT_HARD_STOP, KIT_FIX_BUDGET, KIT_JUDGE_BUDGET, KIT_RECONCILE=fails, KIT_KEEP_B=1, KIT_MONEY,
 # KIT_MAIN_SHARE, KIT_ADAPT=0 (follow-ups keep their effort), KIT_NO_NUDGE=1 (no word about unused budget).
 set -u
@@ -72,7 +73,7 @@ REPORT_END=${KIT_REPORT_END:-220}      # the report-only session is stopped this
 # the main solver is told once if it stops with a good part of its share unused, and the
 # follow-up sessions run at effort high when the run can afford that (KIT_ADAPT=0: never).
 export KIT_MONEY="${KIT_MONEY:-0.72}"  # dollars the run means to stay under; full cost credit ends at 0.75
-MAIN_SHARE=${KIT_MAIN_SHARE:-0.36}     # of which the main solver's first session may use this much
+MAIN_SHARE=${KIT_MAIN_SHARE:-0.30}     # of which the main solver's first session may use this much
 SECOND_SHARE=${KIT_SECOND_SHARE:-0.18} # and the second solver this much (it is told; see also its time limit)
 export KIT_STARTED=$STARTED
 export KIT_LOGS="$ROOT/work/logs"
@@ -227,6 +228,17 @@ agent() { # agent <harness:model:effort> <start|resume> <seconds> <name> <prompt
 
 harness_of() { echo "${1%%:*}"; }
 
+show() { # show <log>...: the end of each session log. The whole of them would push this
+  # script's own lines past the 5 MB that the practice tool and the grader keep of its output.
+  local log
+  for log in "$@"; do
+    [ -f "$log" ] || continue
+    echo "run.sh: ---- $(basename "$log"), last 600 kB of $(wc -c <"$log" | tr -d ' ') bytes ----"
+    tail -c 600000 "$log"
+    echo
+  done
+}
+
 log_for() { # log_for <step> <spec>: where that session's output goes (kit/spend.py reads the name)
   local rest=${2#*:}
   echo "$ROOT/work/logs/$1.$(harness_of "$2").${rest%%:*}.jsonl"
@@ -365,6 +377,22 @@ PREPARED=1
 mkdir -p work/logs work/cross
 PROMPT="$(compose kit/prompt.md)"
 
+if [ "${KIT_VARIANT:-}" = "raw-report" ]; then
+  # Experiment: only the session that derives the report from the raw files, to measure it.
+  if make_room; then
+    RAW_PROMPT="$(cat kit/prompt-report-raw.md)
+$(printf '\n<ticket file="%s">\n' "$TASK_FILE")
+$(cat "$TASK_FILE")
+</ticket>"
+    (cd "$C_ROOT" && KIT_NO_HOOK=1 with_fallback "$THIRD" "$THIRD_FALLBACK" c "$REPORT_END" report "$RAW_PROMPT")
+    show work/logs/c.*.jsonl work/logs/c2.*.jsonl
+    mkdir -p out && cp "$C_ROOT"/out/* out/ 2>/dev/null
+    cp "$C_ROOT/report.py" work/report-raw.py 2>/dev/null
+  fi
+  echo "run.sh: raw-file report only, after $(elapsed) s; estimated spend: $(python3 kit/spend.py work/logs | tail -1)"
+  exit 0
+fi
+
 if [ "${KIT_VARIANT:-}" = "report" ]; then
   # Experiment: one session that answers only the report request, to measure the report
   # skill by itself. Nothing under app/ is meant to change.
@@ -399,7 +427,7 @@ improve() {
   log=$(log_for "$name" "$spec")
   KIT_SESSION=$name KIT_PHASE=$name agent "$spec" resume $((FIX_END - $(elapsed))) all "$prompt" >"$log" 2>&1
   echo "run.sh: $name session ($spec) ended with status $? after $(elapsed) s"
-  cat "$log"
+  show "$log"
   stop_services
   keep=0
   verdict="there was no time left to check it"
@@ -486,7 +514,7 @@ A_LOG=$(log_for a "$MAIN")
 KIT_SESSION=a KIT_SHARE=$MAIN_SHARE KIT_PHASE=solve agent "$MAIN" start $((SOLVE_END - $(elapsed))) all "$PROMPT" >"$A_LOG" 2>&1
 echo "run.sh: main solver ($MAIN) ended with status $? after $(elapsed) s"
 A_ENDED=$(elapsed)
-cat "$A_LOG"
+show "$A_LOG"
 if [ -n "$SECOND" ]; then
   # The second solver gets two and a half more minutes (and at least 200 s in all): the main
   # solver's session is resumed later, and its cached context is gone five minutes after its
@@ -512,12 +540,12 @@ if [ -n "$SECOND" ]; then
   pkill -P "$B_TIMER" 2>/dev/null
   kill "$B_TIMER" 2>/dev/null
   wait "$B_TIMER" 2>/dev/null
-  cat work/logs/b.*.jsonl work/logs/b2.*.jsonl 2>/dev/null
+  show work/logs/b.*.jsonl work/logs/b2.*.jsonl
 fi
 if [ -n "$C_PID" ]; then
   wait "$C_PID"
   echo "run.sh: report-only session ended with status $? after $(elapsed) s; its output follows"
-  cat work/logs/c.*.jsonl work/logs/c2.*.jsonl 2>/dev/null
+  show work/logs/c.*.jsonl work/logs/c2.*.jsonl
   ls "$C_ROOT/out" 2>/dev/null | sed 's/^/run.sh: it wrote out\//'
 fi
 BACKGROUND=""
@@ -623,7 +651,7 @@ $(head -40 work/cross/gate.txt)"
     if [ -n "$JUDGE_PID" ]; then
       wait "$JUDGE_PID"
       echo "run.sh: report decision ($judge_spec) ended with status $? after $(elapsed) s"
-      cat "$JUDGE_LOG"
+      show "$JUDGE_LOG"
       for report in work/cross/out-a/*.json; do
         [ -e "$report" ] || continue
         if ! python3 -c 'import json, sys; json.load(open(sys.argv[1]))' "out/$(basename "$report")" 2>/dev/null; then
