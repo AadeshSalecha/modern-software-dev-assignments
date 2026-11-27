@@ -41,6 +41,13 @@ Rebuilt by `make_results.py`.
 | v2e-zip-sonnet-low | 2/2 | 1.00 | 1.00 | $0.472 | $0.47 to $0.48 | 28 | 218 s | 229 s |
 | v2f-zip-sonnet-low | 2/2 | 1.00 | 1.00 | $0.508 | $0.47 to $0.55 | 30 | 190 s | 195 s |
 | v2g-sonnet-terra | 2/2 | 1.00 | 1.00 | $0.472 | $0.43 to $0.51 | 37 | 291 s | 309 s |
+| v3a-budget | 2/2 | 1.00 | 1.00 | $0.492 | $0.45 to $0.53 | 28 | 193 s | 198 s |
+| v3b-budget | 2/2 | 1.00 | 1.00 | $0.523 | $0.52 to $0.53 | 33 | 241 s | 272 s |
+| v3-budget-sonnet-terra | 2/2 | 1.00 | 1.00 | $0.571 | $0.53 to $0.61 | 46 | 407 s | 435 s |
+| v3c-budget | 2/2 | 1.00 | 1.00 | $0.526 | $0.52 to $0.53 | 32 | 233 s | 236 s |
+| v3c-budget-sonnet-terra | 2/2 | 1.00 | 1.00 | $0.502 | $0.47 to $0.54 | 40 | 366 s | 370 s |
+| rep-new-starter | 0/4 | 0.00 | 1.00 | $0.074 | $0.07 to $0.08 | 6 | 32 s | 34 s |
+| v3d-budget-sonnet-terra | 1/1 | 1.00 | 1.00 | $0.443 | $0.44 to $0.44 | 41 | 344 s | 344 s |
 | v2d-from-zip | 1/1 | 1.00 | 1.00 | $0.243 | $0.24 to $0.24 | 13 | 113 s | 113 s |
 
 ## baseline
@@ -384,6 +391,108 @@ The submitted pairing at the commit of the zip for submission 2 (51ef415), on th
 | mac-20261127-092216-1 | PASS | 1.00 | 1.00 | $0.434 | 34 | 274 s | 9/9 | 10/10 | 2/2 | 19,276 | 1,366,263 | 54,210 |
 | mac-20261127-092216-2 | PASS | 1.00 | 1.00 | $0.509 | 40 | 309 s | 9/9 | 10/10 | 2/2 | 21,128 | 1,542,977 | 54,612 |
 
+## v3a-budget
+
+First budget-aware version: kit/budget.py, one message to a solver that stops with its share unused, follow-ups at effort high when affordable (dev tree, before commit 77a8706). Sonnet main, Sonnet low second.
+
+| Run | Result | Repair | Impact | Cost | Requests | Time | Incident | Regr. | Compat | Output | Cache read | Cache write |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 20261127-083019-1 | PASS | 1.00 | 1.00 | $0.532 | 30 | 198 s | 9/9 | 10/10 | 2/2 | 20,894 | 905,457 | 93,089 |
+| 20261127-083019-2 | PASS | 1.00 | 1.00 | $0.451 | 27 | 188 s | 9/9 | 10/10 | 2/2 | 17,335 | 797,913 | 79,059 |
+
+## v3b-budget
+
+Commit 77a8706: the stop hook persists on hard failures and open ledger lines while budget remains; finish round; cross-check counts a scenario that only the other repair passes. Sonnet main, Sonnet low second.
+
+| Run | Result | Repair | Impact | Cost | Requests | Time | Incident | Regr. | Compat | Output | Cache read | Cache write |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 20261127-084616-1 | PASS | 1.00 | 1.00 | $0.527 | 34 | 272 s | 9/9 | 10/10 | 2/2 | 20,839 | 1,068,387 | 84,690 |
+| 20261127-084616-2 | PASS | 1.00 | 1.00 | $0.519 | 32 | 209 s | 9/9 | 10/10 | 2/2 | 19,700 | 1,021,457 | 87,753 |
+
+## v3-budget-sonnet-terra
+
+Commit 77a8706 with the real pairing on the Mac. The second solver's repair was installed in both runs on a count of failures; fixed in the next commit.
+
+| Run | Result | Repair | Impact | Cost | Requests | Time | Incident | Regr. | Compat | Output | Cache read | Cache write |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| mac-20261127-094617-1 | PASS | 1.00 | 1.00 | $0.612 | 51 | 435 s | 9/9 | 10/10 | 2/2 | 27,757 | 2,354,639 | 63,854 |
+| mac-20261127-094617-2 | PASS | 1.00 | 1.00 | $0.529 | 42 | 379 s | 9/9 | 10/10 | 2/2 | 24,136 | 1,835,032 | 59,981 |
+
+## v3c-budget
+
+Commit 7bfe15c: budget messages follow the agent's own open items; private bus formats left out of the comparison; the main repair stands unless the other is objectively better. Sonnet main, Sonnet low second.
+
+| Run | Result | Repair | Impact | Cost | Requests | Time | Incident | Regr. | Compat | Output | Cache read | Cache write |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 20261127-090318-1 | PASS | 1.00 | 1.00 | $0.530 | 29 | 236 s | 9/9 | 10/10 | 2/2 | 20,167 | 937,449 | 93,856 |
+| 20261127-090318-2 | PASS | 1.00 | 1.00 | $0.522 | 34 | 230 s | 9/9 | 10/10 | 2/2 | 20,444 | 1,068,324 | 84,272 |
+
+## v3c-budget-sonnet-terra
+
+Commit 7bfe15c with the real pairing on the Mac.
+
+| Run | Result | Repair | Impact | Cost | Requests | Time | Incident | Regr. | Compat | Output | Cache read | Cache write |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| mac-20261127-100319-1 | PASS | 1.00 | 1.00 | $0.467 | 38 | 370 s | 9/9 | 10/10 | 2/2 | 21,784 | 1,555,098 | 52,664 |
+| mac-20261127-100319-2 | PASS | 1.00 | 1.00 | $0.536 | 42 | 362 s | 9/9 | 10/10 | 2/2 | 24,585 | 1,871,478 | 58,233 |
+
+## rep-new-starter
+
+Report only (KIT_VARIANT=report), rewritten report skill (commit 0e0854c): one Sonnet session answers the report request and nothing else. Repair is 0 by construction.
+
+| Run | Result | Repair | Impact | Cost | Requests | Time | Incident | Regr. | Compat | Output | Cache read | Cache write |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 20261127-093023-1 | FAIL | 0.00 | 1.00 | $0.073 | 7 | 32 s | 0/9 | 10/10 | 2/2 | 3,105 | 88,842 | 13,091 |
+| 20261127-093023-2 | FAIL | 0.00 | 1.00 | $0.081 | 7 | 34 s | 0/9 | 10/10 | 2/2 | 3,539 | 94,268 | 14,602 |
+| 20261127-093023-3 | FAIL | 0.00 | 1.00 | $0.074 | 6 | 31 s | 0/9 | 10/10 | 2/2 | 3,239 | 74,890 | 13,720 |
+| 20261127-093023-4 | FAIL | 0.00 | 1.00 | $0.069 | 6 | 30 s | 0/9 | 10/10 | 2/2 | 2,928 | 72,438 | 12,787 |
+
+Failures:
+- 20261127-093023-1: [incident] a payment sent again after the api stopped before answering is one event
+- 20261127-093023-1: [incident] a payment sent again after an api restart is one event
+- 20261127-093023-1: [incident] a payment sent again after the api stopped while publishing is one event
+- 20261127-093023-1: [incident] a payment sent again two hours after an api restart is one event
+- 20261127-093023-1: [incident] a repeat the deployed release queued for a retry is not sent once the release is replaced
+- 20261127-093023-1: [incident] a repeat whose original was delivered is never sent
+- 20261127-093023-1: [incident] repeats of several payments are each stopped
+- 20261127-093023-1: [incident] a repeat that is being sent when the release is replaced is not retried
+- 20261127-093023-1: [incident] starting the replaced release twice stops nothing more
+- 20261127-093023-2: [incident] a payment sent again after the api stopped before answering is one event
+- 20261127-093023-2: [incident] a payment sent again after an api restart is one event
+- 20261127-093023-2: [incident] a payment sent again after the api stopped while publishing is one event
+- 20261127-093023-2: [incident] a payment sent again two hours after an api restart is one event
+- 20261127-093023-2: [incident] a repeat the deployed release queued for a retry is not sent once the release is replaced
+- 20261127-093023-2: [incident] a repeat whose original was delivered is never sent
+- 20261127-093023-2: [incident] repeats of several payments are each stopped
+- 20261127-093023-2: [incident] a repeat that is being sent when the release is replaced is not retried
+- 20261127-093023-2: [incident] starting the replaced release twice stops nothing more
+- 20261127-093023-3: [incident] a payment sent again after the api stopped before answering is one event
+- 20261127-093023-3: [incident] a payment sent again after an api restart is one event
+- 20261127-093023-3: [incident] a payment sent again after the api stopped while publishing is one event
+- 20261127-093023-3: [incident] a payment sent again two hours after an api restart is one event
+- 20261127-093023-3: [incident] a repeat the deployed release queued for a retry is not sent once the release is replaced
+- 20261127-093023-3: [incident] a repeat whose original was delivered is never sent
+- 20261127-093023-3: [incident] repeats of several payments are each stopped
+- 20261127-093023-3: [incident] a repeat that is being sent when the release is replaced is not retried
+- 20261127-093023-3: [incident] starting the replaced release twice stops nothing more
+- 20261127-093023-4: [incident] a payment sent again after the api stopped before answering is one event
+- 20261127-093023-4: [incident] a payment sent again after an api restart is one event
+- 20261127-093023-4: [incident] a payment sent again after the api stopped while publishing is one event
+- 20261127-093023-4: [incident] a payment sent again two hours after an api restart is one event
+- 20261127-093023-4: [incident] a repeat the deployed release queued for a retry is not sent once the release is replaced
+- 20261127-093023-4: [incident] a repeat whose original was delivered is never sent
+- 20261127-093023-4: [incident] repeats of several payments are each stopped
+- 20261127-093023-4: [incident] a repeat that is being sent when the release is replaced is not retried
+- 20261127-093023-4: [incident] starting the replaced release twice stops nothing more
+
+## v3d-budget-sonnet-terra
+
+Commit 0e0854c, the zip for submission 2, with the real pairing on the Mac.
+
+| Run | Result | Repair | Impact | Cost | Requests | Time | Incident | Regr. | Compat | Output | Cache read | Cache write |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| mac-20261127-103337-1 | PASS | 1.00 | 1.00 | $0.443 | 41 | 344 s | 9/9 | 10/10 | 2/2 | 20,431 | 1,676,146 | 48,104 |
+
 ## v2d-from-zip
 
 The zip for submission 2, unpacked, nothing set (commit b407568). No Codex in the container, so the second solver cannot start: the run shows that case.
@@ -392,10 +501,13 @@ The zip for submission 2, unpacked, nothing set (commit b407568). No Codex in th
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 20261126-210148-1 | PASS | 1.00 | 1.00 | $0.243 | 13 | 113 s | 9/9 | 10/10 | 2/2 | 8,859 | 381,754 | 46,394 |
 
-## Transfer incident (INC-2231, endpoint changes ignored)
+## Other incidents (INC-2231, INC-2307, INC-2318)
 
-A second incident built to test the setup on a ticket it was not designed around; see
-`transfer/README.md`. Scored by `transfer/inc-2231/judge.py` with the assignment's formulas.
+Incidents built to test the setup on tickets it was not designed around; see
+`transfer/README.md` and each folder's `NOTES.md`. Scored by each incident's `judge.py` with the
+assignment's formulas. Labels without an incident number are INC-2231. `rep-` labels are
+report-only runs (repair 0 by construction); `sub1-` is the first submission's version;
+`v2zip-` the two-solver version of 2026-11-26; `v3c-`/`v3d-` the budget-aware versions.
 
 | Setup | Run | Result | Repair | Impact | Cost | Requests | Time | Incident | Regr. | Compat |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -404,6 +516,16 @@ A second incident built to test the setup on a ticket it was not designed around
 | codex-luna | 20261126-170021-1 | PASS | 1.0 | 1.0 | $0.029 | 23 | 481 s | 9/9 | 9/9 | 4/4 |
 | codex-terra | 20261126-165400-1 | PASS | 1.0 | 1.0 | $0.110 | 19 | 183 s | 9/9 | 9/9 | 4/4 |
 | codex-terra | 20261126-165400-2 | PASS | 1.0 | 1.0 | $0.147 | 21 | 186 s | 9/9 | 9/9 | 4/4 |
+| rep-new-2231 | 20261127-092755-1 | FAIL | 0.0 | 1.0 | $0.072 | 5 | 27 s | 0/9 | 9/9 | 4/4 |
+| rep-new-2231 | 20261127-092755-2 | FAIL | 0.0 | 1.0 | $0.081 | 6 | 33 s | 0/9 | 9/9 | 4/4 |
+| rep-new-2307 | 20261127-092755-1 | FAIL | 0.0 | 1.0 | $0.094 | 6 | 41 s | 0/19 | 21/21 | 6/6 |
+| rep-new-2307 | 20261127-092755-2 | FAIL | 0.0 | 1.0 | $0.087 | 6 | 31 s | 0/19 | 21/21 | 6/6 |
+| rep-new-2307 | 20261127-092755-3 | FAIL | 0.0 | 1.0 | $0.081 | 5 | 29 s | 0/19 | 21/21 | 6/6 |
+| rep-new-2318 | 20261127-092755-1 | FAIL | 0.0 | 1.0 | $0.081 | 6 | 28 s | 0/19 | 19/19 | 6/6 |
+| rep-new-2318 | 20261127-092755-2 | FAIL | 0.0 | 1.0 | $0.072 | 5 | 24 s | 0/19 | 19/19 | 6/6 |
+| rep-old-2307 | 20261127-092755-1 | FAIL | 0.0 | 0.6222 | $0.061 | 6 | 24 s | 0/19 | 21/21 | 6/6 |
+| rep-old-2307 | 20261127-092755-2 | FAIL | 0.0 | 0.6222 | $0.068 | 6 | 28 s | 0/19 | 21/21 | 6/6 |
+| rep-old-2307 | 20261127-092755-3 | FAIL | 0.0 | 0.6222 | $0.075 | 6 | 27 s | 0/19 | 21/21 | 6/6 |
 | sonnet-main-terra-rescue | 20261126-172727-1 | PASS | 1.0 | 1.0 | $0.413 | 23 | 250 s | 9/9 | 9/9 | 4/4 |
 | sonnet-medium | 20261126-150246-1 | PASS | 1.0 | 1.0 | $0.364 | 25 | 179 s | 9/9 | 9/9 | 4/4 |
 | sonnet-medium | 20261126-150246-2 | PASS | 1.0 | 1.0 | $0.270 | 14 | 136 s | 9/9 | 9/9 | 4/4 |
@@ -411,6 +533,10 @@ A second incident built to test the setup on a ticket it was not designed around
 | sonnet-medium-v5 | 20261126-153044-1 | PASS | 1.0 | 1.0 | $0.448 | 28 | 234 s | 9/9 | 9/9 | 4/4 |
 | sonnet-medium-v5 | 20261126-153044-2 | PASS | 1.0 | 1.0 | $0.265 | 18 | 150 s | 9/9 | 9/9 | 4/4 |
 | sonnet-medium-v5 | 20261126-153044-3 | PASS | 1.0 | 1.0 | $0.300 | 19 | 146 s | 9/9 | 9/9 | 4/4 |
+| sub1-2307 | 20261127-093346-1 | FAIL | 1.0 | 0.6222 | $0.262 | 13 | 141 s | 19/19 | 21/21 | 6/6 |
+| sub1-2307 | 20261127-093346-2 | FAIL | 1.0 | 0.6222 | $0.199 | 10 | 105 s | 19/19 | 21/21 | 6/6 |
+| sub1-2318 | 20261127-093346-1 | FAIL | 0.8232 | 1.0 | $0.635 | 31 | 381 s | 17/19 | 19/19 | 4/6 |
+| sub1-2318 | 20261127-093346-2 | PASS | 1.0 | 1.0 | $0.598 | 32 | 363 s | 19/19 | 19/19 | 6/6 |
 | v2-sonnet-plus-haiku | 20261126-195841-1 | PASS | 1.0 | 1.0 | $0.423 | 53 | 342 s | 9/9 | 9/9 | 4/4 |
 | v2c-sonnet-plus-haiku | 20261126-204327-1 | PASS | 1.0 | 1.0 | $0.304 | 34 | 252 s | 9/9 | 9/9 | 4/4 |
 | v2c-sonnet-plus-haiku | 20261126-204327-2 | PASS | 1.0 | 1.0 | $0.524 | 67 | 388 s | 9/9 | 9/9 | 4/4 |
@@ -419,6 +545,21 @@ A second incident built to test the setup on a ticket it was not designed around
 | v2f-zip-sonnet-plus-haiku | 20261126-211406-1 | PASS | 1.0 | 1.0 | $0.524 | 51 | 463 s | 9/9 | 9/9 | 4/4 |
 | v2f-zip-sonnet-plus-haiku | 20261126-211406-2 | PASS | 1.0 | 1.0 | $0.481 | 56 | 396 s | 9/9 | 9/9 | 4/4 |
 | v2g-sonnet-terra | 20261127-093228-1 | PASS | 1.0 | 1.0 | $0.564 | 49 | 348 s | 9/9 | 9/9 | 4/4 |
+| v2zip-2307-sonnet-low | 20261127-094633-1 | FAIL | 1.0 | 0.6222 | $0.616 | 34 | 303 s | 19/19 | 21/21 | 6/6 |
+| v2zip-2307-sonnet-low | 20261127-094633-2 | FAIL | 1.0 | 0.6222 | $0.589 | 29 | 258 s | 19/19 | 21/21 | 6/6 |
+| v2zip-2318-sonnet-low | 20261127-094633-1 | PASS | 1.0 | 1.0 | $0.856 | 41 | 326 s | 19/19 | 19/19 | 6/6 |
+| v2zip-2318-sonnet-low | 20261127-094633-2 | PASS | 1.0 | 1.0 | $0.662 | 32 | 201 s | 19/19 | 19/19 | 6/6 |
+| v3b-budget-sonnet-plus-haiku | 20261127-084616-1 | PASS | 1.0 | 1.0 | $0.386 | 37 | 272 s | 9/9 | 9/9 | 4/4 |
+| v3b-budget-sonnet-plus-haiku | 20261127-084616-2 | PASS | 1.0 | 1.0 | $0.376 | 30 | 244 s | 9/9 | 9/9 | 4/4 |
+| v3c-2307-sonnet-low | 20261127-091629-1 | FAIL | 1.0 | 0.6222 | $0.592 | 29 | 302 s | 19/19 | 21/21 | 6/6 |
+| v3c-2307-sonnet-low | 20261127-091629-2 | PASS | 1.0 | 1.0 | $0.705 | 36 | 239 s | 19/19 | 21/21 | 6/6 |
+| v3c-2307-sonnet-terra | 20261127-101630-1 | PASS | 1.0 | 1.0 | $0.674 | 48 | 368 s | 19/19 | 21/21 | 6/6 |
+| v3c-2318-sonnet-low | 20261127-091629-1 | PASS | 1.0 | 1.0 | $0.786 | 37 | 244 s | 19/19 | 19/19 | 6/6 |
+| v3c-2318-sonnet-low | 20261127-091629-2 | PASS | 1.0 | 1.0 | $0.779 | 39 | 221 s | 19/19 | 19/19 | 6/6 |
+| v3c-2318-sonnet-terra | 20261127-102247-1 | PASS | 1.0 | 1.0 | $0.643 | 50 | 316 s | 19/19 | 19/19 | 6/6 |
+| v3d-2231-sonnet-terra | 20261127-105117-1 | PASS | 1.0 | 1.0 | $0.649 | 55 | 385 s | 9/9 | 9/9 | 4/4 |
+| v3d-2307-sonnet-terra | 20261127-103927-1 | PASS | 1.0 | 1.0 | $0.538 | 38 | 364 s | 19/19 | 21/21 | 6/6 |
+| v3d-2318-sonnet-terra | 20261127-104554-1 | PASS | 1.0 | 1.0 | $0.689 | 44 | 314 s | 19/19 | 19/19 | 6/6 |
 
 ## Notes from reading the logs
 

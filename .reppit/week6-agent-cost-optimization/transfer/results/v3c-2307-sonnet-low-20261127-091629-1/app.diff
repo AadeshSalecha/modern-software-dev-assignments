@@ -1,0 +1,148 @@
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/api/src/main.ts week6/app/services/api/src/main.ts
+--- clean-app/services/api/src/main.ts	2026-11-26 10:01:16.143626922 +0000
++++ week6/app/services/api/src/main.ts	2026-11-27 09:17:36.346478919 +0000
+@@ -258,6 +258,34 @@
+     crash(4);
+     did += 1;
+   }
++  // Releases before 2.3.2 dropped some accepted resends in the router. Ask the router to
++  // settle each published request once; it answers the same way every time it is asked.
++  for (const row of store.unreplayed()) {
++    const data = JSON.parse(row.data);
++    let status: number;
++    try {
++      const response = await fetch(`${routerUrl}/bus`, {
++        method: "POST",
++        headers: { "content-type": "application/json" },
++        body: JSON.stringify({
++          v: 3,
++          producer: "api",
++          seq: row.seq,
++          type: "resend.replayed",
++          at: row.at,
++          data: { event_id: data.event_id, endpoint_id: data.endpoint_id, request_seq: row.seq },
++        }),
++      });
++      status = response.status;
++      await response.arrayBuffer();
++    } catch {
++      break;
++    }
++    if (status === 200) {
++      store.markReplayed(row.seq);
++      did += 1;
++    }
++  }
+   return did;
+ }
+ 
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/api/src/store.ts week6/app/services/api/src/store.ts
+--- clean-app/services/api/src/store.ts	2026-11-26 10:01:16.143626922 +0000
++++ week6/app/services/api/src/store.ts	2026-11-27 09:17:31.900811028 +0000
+@@ -65,6 +65,7 @@
+   data text not null,
+   status text not null default 'pending'
+ );
++create table if not exists resend_replayed (seq integer primary key);
+ `;
+ 
+ export class Store {
+@@ -210,6 +211,19 @@
+       .all() as unknown as OutboxRow[];
+   }
+ 
++  unreplayed(): OutboxRow[] {
++    return this.db
++      .prepare(
++        "select seq, type, at, data from outbox where type = 'resend.requested' and status = 'published' " +
++          "and seq not in (select seq from resend_replayed) order by seq",
++      )
++      .all() as unknown as OutboxRow[];
++  }
++
++  markReplayed(seq: number): void {
++    this.db.prepare("insert or ignore into resend_replayed (seq) values (?)").run(seq);
++  }
++
+   mark(seq: number, status: "published" | "rejected"): void {
+     this.db
+       .prepare("update outbox set status = ? where seq = ?")
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/bus.py week6/app/services/router/bus.py
+--- clean-app/services/router/bus.py	2026-11-26 10:01:16.144267697 +0000
++++ week6/app/services/router/bus.py	2026-11-27 09:17:31.900542603 +0000
+@@ -112,7 +112,14 @@
+         return producer, str(seq), "endpoint", body
+     if type_ == "resend.requested":
+         body = {"event_id": need(data, "event_id", str), "endpoint_id": need(data, "endpoint_id", str)}
++        body["request"] = f"{producer}:{seq}"
+         return producer, str(seq), "resend", body
++    if type_ == "resend.replayed":
++        request = need(data, "request_seq", int)
++        body = {"event_id": need(data, "event_id", str), "endpoint_id": need(data, "endpoint_id", str)}
++        body["request"] = f"{producer}:{request}"
++        body["replay"] = True
++        return producer, f"replay-{request}", "resend", body
+     raise Malformed("unknown message type")
+ 
+ 
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/routing.py week6/app/services/router/routing.py
+--- clean-app/services/router/routing.py	2026-11-26 10:01:16.144267697 +0000
++++ week6/app/services/router/routing.py	2026-11-27 09:17:31.899640565 +0000
+@@ -140,12 +140,39 @@
+         catch_up(db, log, now, endpoint, disabled_at)
+ 
+ 
++def _record_resend(db, request, delivery_id):
++    db.execute("insert or ignore into resend_done (request, delivery_id) values (?, ?)", (request, delivery_id))
++
++
+ def apply_resend(db, log, now, body):
+-    original = first_delivery(db, body["event_id"], body["endpoint_id"])
+-    if original is None:
+-        log.write("resend.skipped", level="warn", event=body["event_id"], endpoint=body["endpoint_id"])
++    event_id, endpoint_id = body["event_id"], body["endpoint_id"]
++    request = body.get("request")
++    if request is not None and db.execute("select 1 from resend_done where request = ?", (request,)).fetchone():
++        return
++    event = db.execute("select merchant_id from events where id = ?", (event_id,)).fetchone()
++    endpoint = db.execute("select merchant_id from endpoints where id = ?", (endpoint_id,)).fetchone()
++    if event is None or endpoint is None or event["merchant_id"] != endpoint["merchant_id"]:
++        log.write("resend.skipped", level="warn", event=event_id, endpoint=endpoint_id)
+         return
+-    create_delivery(db, log, now, body["event_id"], body["endpoint_id"], resend_of=original["id"])
++    if body.get("replay"):
++        # A request applied by an earlier release: it may already have its delivery.
++        claimed = db.execute(
++            "select id from deliveries where event_id = ? and endpoint_id = ? and resend_of is not null "
++            "and id not in (select delivery_id from resend_done) order by ord",
++            (event_id, endpoint_id),
++        ).fetchone()
++        if claimed:
++            _record_resend(db, request, claimed["id"])
++            return
++    previous = db.execute(
++        "select id from deliveries where event_id = ? and endpoint_id = ? order by (resend_of is not null), ord",
++        (event_id, endpoint_id),
++    ).fetchone()
++    delivery_id = create_delivery(db, log, now, event_id, endpoint_id, resend_of=previous["id"] if previous else "self")
++    if previous is None:
++        db.execute("update deliveries set resend_of = id where id = ?", (delivery_id,))
++    if request is not None:
++        _record_resend(db, request, delivery_id)
+ 
+ 
+ def apply(db, log, now, kind, body):
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/store.py week6/app/services/router/store.py
+--- clean-app/services/router/store.py	2026-11-26 10:01:16.144267697 +0000
++++ week6/app/services/router/store.py	2026-11-27 09:17:31.900201230 +0000
+@@ -15,6 +15,10 @@
+     ident text not null,
+     primary key (producer, ident)
+ );
++create table if not exists resend_done (
++    request text primary key,
++    delivery_id text not null
++);
+ create table if not exists endpoints (
+     id text primary key,
+     merchant_id text not null,

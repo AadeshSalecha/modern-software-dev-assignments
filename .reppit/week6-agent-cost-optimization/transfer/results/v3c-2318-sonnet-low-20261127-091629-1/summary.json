@@ -1,0 +1,93 @@
+{
+  "passed": true,
+  "score": {
+    "passed": true,
+    "repair": 1.0,
+    "impact": {
+      "impact": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "figures_right": 10,
+      "figures": 10,
+      "problem": null,
+      "reported": {
+        "endpoints": [
+          "ep_harbor_1",
+          "ep_isle_1",
+          "ep_isle_2",
+          "ep_juniper_1",
+          "ep_moss_1",
+          "ep_nettle_1"
+        ],
+        "entries": 71,
+        "skipped_rows": 116
+      }
+    },
+    "categories": {
+      "incident": {
+        "passed": 19,
+        "total": 19,
+        "failed": [],
+        "classes": {
+          "plain": {
+            "passed": 3,
+            "total": 3
+          },
+          "several times": {
+            "passed": 3,
+            "total": 3
+          },
+          "types": {
+            "passed": 2,
+            "total": 2
+          },
+          "restart or crash": {
+            "passed": 2,
+            "total": 2
+          },
+          "older bus versions": {
+            "passed": 2,
+            "total": 2
+          },
+          "already skipped": {
+            "passed": 7,
+            "total": 7
+          }
+        }
+      },
+      "regressions": {
+        "passed": 19,
+        "total": 19,
+        "failed": []
+      },
+      "compat": {
+        "passed": 6,
+        "total": 6,
+        "failed": []
+      }
+    },
+    "build_problem": null
+  },
+  "exit_code": 0,
+  "timed_out": false,
+  "seconds": 243.6,
+  "error": null,
+  "cost_usd": 0.7855965000000001,
+  "requests": 37,
+  "rejected": [
+    "endpoint_not_available",
+    "endpoint_not_available"
+  ],
+  "upstream_errors": 0,
+  "by_model": {
+    "claude-sonnet-5-5": {
+      "requests": 37,
+      "cost_usd": 0.7855965000000001,
+      "input": 78,
+      "output": 35481,
+      "cache_read": 1456105,
+      "cache_write": 114008,
+      "cache_write_1h": 0
+    }
+  }
+}

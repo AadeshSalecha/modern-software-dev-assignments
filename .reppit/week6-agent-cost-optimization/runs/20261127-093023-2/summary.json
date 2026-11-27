@@ -1,0 +1,115 @@
+{
+  "passed": false,
+  "score": {
+    "categories": {
+      "incident": {
+        "passed": 0,
+        "total": 9,
+        "failed": [
+          {
+            "name": "a payment sent again after the api stopped before answering is one event",
+            "problems": [
+              "pay_1 -> ep_a: delivered as 2 events, expected 1",
+              "a payment reaches an endpoint as a second event"
+            ]
+          },
+          {
+            "name": "a payment sent again after an api restart is one event",
+            "problems": [
+              "pay_1 -> ep_a: delivered as 2 events, expected 1",
+              "a payment reaches an endpoint as a second event"
+            ]
+          },
+          {
+            "name": "a payment sent again after the api stopped while publishing is one event",
+            "problems": [
+              "pay_1 -> ep_a: delivered as 2 events, expected 1",
+              "a payment reaches an endpoint as a second event"
+            ]
+          },
+          {
+            "name": "a payment sent again two hours after an api restart is one event",
+            "problems": [
+              "pay_1 -> ep_a: delivered as 2 events, expected 1",
+              "a payment reaches an endpoint as a second event"
+            ]
+          },
+          {
+            "name": "a repeat the deployed release queued for a retry is not sent once the release is replaced",
+            "problems": [
+              "pay_1 -> ep_a: delivered as 2 events, expected 1",
+              "a payment reaches an endpoint as a second event"
+            ]
+          },
+          {
+            "name": "a repeat whose original was delivered is never sent",
+            "problems": [
+              "pay_1 -> ep_b: delivered as 2 events, expected 1",
+              "a payment reaches an endpoint as a second event"
+            ]
+          },
+          {
+            "name": "repeats of several payments are each stopped",
+            "problems": [
+              "pay_1 -> ep_a: delivered as 2 events, expected 1",
+              "pay_2 -> ep_a: delivered as 2 events, expected 1",
+              "a payment reaches an endpoint as a second event"
+            ]
+          },
+          {
+            "name": "a repeat that is being sent when the release is replaced is not retried",
+            "problems": [
+              "pay_1 -> ep_a: delivered as 2 events, expected 1",
+              "a payment reaches an endpoint as a second event"
+            ]
+          },
+          {
+            "name": "starting the replaced release twice stops nothing more",
+            "problems": [
+              "pay_1 -> ep_a: delivered as 2 events, expected 1",
+              "a payment reaches an endpoint as a second event"
+            ]
+          }
+        ]
+      },
+      "regressions": {
+        "passed": 10,
+        "total": 10,
+        "failed": []
+      },
+      "compat": {
+        "passed": 2,
+        "total": 2,
+        "failed": []
+      }
+    },
+    "repair": 0.0,
+    "impact": 1.0,
+    "precision": 1.0,
+    "recall": 1.0,
+    "totals_right": 6,
+    "totals": 6,
+    "seconds": 5.9
+  },
+  "exit_code": 0,
+  "timed_out": false,
+  "seconds": 33.8,
+  "error": null,
+  "cost_usd": 0.0813498,
+  "requests": 7,
+  "rejected": [
+    "endpoint_not_available"
+  ],
+  "upstream_errors": 0,
+  "by_model": {
+    "claude-sonnet-5-5": {
+      "requests": 7,
+      "cost_usd": 0.0813498,
+      "input": 14,
+      "output": 3539,
+      "cache_read": 94268,
+      "cache_write": 14602,
+      "cache_write_1h": 0
+    }
+  }
+}

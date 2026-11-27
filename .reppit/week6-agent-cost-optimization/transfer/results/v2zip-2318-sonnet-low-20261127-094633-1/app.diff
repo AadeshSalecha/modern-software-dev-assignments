@@ -1,0 +1,245 @@
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/api/src/main.ts week6/app/services/api/src/main.ts
+--- clean-app/services/api/src/main.ts	2026-11-26 10:01:16.143626922 +0000
++++ week6/app/services/api/src/main.ts	2026-11-27 09:49:00.897513519 +0000
+@@ -50,6 +50,10 @@
+   );
+ }
+ 
++// Owed events of earlier switch-ons that the router may never have been told
++// about. Safe on every start: each switch-on is handed over once.
++store.transaction(() => store.backlog(null, null, now()));
++
+ // --- request handling -----------------------------------------------------
+ 
+ type Reply = [number, unknown];
+@@ -126,6 +130,10 @@
+       version: current.version + 1,
+     };
+     store.saveEndpoint(next, now());
++    if (!current.enabled && next.enabled) {
++      const last = store.db.prepare("select max(seq) as s from outbox").get() as { s: number };
++      store.backlog(id, last.s, now());
++    }
+     return next;
+   });
+   if (!endpoint) return [404, { error: "no such endpoint" }];
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/api/src/store.ts week6/app/services/api/src/store.ts
+--- clean-app/services/api/src/store.ts	2026-11-26 10:01:16.143626922 +0000
++++ week6/app/services/api/src/store.ts	2026-11-27 09:49:00.894244067 +0000
+@@ -58,6 +58,11 @@
+   data text not null,
+   idempotency_key text
+ );
++create table if not exists catchup_done (
++  endpoint_id text not null,
++  on_seq integer not null,
++  primary key (endpoint_id, on_seq)
++);
+ create table if not exists outbox (
+   seq integer primary key autoincrement,
+   type text not null,
+@@ -153,6 +158,71 @@
+     this.enqueue("endpoint.changed", now, { endpoint });
+   }
+ 
++  // A switch-on (off -> on) is owed its merchant's events accepted after the
++  // change that switched it off (or its creation) and before the switch-on, of a
++  // type it is subscribed to at the switch-on. Order is the outbox sequence.
++  // Hands the owed events of switch-ons not yet handed over to the router, for
++  // endpoints that are on now (or only `only`). Call inside a transaction.
++  // `skipSeq`: a switch-on the router has just been told about in order.
++  backlog(only: string | null, skipSeq: number | null, at: number): void {
++    const rows = this.db
++      .prepare(
++        "select seq, type, data from outbox where type in ('event.accepted', 'endpoint.changed') order by seq",
++      )
++      .all() as unknown as { seq: number; type: string; data: string }[];
++    const state = new Map<string, { enabled: boolean; offSeq: number }>();
++    const byMerchant = new Map<string, { seq: number; id: string; type: string }[]>();
++    const current = new Map<string, Endpoint>();
++    const ons: { ep: Endpoint; offSeq: number; onSeq: number }[] = [];
++    for (const row of rows) {
++      const data = JSON.parse(row.data);
++      if (row.type === "event.accepted") {
++        const e = data.event;
++        const list = byMerchant.get(e.merchant_id) ?? [];
++        list.push({ seq: row.seq, id: e.id, type: e.type });
++        byMerchant.set(e.merchant_id, list);
++        continue;
++      }
++      const ep = data.endpoint as Endpoint;
++      const prev = state.get(ep.id);
++      if (!prev) {
++        state.set(ep.id, { enabled: ep.enabled, offSeq: row.seq });
++      } else if (prev.enabled && !ep.enabled) {
++        state.set(ep.id, { enabled: false, offSeq: row.seq });
++      } else if (!prev.enabled && ep.enabled) {
++        ons.push({ ep, offSeq: prev.offSeq, onSeq: row.seq });
++        state.set(ep.id, { enabled: true, offSeq: 0 });
++      }
++      current.set(ep.id, ep);
++    }
++    for (const on of ons) {
++      if (only !== null && on.ep.id !== only) continue;
++      if (!current.get(on.ep.id)?.enabled) continue;
++      const done = this.db
++        .prepare("select 1 from catchup_done where endpoint_id = ? and on_seq = ?")
++        .get(on.ep.id, on.onSeq);
++      if (done) continue;
++      if (on.onSeq !== skipSeq) {
++        const owed = (byMerchant.get(on.ep.merchant_id) ?? [])
++          .filter(
++            (e) =>
++              e.seq > on.offSeq &&
++              e.seq < on.onSeq &&
++              (on.ep.event_types.includes("*") || on.ep.event_types.includes(e.type)),
++          )
++          .map((e) => e.id);
++        if (owed.length > 0)
++          this.enqueue("catchup.requested", at, {
++            endpoint_id: on.ep.id,
++            event_ids: owed,
++          });
++      }
++      this.db
++        .prepare("insert into catchup_done (endpoint_id, on_seq) values (?, ?)")
++        .run(on.ep.id, on.onSeq);
++    }
++  }
++
+   event(id: string): EventRecord | undefined {
+     const row = this.db.prepare("select * from events where id = ?").get(id) as
+       | Record<string, unknown>
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/bus.py week6/app/services/router/bus.py
+--- clean-app/services/router/bus.py	2026-11-26 10:01:16.144267697 +0000
++++ week6/app/services/router/bus.py	2026-11-27 09:48:36.476993548 +0000
+@@ -113,6 +113,12 @@
+     if type_ == "resend.requested":
+         body = {"event_id": need(data, "event_id", str), "endpoint_id": need(data, "endpoint_id", str)}
+         return producer, str(seq), "resend", body
++    if type_ == "catchup.requested":
++        ids = need(data, "event_ids", list)
++        if not all(isinstance(i, str) for i in ids):
++            raise Malformed("event_ids must be strings")
++        body = {"endpoint_id": need(data, "endpoint_id", str), "event_ids": ids}
++        return producer, str(seq), "catchup", body
+     raise Malformed("unknown message type")
+ 
+ 
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/routing.py week6/app/services/router/routing.py
+--- clean-app/services/router/routing.py	2026-11-26 10:01:16.144267697 +0000
++++ week6/app/services/router/routing.py	2026-11-27 09:48:36.475417352 +0000
+@@ -5,8 +5,6 @@
+ 
+ from store import next_id
+ 
+-CATCH_UP_SECONDS = 24 * 3600
+-
+ # INC-2188 workaround (2.3.1). With it on, an endpoint change does not create deliveries
+ # at the endpoint's new version, so a delivery that was queued keeps going under the
+ # version it was created for. Leave it on until deliveries stop being keyed by version.
+@@ -86,13 +84,18 @@
+             create_delivery(db, log, now, event["id"], ep["id"])
+ 
+ 
+-def catch_up(db, log, now, endpoint, since):
+-    """Deliver what the endpoint missed while it was disabled."""
+-    floor = max(since, now - CATCH_UP_SECONDS)
+-    missed = db.execute(
+-        "select id, type from events where merchant_id = ? and routed_at >= ? order by routed_at, rowid",
+-        (endpoint["merchant_id"], floor),
+-    ).fetchall()
++def catch_up(db, log, now, endpoint, since, after=None):
++    """Deliver what the endpoint missed while it was disabled, however long that was."""
++    if after is not None:
++        missed = db.execute(
++            "select id, type from events where merchant_id = ? and rowid > ? order by rowid",
++            (endpoint["merchant_id"], after),
++        ).fetchall()
++    else:
++        missed = db.execute(
++            "select id, type from events where merchant_id = ? and routed_at >= ? order by routed_at, rowid",
++            (endpoint["merchant_id"], since),
++        ).fetchall()
+     for event in missed:
+         if not subscribed(endpoint["event_types"], event["type"]):
+             continue
+@@ -101,6 +104,21 @@
+         create_delivery(db, log, now, event["id"], endpoint["id"])
+ 
+ 
++def apply_catchup(db, log, now, body):
++    """Events the api says an enabled endpoint is owed from earlier switch-ons."""
++    ep = db.execute("select * from endpoints where id = ?", (body["endpoint_id"],)).fetchone()
++    if ep is None or not ep["enabled"]:
++        log.write("catchup.skipped", level="warn", endpoint=body["endpoint_id"])
++        return
++    for event_id in body["event_ids"]:
++        ev = db.execute("select merchant_id from events where id = ?", (event_id,)).fetchone()
++        if ev is None or ev["merchant_id"] != ep["merchant_id"]:
++            continue
++        if first_delivery(db, event_id, ep["id"]):
++            continue
++        create_delivery(db, log, now, event_id, ep["id"])
++
++
+ def apply_endpoint(db, log, now, endpoint):
+     old = db.execute("select * from endpoints where id = ?", (endpoint["id"],)).fetchone()
+     if old is not None and endpoint["version"] <= old["version"]:
+@@ -108,14 +126,16 @@
+         return
+     was_enabled = bool(old["enabled"]) if old is not None else None
+     disabled_at = old["disabled_at"] if old is not None else None
++    disabled_after = old["disabled_after"] if old is not None else None
+     if not endpoint["enabled"] and was_enabled is not False:
+         disabled_at = now
++        disabled_after = db.execute("select coalesce(max(rowid), 0) from events").fetchone()[0]
+     db.execute(
+-        "insert into endpoints (id, merchant_id, url, secret, event_types, enabled, version, disabled_at) "
+-        "values (?, ?, ?, ?, ?, ?, ?, ?) "
++        "insert into endpoints (id, merchant_id, url, secret, event_types, enabled, version, disabled_at, "
++        "disabled_after) values (?, ?, ?, ?, ?, ?, ?, ?, ?) "
+         "on conflict (id) do update set url = excluded.url, secret = excluded.secret, "
+         "event_types = excluded.event_types, enabled = excluded.enabled, version = excluded.version, "
+-        "disabled_at = excluded.disabled_at",
++        "disabled_at = excluded.disabled_at, disabled_after = excluded.disabled_after",
+         (
+             endpoint["id"],
+             endpoint["merchant_id"],
+@@ -125,6 +145,7 @@
+             int(endpoint["enabled"]),
+             endpoint["version"],
+             None if endpoint["enabled"] else disabled_at,
++            None if endpoint["enabled"] else disabled_after,
+         ),
+     )
+     log.write(
+@@ -137,7 +158,7 @@
+     if old is not None and not INC_2188_WORKAROUND:
+         follow_version(db, log, now, endpoint["id"], endpoint["version"])
+     if endpoint["enabled"] and was_enabled is False and disabled_at is not None:
+-        catch_up(db, log, now, endpoint, disabled_at)
++        catch_up(db, log, now, endpoint, disabled_at, disabled_after)
+ 
+ 
+ def apply_resend(db, log, now, body):
+@@ -153,5 +174,7 @@
+         route_event(db, log, now, body)
+     elif kind == "endpoint":
+         apply_endpoint(db, log, now, body)
++    elif kind == "catchup":
++        apply_catchup(db, log, now, body)
+     else:
+         apply_resend(db, log, now, body)
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/store.py week6/app/services/router/store.py
+--- clean-app/services/router/store.py	2026-11-26 10:01:16.144267697 +0000
++++ week6/app/services/router/store.py	2026-11-27 09:48:36.475849695 +0000
+@@ -77,6 +77,8 @@
+     db.execute("pragma journal_mode = wal")
+     db.execute("pragma synchronous = normal")
+     db.executescript(SCHEMA)
++    if "disabled_after" not in [r[1] for r in db.execute("pragma table_info(endpoints)")]:
++        db.execute("alter table endpoints add column disabled_after integer")
+     db.commit()
+     return db
+ 

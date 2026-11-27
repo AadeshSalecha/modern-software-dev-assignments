@@ -1,0 +1,121 @@
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/api/src/store.ts week6/app/services/api/src/store.ts
+--- clean-app/services/api/src/store.ts	2026-11-26 10:01:16.143626922 +0000
++++ week6/app/services/api/src/store.ts	2026-11-27 09:22:43.847026252 +0000
+@@ -77,6 +77,44 @@
+     this.db.exec("pragma journal_mode = wal");
+     this.db.exec("pragma synchronous = normal");
+     this.db.exec(SCHEMA);
++    this.reconcileResends();
++  }
++
++  // One-time, safe to repeat: resends the shipped release accepted were applied by the router
++  // only when the event had gone to that endpoint before. Fold every earlier request into one
++  // message per event and endpoint carrying how many were made; the router creates what is missing.
++  reconcileResends(): void {
++    this.transaction(() => {
++      const done = this.db
++        .prepare("select value from meta where key = 'resend_reconcile'")
++        .get();
++      if (done) return;
++      const rows = this.db
++        .prepare(
++          "select seq, status, data from outbox where type = 'resend.requested' and status != 'rejected' order by seq",
++        )
++        .all() as unknown as { seq: number; status: string; data: string }[];
++      const pairs = new Map<string, { event_id: string; endpoint_id: string; n: number }>();
++      for (const r of rows) {
++        const d = JSON.parse(r.data);
++        const k = JSON.stringify([d.event_id, d.endpoint_id]);
++        const p = pairs.get(k) ?? { event_id: d.event_id, endpoint_id: d.endpoint_id, n: 0 };
++        p.n += 1;
++        pairs.set(k, p);
++      }
++      for (const p of pairs.values())
++        this.enqueue("resend.requested", Math.floor(Date.now() / 1000), {
++          event_id: p.event_id,
++          endpoint_id: p.endpoint_id,
++          reconcile: p.n,
++        });
++      this.db
++        .prepare(
++          "update outbox set status = 'published' where type = 'resend.requested' and status = 'pending' and data not like '%reconcile%'",
++        )
++        .run();
++      this.db.prepare("insert into meta (key, value) values ('resend_reconcile', 1)").run();
++    });
+   }
+ 
+   transaction<T>(work: () => T): T {
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/bus.py week6/app/services/router/bus.py
+--- clean-app/services/router/bus.py	2026-11-26 10:01:16.144267697 +0000
++++ week6/app/services/router/bus.py	2026-11-27 09:22:38.363857021 +0000
+@@ -112,6 +112,8 @@
+         return producer, str(seq), "endpoint", body
+     if type_ == "resend.requested":
+         body = {"event_id": need(data, "event_id", str), "endpoint_id": need(data, "endpoint_id", str)}
++        if data.get("reconcile") is not None:
++            body["reconcile"] = need(data, "reconcile", int)
+         return producer, str(seq), "resend", body
+     raise Malformed("unknown message type")
+ 
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/main.py week6/app/services/router/main.py
+--- clean-app/services/router/main.py	2026-11-26 10:01:16.144267697 +0000
++++ week6/app/services/router/main.py	2026-11-27 09:22:38.364045178 +0000
+@@ -51,6 +51,8 @@
+             return 200, {"applied": False}
+         now = self.clock.now()
+         self.db.execute("insert into bus_seen (producer, ident) values (?, ?)", (producer, ident))
++        if kind == "resend":
++            body["key"] = f"{producer}:{ident}"
+         routing.apply(self.db, self.log, now, kind, body)
+         self.db.commit()
+         self.crash(1)
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/routing.py week6/app/services/router/routing.py
+--- clean-app/services/router/routing.py	2026-11-26 10:01:16.144267697 +0000
++++ week6/app/services/router/routing.py	2026-11-27 09:22:38.363263004 +0000
+@@ -141,11 +141,29 @@
+ 
+ 
+ def apply_resend(db, log, now, body):
+-    original = first_delivery(db, body["event_id"], body["endpoint_id"])
+-    if original is None:
+-        log.write("resend.skipped", level="warn", event=body["event_id"], endpoint=body["endpoint_id"])
++    """A resend is an explicit request: one new delivery, whatever happened before."""
++    event_id, endpoint_id = body["event_id"], body["endpoint_id"]
++    event = db.execute("select merchant_id from events where id = ?", (event_id,)).fetchone()
++    endpoint = db.execute("select merchant_id from endpoints where id = ?", (endpoint_id,)).fetchone()
++    if event is None or endpoint is None or event["merchant_id"] != endpoint["merchant_id"]:
++        log.write("resend.skipped", level="warn", event=event_id, endpoint=endpoint_id)
+         return
+-    create_delivery(db, log, now, body["event_id"], body["endpoint_id"], resend_of=original["id"])
++    wanted = 1
++    if body.get("reconcile") is not None:
++        # Requests the shipped release accepted: it made a delivery only for some of them.
++        have = db.execute(
++            "select count(*) from deliveries where event_id = ? and endpoint_id = ? "
++            "and resend_of is not null and resend_key is null",
++            (event_id, endpoint_id),
++        ).fetchone()[0]
++        wanted = max(0, body["reconcile"] - have)
++    original = first_delivery(db, event_id, endpoint_id)
++    for _ in range(wanted):
++        d = create_delivery(db, log, now, event_id, endpoint_id, resend_of=original["id"] if original else "self")
++        db.execute(
++            "update deliveries set resend_of = coalesce(nullif(resend_of, 'self'), id), resend_key = ? where id = ?",
++            (body.get("key"), d),
++        )
+ 
+ 
+ def apply(db, log, now, kind, body):
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/store.py week6/app/services/router/store.py
+--- clean-app/services/router/store.py	2026-11-26 10:01:16.144267697 +0000
++++ week6/app/services/router/store.py	2026-11-27 09:22:38.363639392 +0000
+@@ -77,6 +77,8 @@
+     db.execute("pragma journal_mode = wal")
+     db.execute("pragma synchronous = normal")
+     db.executescript(SCHEMA)
++    if "resend_key" not in [r[1] for r in db.execute("pragma table_info(deliveries)")]:
++        db.execute("alter table deliveries add column resend_key text")
+     db.commit()
+     return db
+ 

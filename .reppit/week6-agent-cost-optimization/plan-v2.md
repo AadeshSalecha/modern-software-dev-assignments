@@ -96,6 +96,39 @@ Steps 1 to 5 and 7 are done; step 6 is half done.
   the archive that would have been lost, which is the case the one failing Sonnet run had
   missed).
 
+## Status (2026-11-27): budget awareness and a wider test
+
+Asked for after the Mac check: a harness that knows its budget and decides from it whether to
+spend more effort and time, and an answer to where the held-out failures could be.
+
+- **Mac check of the zip of 2026-11-26** (commit 51ef415, Sonnet + `gpt-6.1-terra`): starter
+  2 of 2 ($0.43, $0.51), INC-2231 1 of 1 ($0.56).
+- **What the first submission's gate says about the graded run.** Unticked ledger lines and the
+  agent's own failing scenarios were blocking then. The session was let go after four blocks at
+  158 s and $0.26; the rescue did nothing. Most likely the agent knew it was not finished.
+- **Budget awareness** (commits 77a8706, 7bfe15c, 0e0854c): `kit/budget.py`; stop-hook
+  messages that persist on failing checks and on the agent's own open items while money and
+  time remain; follow-ups at effort high when affordable (resuming at another effort keeps the
+  cache, measured); a finish session when the gate still fails; a budget stop for the second
+  solver. Run estimate fixed for sessions still running and for Codex sessions cut off.
+- **Cross-check, found with the real pairing:** the second solver's repair was installed twice
+  on failure counts (a private bus message type; a cut-off session one failure ahead). Now the
+  main repair stands unless the other is objectively better.
+- **A wider test.** An audit of the release reproduced nine latent defects. Two became
+  incidents: INC-2307 (a resend that is accepted and does nothing) and INC-2318 (events lost
+  when an endpoint is off for more than a day), each with ticket, generated packet, judge (19
+  incident scenarios) and reference repair. The first submission's setup passes 1 run in 4 on
+  them; the zip of 2026-11-26 passes 2 in 4 with a stand-in second solver.
+- **What the wider test found in the kit:** the report skill told the agent to leave out an id
+  whose defining row was cut and never to rebuild it from another kind of record. On INC-2307
+  that loses 7 of 35 entries every time (0 of 3 report-only runs right). Rewritten: 11 of 11
+  right across four incidents.
+- **Final commit 0e0854c, real pairing on the Mac:** starter $0.44, INC-2231 $0.65, INC-2307
+  $0.54, INC-2318 $0.69, all passing, 314 to 385 s. The zip for submission 2 is built from it.
+- **Not measured:** which of the budget rules earns its cost. They are measured for doing no
+  harm and for price. Seven audit defects are not built into incidents (one needs a second
+  worker, which the harness cannot start).
+
 ## Out of scope
 
 Anything that needs to know the held-out ticket. We only get category counts back.

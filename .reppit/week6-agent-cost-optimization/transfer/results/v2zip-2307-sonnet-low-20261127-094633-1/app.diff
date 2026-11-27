@@ -1,0 +1,153 @@
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/api/src/main.ts week6/app/services/api/src/main.ts
+--- clean-app/services/api/src/main.ts	2026-11-26 10:01:16.143626922 +0000
++++ week6/app/services/api/src/main.ts	2026-11-27 09:47:36.372245820 +0000
+@@ -339,6 +339,42 @@
+   });
+ });
+ 
++// One-time repair (INC-2307): resend requests accepted by the shipped release were
++// dropped by the router when the endpoint had no earlier delivery. Tell the router which
++// requests exist, once per event and endpoint; it creates the deliveries that are missing.
++function reconcileResends(): void {
++  store.transaction(() => {
++    const done = store.db
++      .prepare("select value from meta where key = 'resend_reconcile'")
++      .get();
++    if (done) return;
++    const rows = store.db
++      .prepare(
++        "select seq, data from outbox where type = 'resend.requested' and status != 'rejected' order by seq",
++      )
++      .all() as unknown as { seq: number; data: string }[];
++    const pairs = new Map<string, { data: Record<string, unknown>; seqs: number[] }>();
++    for (const row of rows) {
++      const data = JSON.parse(row.data);
++      const key = JSON.stringify([data.event_id, data.endpoint_id]);
++      const entry = pairs.get(key) ?? { data, seqs: [] };
++      entry.seqs.push(row.seq);
++      pairs.set(key, entry);
++    }
++    for (const { data, seqs } of pairs.values()) {
++      store.enqueue("resend.requested", now(), {
++        event_id: data.event_id,
++        endpoint_id: data.endpoint_id,
++        legacy_seqs: seqs,
++      });
++    }
++    store.db
++      .prepare("insert into meta (key, value) values ('resend_reconcile', 1)")
++      .run();
++  });
++}
++reconcileResends();
++
+ server.listen(portBase + 1, "127.0.0.1", () =>
+   log("api.started", { release: RELEASE }),
+ );
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/bus.py week6/app/services/router/bus.py
+--- clean-app/services/router/bus.py	2026-11-26 10:01:16.144267697 +0000
++++ week6/app/services/router/bus.py	2026-11-27 09:47:36.372976102 +0000
+@@ -112,6 +112,11 @@
+         return producer, str(seq), "endpoint", body
+     if type_ == "resend.requested":
+         body = {"event_id": need(data, "event_id", str), "endpoint_id": need(data, "endpoint_id", str)}
++        legacy = data.get("legacy_seqs")
++        if legacy is not None:
++            if not isinstance(legacy, list) or not all(isinstance(n, int) for n in legacy):
++                raise Malformed("legacy_seqs must be a list of integers")
++            body["legacy_seqs"] = legacy
+         return producer, str(seq), "resend", body
+     raise Malformed("unknown message type")
+ 
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/main.py week6/app/services/router/main.py
+--- clean-app/services/router/main.py	2026-11-26 10:01:16.144267697 +0000
++++ week6/app/services/router/main.py	2026-11-27 09:47:36.373626960 +0000
+@@ -51,6 +51,8 @@
+             return 200, {"applied": False}
+         now = self.clock.now()
+         self.db.execute("insert into bus_seen (producer, ident) values (?, ?)", (producer, ident))
++        if kind == "resend" and producer == "api":
++            body["_ident"] = ident
+         routing.apply(self.db, self.log, now, kind, body)
+         self.db.commit()
+         self.crash(1)
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/routing.py week6/app/services/router/routing.py
+--- clean-app/services/router/routing.py	2026-11-26 10:01:16.144267697 +0000
++++ week6/app/services/router/routing.py	2026-11-27 09:48:32.685623647 +0000
+@@ -140,12 +140,59 @@
+         catch_up(db, log, now, endpoint, disabled_at)
+ 
+ 
+-def apply_resend(db, log, now, body):
++def resend_target(db, body):
++    """The event and endpoint of a resend, or None when it must produce no delivery."""
++    event = db.execute("select merchant_id from events where id = ?", (body["event_id"],)).fetchone()
++    endpoint = db.execute("select merchant_id from endpoints where id = ?", (body["endpoint_id"],)).fetchone()
++    if event is None or endpoint is None or event["merchant_id"] != endpoint["merchant_id"]:
++        return None
++    return True
++
++
++def resend_delivery(db, log, now, body):
++    """A resend of something never sent is its endpoint's first delivery of the event."""
+     original = first_delivery(db, body["event_id"], body["endpoint_id"])
+-    if original is None:
++    return create_delivery(
++        db, log, now, body["event_id"], body["endpoint_id"], resend_of=original["id"] if original else None
++    )
++
++
++def apply_resend(db, log, now, body):
++    if not resend_target(db, body):
+         log.write("resend.skipped", level="warn", event=body["event_id"], endpoint=body["endpoint_id"])
++        if body.get("_ident") and "legacy_seqs" not in body:
++            db.execute("insert or ignore into resend_applied (ident, delivery_id) values (?, null)", (body["_ident"],))
++        return
++    if "legacy_seqs" in body:
++        return reconcile_resends(db, log, now, body)
++    delivery_id = resend_delivery(db, log, now, body)
++    if body.get("_ident"):
++        db.execute("insert or ignore into resend_applied (ident, delivery_id) values (?, ?)", (body["_ident"], delivery_id))
++
++
++def reconcile_resends(db, log, now, body):
++    """Requests the shipped release applied (and may have dropped): create what is missing."""
++    legacy = []
++    for seq in body["legacy_seqs"]:
++        ident = str(seq)
++        seen = db.execute("select 1 from bus_seen where producer = 'api' and ident = ?", (ident,)).fetchone()
++        done = db.execute("select 1 from resend_applied where ident = ?", (ident,)).fetchone()
++        if seen and not done:
++            legacy.append(ident)
++    if not legacy:
+         return
+-    create_delivery(db, log, now, body["event_id"], body["endpoint_id"], resend_of=original["id"])
++    have = db.execute(
++        "select count(*) from deliveries where event_id = ? and endpoint_id = ? and resend_of is not null "
++        "and id not in (select delivery_id from resend_applied where delivery_id is not null)",
++        (body["event_id"], body["endpoint_id"]),
++    ).fetchone()[0]
++    missing = max(0, len(legacy) - have)
++    for ident in legacy:
++        delivery_id = None
++        if missing > 0:
++            delivery_id = resend_delivery(db, log, now, body)
++            missing -= 1
++        db.execute("insert into resend_applied (ident, delivery_id) values (?, ?)", (ident, delivery_id))
+ 
+ 
+ def apply(db, log, now, kind, body):
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/store.py week6/app/services/router/store.py
+--- clean-app/services/router/store.py	2026-11-26 10:01:16.144267697 +0000
++++ week6/app/services/router/store.py	2026-11-27 09:47:36.372684645 +0000
+@@ -15,6 +15,10 @@
+     ident text not null,
+     primary key (producer, ident)
+ );
++create table if not exists resend_applied (
++    ident text primary key,
++    delivery_id text
++);
+ create table if not exists endpoints (
+     id text primary key,
+     merchant_id text not null,

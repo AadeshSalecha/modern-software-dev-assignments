@@ -1,0 +1,223 @@
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/api/src/main.ts week6/app/services/api/src/main.ts
+--- clean-app/services/api/src/main.ts	2026-11-26 10:01:16.143626922 +0000
++++ week6/app/services/api/src/main.ts	2026-11-27 09:42:03.100165945 +0000
+@@ -339,6 +339,8 @@
+   });
+ });
+ 
++store.queueOwed(now());
++
+ server.listen(portBase + 1, "127.0.0.1", () =>
+   log("api.started", { release: RELEASE }),
+ );
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/api/src/store.ts week6/app/services/api/src/store.ts
+--- clean-app/services/api/src/store.ts	2026-11-26 10:01:16.143626922 +0000
++++ week6/app/services/api/src/store.ts	2026-11-27 09:42:03.099699967 +0000
+@@ -216,6 +216,61 @@
+       .run(status, seq);
+   }
+ 
++  // Once, at the first start of the release that repairs INC-2318: ask the router
++  // for the events that earlier switch-ons were owed and never got. The router
++  // skips what already has a delivery, so this is safe to repeat.
++  queueOwed(now: number): void {
++    this.transaction(() => {
++      const flag = this.db
++        .prepare("select value from meta where key = 'owed_queued'")
++        .get();
++      if (flag) return;
++      const history = this.db
++        .prepare(
++          "select endpoint_id, config, at from endpoint_history order by endpoint_id, version",
++        )
++        .all() as { endpoint_id: string; config: string; at: number }[];
++      let offAt: number | null = null;
++      let current = "";
++      let on = true;
++      for (const row of history) {
++        const config = JSON.parse(row.config) as Endpoint;
++        if (row.endpoint_id !== current) {
++          current = row.endpoint_id;
++          on = true;
++          offAt = null;
++        }
++        if (on && !config.enabled) {
++          offAt = row.at;
++        } else if (!on && config.enabled && offAt !== null) {
++          const types = config.event_types;
++          const events = this.db
++            .prepare(
++              "select id, type from events where merchant_id = ? and created >= ? and created < ? order by rowid",
++            )
++            .all(config.merchant_id, offAt, row.at) as {
++            id: string;
++            type: string;
++          }[];
++          for (const event of events) {
++            if (types.includes("*") || types.includes(event.type)) {
++              this.enqueue("resend.requested", now, {
++                event_id: event.id,
++                endpoint_id: current,
++                owed: true,
++              });
++            }
++          }
++        }
++        if (config.enabled) offAt = null;
++        on = config.enabled;
++      }
++      this.db
++        .prepare("insert into meta (key, value) values ('owed_queued', 1)")
++        .run();
++    });
++  }
++
+   summary(): Record<string, unknown> {
+     const count = (sql: string) =>
+       (this.db.prepare(sql).get() as { n: number }).n;
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/bus.py week6/app/services/router/bus.py
+--- clean-app/services/router/bus.py	2026-11-26 10:01:16.144267697 +0000
++++ week6/app/services/router/bus.py	2026-11-27 09:41:55.944195761 +0000
+@@ -112,6 +112,8 @@
+         return producer, str(seq), "endpoint", body
+     if type_ == "resend.requested":
+         body = {"event_id": need(data, "event_id", str), "endpoint_id": need(data, "endpoint_id", str)}
++        if data.get("owed") is True:
++            body["owed"] = True
+         return producer, str(seq), "resend", body
+     raise Malformed("unknown message type")
+ 
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/routing.py week6/app/services/router/routing.py
+--- clean-app/services/router/routing.py	2026-11-26 10:01:16.144267697 +0000
++++ week6/app/services/router/routing.py	2026-11-27 09:41:55.943872398 +0000
+@@ -5,8 +5,6 @@
+ 
+ from store import next_id
+ 
+-CATCH_UP_SECONDS = 24 * 3600
+-
+ # INC-2188 workaround (2.3.1). With it on, an endpoint change does not create deliveries
+ # at the endpoint's new version, so a delivery that was queued keeps going under the
+ # version it was created for. Leave it on until deliveries stop being keyed by version.
+@@ -86,13 +84,18 @@
+             create_delivery(db, log, now, event["id"], ep["id"])
+ 
+ 
+-def catch_up(db, log, now, endpoint, since):
+-    """Deliver what the endpoint missed while it was disabled."""
+-    floor = max(since, now - CATCH_UP_SECONDS)
+-    missed = db.execute(
+-        "select id, type from events where merchant_id = ? and routed_at >= ? order by routed_at, rowid",
+-        (endpoint["merchant_id"], floor),
+-    ).fetchall()
++def catch_up(db, log, now, endpoint, since, after):
++    """Deliver what the endpoint missed while it was disabled, however long that was."""
++    if after is not None:
++        missed = db.execute(
++            "select id, type from events where merchant_id = ? and rowid > ? order by rowid",
++            (endpoint["merchant_id"], after),
++        ).fetchall()
++    else:
++        missed = db.execute(
++            "select id, type from events where merchant_id = ? and routed_at >= ? order by routed_at, rowid",
++            (endpoint["merchant_id"], since),
++        ).fetchall()
+     for event in missed:
+         if not subscribed(endpoint["event_types"], event["type"]):
+             continue
+@@ -101,6 +104,15 @@
+         create_delivery(db, log, now, event["id"], endpoint["id"])
+ 
+ 
++def flush_owed(db, log, now, endpoint_id):
++    rows = db.execute("select event_id from owed where endpoint_id = ? order by rowid", (endpoint_id,)).fetchall()
++    for row in rows:
++        known = db.execute("select 1 from events where id = ?", (row["event_id"],)).fetchone()
++        if known and not first_delivery(db, row["event_id"], endpoint_id):
++            create_delivery(db, log, now, row["event_id"], endpoint_id)
++        db.execute("delete from owed where endpoint_id = ? and event_id = ?", (endpoint_id, row["event_id"]))
++
++
+ def apply_endpoint(db, log, now, endpoint):
+     old = db.execute("select * from endpoints where id = ?", (endpoint["id"],)).fetchone()
+     if old is not None and endpoint["version"] <= old["version"]:
+@@ -108,14 +120,16 @@
+         return
+     was_enabled = bool(old["enabled"]) if old is not None else None
+     disabled_at = old["disabled_at"] if old is not None else None
++    disabled_after = old["disabled_after"] if old is not None else None
+     if not endpoint["enabled"] and was_enabled is not False:
+         disabled_at = now
++        disabled_after = db.execute("select coalesce(max(rowid), 0) from events").fetchone()[0]
+     db.execute(
+-        "insert into endpoints (id, merchant_id, url, secret, event_types, enabled, version, disabled_at) "
+-        "values (?, ?, ?, ?, ?, ?, ?, ?) "
++        "insert into endpoints (id, merchant_id, url, secret, event_types, enabled, version, disabled_at, disabled_after) "
++        "values (?, ?, ?, ?, ?, ?, ?, ?, ?) "
+         "on conflict (id) do update set url = excluded.url, secret = excluded.secret, "
+         "event_types = excluded.event_types, enabled = excluded.enabled, version = excluded.version, "
+-        "disabled_at = excluded.disabled_at",
++        "disabled_at = excluded.disabled_at, disabled_after = excluded.disabled_after",
+         (
+             endpoint["id"],
+             endpoint["merchant_id"],
+@@ -125,6 +139,7 @@
+             int(endpoint["enabled"]),
+             endpoint["version"],
+             None if endpoint["enabled"] else disabled_at,
++            None if endpoint["enabled"] else disabled_after,
+         ),
+     )
+     log.write(
+@@ -137,10 +152,25 @@
+     if old is not None and not INC_2188_WORKAROUND:
+         follow_version(db, log, now, endpoint["id"], endpoint["version"])
+     if endpoint["enabled"] and was_enabled is False and disabled_at is not None:
+-        catch_up(db, log, now, endpoint, disabled_at)
++        catch_up(db, log, now, endpoint, disabled_at, old["disabled_after"])
++    if endpoint["enabled"]:
++        flush_owed(db, log, now, endpoint["id"])
++
++
++def apply_owed(db, log, now, body):
++    """An event the shipped release never delivered to an endpoint it was owed to."""
++    endpoint = db.execute("select enabled from endpoints where id = ?", (body["endpoint_id"],)).fetchone()
++    if endpoint is None:
++        return
++    db.execute("insert or ignore into owed (endpoint_id, event_id) values (?, ?)", (body["endpoint_id"], body["event_id"]))
++    if endpoint["enabled"]:
++        flush_owed(db, log, now, body["endpoint_id"])
+ 
+ 
+ def apply_resend(db, log, now, body):
++    if body.get("owed"):
++        apply_owed(db, log, now, body)
++        return
+     original = first_delivery(db, body["event_id"], body["endpoint_id"])
+     if original is None:
+         log.write("resend.skipped", level="warn", event=body["event_id"], endpoint=body["endpoint_id"])
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/store.py week6/app/services/router/store.py
+--- clean-app/services/router/store.py	2026-11-26 10:01:16.144267697 +0000
++++ week6/app/services/router/store.py	2026-11-27 09:41:55.943305814 +0000
+@@ -25,6 +25,11 @@
+     version integer not null,
+     disabled_at integer
+ );
++create table if not exists owed (
++    endpoint_id text not null,
++    event_id text not null,
++    primary key (endpoint_id, event_id)
++);
+ create table if not exists events (
+     id text primary key,
+     merchant_id text not null,
+@@ -77,6 +82,9 @@
+     db.execute("pragma journal_mode = wal")
+     db.execute("pragma synchronous = normal")
+     db.executescript(SCHEMA)
++    columns = [r[1] for r in db.execute("pragma table_info(endpoints)")]
++    if "disabled_after" not in columns:
++        db.execute("alter table endpoints add column disabled_after integer")
+     db.commit()
+     return db
+ 

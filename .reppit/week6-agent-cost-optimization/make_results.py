@@ -50,6 +50,13 @@ DESCRIPTIONS = collections.OrderedDict(
         ("v2e-zip-sonnet-low", "A later zip (commit 8a6fdb5: failing runs saved as replayable files), unpacked, with Sonnet at effort low as the second solver so that every step runs here. The comparison session ran in both runs."),
         ("v2f-zip-sonnet-low", "The zip for submission 2 (commit 54cab27: the main session always does the comparison, the better repair is chosen after it; spending lines 0.64 and 0.70), unpacked, Sonnet at effort low as the second solver."),
         ("v2g-sonnet-terra", "The submitted pairing at the commit of the zip for submission 2 (51ef415), on the Mac with nothing set: Sonnet main, `gpt-6.1-terra` (Codex) second, comparison session in every run."),
+        ("v3a-budget", "First budget-aware version: kit/budget.py, one message to a solver that stops with its share unused, follow-ups at effort high when affordable (dev tree, before commit 77a8706). Sonnet main, Sonnet low second."),
+        ("v3b-budget", "Commit 77a8706: the stop hook persists on hard failures and open ledger lines while budget remains; finish round; cross-check counts a scenario that only the other repair passes. Sonnet main, Sonnet low second."),
+        ("v3-budget-sonnet-terra", "Commit 77a8706 with the real pairing on the Mac. The second solver's repair was installed in both runs on a count of failures; fixed in the next commit."),
+        ("v3c-budget", "Commit 7bfe15c: budget messages follow the agent's own open items; private bus formats left out of the comparison; the main repair stands unless the other is objectively better. Sonnet main, Sonnet low second."),
+        ("v3c-budget-sonnet-terra", "Commit 7bfe15c with the real pairing on the Mac."),
+        ("rep-new-starter", "Report only (KIT_VARIANT=report), rewritten report skill (commit 0e0854c): one Sonnet session answers the report request and nothing else. Repair is 0 by construction."),
+        ("v3d-budget-sonnet-terra", "Commit 0e0854c, the zip for submission 2, with the real pairing on the Mac."),
         ("v2d-from-zip", "The zip for submission 2, unpacked, nothing set (commit b407568). No Codex in the container, so the second solver cannot start: the run shows that case."),
     ]
 )
@@ -83,10 +90,13 @@ def transfer_section():
             groups.setdefault(name.rsplit("-", 3)[0], []).append((name, json.load(open(path))))
     out = [
         "",
-        "## Transfer incident (INC-2231, endpoint changes ignored)",
+        "## Other incidents (INC-2231, INC-2307, INC-2318)",
         "",
-        "A second incident built to test the setup on a ticket it was not designed around; see",
-        "`transfer/README.md`. Scored by `transfer/inc-2231/judge.py` with the assignment's formulas.",
+        "Incidents built to test the setup on tickets it was not designed around; see",
+        "`transfer/README.md` and each folder's `NOTES.md`. Scored by each incident's `judge.py` with the",
+        "assignment's formulas. Labels without an incident number are INC-2231. `rep-` labels are",
+        "report-only runs (repair 0 by construction); `sub1-` is the first submission's version;",
+        "`v2zip-` the two-solver version of 2026-11-26; `v3c-`/`v3d-` the budget-aware versions.",
         "",
         "| Setup | Run | Result | Repair | Impact | Cost | Requests | Time | Incident | Regr. | Compat |",
         "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",

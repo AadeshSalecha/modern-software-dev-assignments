@@ -1,0 +1,64 @@
+{
+  "passed": false,
+  "score": {
+    "passed": false,
+    "repair": 1.0,
+    "impact": {
+      "impact": 0.6222,
+      "precision": 1.0,
+      "recall": 0.8,
+      "figures_right": 2,
+      "figures": 9,
+      "problem": null,
+      "reported": {
+        "merchants": [
+          "m_juniper",
+          "m_kestrel",
+          "m_larch",
+          "m_oak"
+        ],
+        "entries": 28,
+        "skipped_rows": 82
+      }
+    },
+    "categories": {
+      "incident": {
+        "passed": 19,
+        "total": 19,
+        "failed": []
+      },
+      "regressions": {
+        "passed": 21,
+        "total": 21,
+        "failed": []
+      },
+      "compat": {
+        "passed": 6,
+        "total": 6,
+        "failed": []
+      }
+    },
+    "build_problem": null
+  },
+  "exit_code": 0,
+  "timed_out": false,
+  "seconds": 140.8,
+  "error": null,
+  "cost_usd": 0.26163020000000003,
+  "requests": 13,
+  "rejected": [
+    "endpoint_not_available"
+  ],
+  "upstream_errors": 0,
+  "by_model": {
+    "claude-sonnet-5-5": {
+      "requests": 13,
+      "cost_usd": 0.26163020000000003,
+      "input": 26,
+      "output": 11811,
+      "cache_read": 405632,
+      "cache_write": 41162,
+      "cache_write_1h": 0
+    }
+  }
+}
