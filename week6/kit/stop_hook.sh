@@ -8,6 +8,8 @@ cd "$(dirname "$0")/.." || exit 0
 [ -d work ] || exit 0
 [ "${KIT_NO_HOOK:-}" = "1" ] && exit 0   # experiments only
 stage="${KIT_STAGE:-all}"
+# What the harness hands a stop hook on its input, the agent's last message among it.
+[ -t 0 ] || cat >work/.stop_input.json 2>/dev/null
 counter="work/.stop_blocks.$stage"
 blocks=$(cat "$counter" 2>/dev/null || echo 0)
 # Three times whatever the budget says. After that only while the session still has money and
@@ -29,7 +31,7 @@ if [ "$status" -eq 0 ]; then
   if [ "$stage" = "all" ] && [ "${KIT_PHASE:-}" = "solve" ] && [ "${KIT_NO_NUDGE:-}" != "1" ]; then
     given=$(cat work/.nudged 2>/dev/null || echo 0)
     if [ "$given" -lt 3 ]; then
-      note=$(python3 kit/budget.py --nudge "$given" 2>/dev/null)
+      note=$(python3 kit/budget.py --nudge "$given" --last work/.stop_input.json 2>/dev/null)
       if [ -n "$note" ]; then
         echo $((given + 1)) >work/.nudged
         echo "$note" >&2

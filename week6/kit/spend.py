@@ -30,6 +30,7 @@ FALLBACK = {  # dollars per million tokens, if rate_card.json is not there
 # finished sessions the logged content came to 3.7 to 4.6 characters per output token (thinking
 # included); the low end is used, so the estimate errs high.
 CHARS_PER_OUTPUT_TOKEN = 3.6
+CODEX_DOLLARS_PER_ITEM = 0.0035
 
 
 def rates():
@@ -62,6 +63,7 @@ def cost_of(path, card, sessions=None):
     name = os.path.basename(path).split(".")
     file_model = ".".join(name[2:-1]) if len(name) > 3 else ""
     total = 0.0
+    codex_items, codex_done = 0, False
     pending = {}  # claude messages since the last session result: id -> (model, usage, characters written)
     try:
         handle = open(path, encoding="utf-8", errors="replace")
@@ -108,7 +110,10 @@ def cost_of(path, card, sessions=None):
                 total += max(whole - sessions.get(key, 0.0), 0.0)
                 sessions[key] = max(whole, sessions.get(key, 0.0))
                 pending = {}
+            elif kind == "item.completed":
+                codex_items += 1
             elif kind == "turn.completed" and isinstance(event.get("usage"), dict):
+                codex_done = True
                 usage = event["usage"]
                 cached = usage.get("cached_input_tokens", 0)
                 total += price(card, file_model, {
@@ -118,6 +123,11 @@ def cost_of(path, card, sessions=None):
                 })
     for model, usage, written in pending.values():  # a session that was cut off
         total += price(card, model, dict(usage, output=int(written / CHARS_PER_OUTPUT_TOKEN)))
+    if codex_items and not codex_done:
+        # A Codex session reports its tokens only when its turn ends. One that is still running
+        # or was cut off is priced by what it has done: about 0.35 cents per finished step on
+        # gpt-6.1-terra in five sessions, scaled by the model's output price.
+        total += codex_items * CODEX_DOLLARS_PER_ITEM * rate_for(card, file_model).get("output", 5.0) / 5.0
     return total
 
 

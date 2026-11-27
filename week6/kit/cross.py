@@ -9,9 +9,12 @@ another agent did the whole job on its own. What happens:
   repairs   Every scenario either agent wrote that fails on the shipped release and passes on
             at least one of the two repairs counts as evidence. Each is run on both repairs,
             plainly, with the shipped release taking every step up to the last drain, and
-            with every service restarted before the last drain. The shipped
-            scenarios are run on both, alone and across a release replacement. The repair
-            with fewer failures is the better one; a tie goes to "a".
+            with every service restarted before the last drain. A scenario that posts a
+            raw bus message the shipped release refuses is left out: it tests one repair's
+            own message format. The shipped
+            scenarios are run on both, alone and across a release replacement. Every
+            failure is listed for the first workspace's author. Which repair is handed in
+            is decided on less: "a" unless "b" is better on objective grounds (better()).
   reports   The files under out/ are compared value by value, ignoring the order of lists.
 
 Written to <out>/:
@@ -27,6 +30,7 @@ run its own repair fails as the scenario that was played (run-<n>.json). The oth
 """
 
 import argparse
+import copy
 import difflib
 import glob
 import json
@@ -127,6 +131,40 @@ def hand_over_material(best_root, other_root):
         shutil.copy(path, os.path.join(target, "other-scenarios", name))
 
 
+def with_bus_refs(scenario):
+    """A copy in which every raw bus step has a ref, so that the router's answer to it is in the
+    result. Nothing else about the run changes."""
+    changed = copy.deepcopy(scenario)
+    for index, step in enumerate(changed["steps"]):
+        if isinstance(step, dict) and step.get("do") == "bus" and "ref" not in step:
+            step["ref"] = f"_bus{index}"
+    return changed
+
+
+def private_bus_step(scenario, old, passing):
+    """A scenario that posts a raw bus message which the shipped release refuses and a repair it
+    passes on accepts depends on that repair's own message format: api and router of one repair
+    agree on it, another repair has no reason to. Returns a short description of the first such
+    step, or "" if there is none."""
+    def statuses(outcome):
+        return ((outcome or {}).get("result") or {}).get("statuses") or {}
+    before = statuses(old)
+    for index, step in enumerate(scenario["steps"]):
+        if not (isinstance(step, dict) and step.get("do") == "bus"):
+            continue
+        ref = step.get("ref", f"_bus{index}")
+        refused = before.get(ref)
+        if not isinstance(refused, int) or refused < 400:
+            continue
+        for outcome in passing:
+            accepted = statuses(outcome).get(ref)
+            if isinstance(accepted, int) and accepted < 300:
+                message = step.get("message")
+                kind = (message.get("type") or message.get("kind") or "") if isinstance(message, dict) else ""
+                return f"step {index + 1}{' ' + str(kind) if kind else ''}: {refused} as shipped, {accepted} on the repair"
+    return ""
+
+
 def judge_repairs(roots, deadline):
     """Returns (scores, notes). scores[name] = {"usable", "fails": [...], "passed": n}."""
     notes = []
@@ -152,9 +190,10 @@ def judge_repairs(roots, deadline):
     authored = [(author, file_name, path, scenario) for author in roots for file_name, path, scenario in scenarios_of(roots[author])]
     specs = []
     for author, file_name, _, scenario in authored:
-        specs.append(((author, file_name, "old"), scenario, "old", None))
+        probe = with_bus_refs(scenario)
+        specs.append(((author, file_name, "old"), probe, "old", None))
         for name in usable:
-            specs.append(((author, file_name, name), scenario, "new", apps[name]))
+            specs.append(((author, file_name, name), probe, "new", apps[name]))
     results = rollout.run_all([(str(i), s[1], s[2], s[3]) for i, s in enumerate(specs)], bins, deadline=deadline)
     outcomes = {spec[0]: outcome for spec, outcome in zip(specs, results)}
     valid = []
@@ -165,6 +204,11 @@ def judge_repairs(roots, deadline):
             continue
         if not old["problems"]:
             notes.append(f"{author}'s {file_name} passes on the shipped release too: not used")
+            continue
+        private = private_bus_step(scenario, old, [r for r in runs.values() if not r["problems"]])
+        if private:
+            notes.append(f"{author}'s {file_name} posts a bus message the shipped release refuses ({private}): "
+                         "a format of one repair's own, so it says nothing about the other; not used")
             continue
         if all(r["problems"] for r in runs.values()):
             first = next(iter(runs.values()))["problems"][0][:120]
@@ -211,11 +255,20 @@ def judge_repairs(roots, deadline):
 
 
 def better(scores):
-    """The name of the better repair. Unusable or unchanged loses; then fewer failures; then "a"."""
+    """The name of the repair to hand in. "a", the main solver's, unless "b" is better on grounds
+    that do not depend on whose reading of the ticket is right: "a" does not build or changed
+    nothing, breaks more of the scenarios shipped with the release, or fails more scenarios that
+    its own author wrote (and the other repair passes) than "b" fails of its own.
+
+    Scenarios of one author that the other repair fails are not counted here. They are an
+    opinion about the ticket; the other author is shown them and can take them up or not. Nor
+    are the hand-over and restart variants: they ask for more than a judge does about one run
+    in three."""
     def rank(name):
         score = scores[name]
         shipped = sum(1 for f in score["fails"] if f["author"] == "shipped")
-        return (not score["usable"], not score["changed"], shipped, len(score["fails"]), name)
+        own = sum(1 for f in score["fails"] if f["author"] == name and f["how"] == "as written")
+        return (not score["usable"], not score["changed"], shipped, own, name)
     return min(scores, key=rank)
 
 

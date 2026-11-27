@@ -8,11 +8,14 @@
     python3 kit/budget.py --session-room
                                        exit status 0 if the session that asks still has money
                                        and time worth going on with
-    python3 kit/budget.py --nudge N    for the stop hook, which has sent N such messages so far:
-                                       a message if this session is stopping with a good part
-                                       of its share unused, else nothing. The first lists
-                                       checks to spend it on; later ones name the ledger lines
-                                       that are still open
+    python3 kit/budget.py --nudge N [--last FILE]
+                                       for the stop hook, which has sent N such messages so far
+                                       and saved what the harness handed it in FILE: a message
+                                       if this session is stopping with a good part of its
+                                       share unused, else nothing. The first lists checks to
+                                       spend it on; later ones name what is still open by the
+                                       agent's own account (unticked ledger lines, and cases
+                                       its last message says are not covered)
 
 The run has one limit for money and one clock. run.sh exports what is needed:
 
@@ -31,6 +34,7 @@ here may ever fail a session or hold one up.
 import glob
 import json
 import os
+import re
 import sys
 import time
 
@@ -59,14 +63,28 @@ Stop when the list is done or about a minute is left. `python3 kit/budget.py` sh
 
 
 OPEN = """Budget check (kit/budget.py): about ${left:.2f} and {seconds} s are left for this session, and
-`work/ledger.md` still has {count} open line(s):
+by your own account these are not shown to hold:
 
 {lines}
 
-An open line is a requirement you have not shown to hold, and handing in with one is the most
-likely way to fail this job. For each: write the scenario or query that proves it and tick the
-line, or fix what it shows. If the ticket and `app/contracts` do not require it after all, tick
-it and add the sentence that says so. Do not tick a line you have not run a check for."""
+A case you name as not covered is the most likely place for this job to fail, and there is
+room to close it. For each one do one of these, and say which:
+
+- The ticket or `app/contracts` requires it: write the scenario or the query, run it, and fix
+  what it shows.
+- It cannot be played with the harness (two copies of a service at once, for example): point
+  to the lines of your change that make it hold whichever copy runs, or change them so that
+  they do.
+- Neither the ticket nor a contract requires it: quote the sentence that says so.
+
+Tick a ledger line only after its check has run."""
+
+# What an agent writes when it knows of a gap. Matched per line of its last message.
+ADMITS = re.compile(
+    r"not covered|not verified|unverified|unproven|untested|not tested|not proven|did(?: not|n't) (?:test|verify|write|run|cover)"
+    r"|no scenario|without a scenario|could(?: not|n't) (?:verify|test|reproduce|cover)|cannot be tested|can't be tested"
+    r"|have(?: not|n't) (?:tested|verified|covered)|still open|remains? (?:open|untested|unproven)|may still",
+    re.IGNORECASE)
 
 
 def open_ledger_lines():
@@ -76,6 +94,46 @@ def open_ledger_lines():
             return [line.strip() for line in handle if line.lstrip().startswith(("- [ ]", "* [ ]"))]
     except OSError:
         return []
+
+
+def last_message(path):
+    """The agent's last message, from what the harness hands a stop hook (its JSON on a file):
+    the message itself where the harness gives it, else the last text in the transcript."""
+    try:
+        with open(path, encoding="utf-8") as handle:
+            given = json.load(handle)
+    except (OSError, ValueError, TypeError):
+        return ""
+    if not isinstance(given, dict):
+        return ""
+    if isinstance(given.get("last_assistant_message"), str):
+        return given["last_assistant_message"]
+    text = ""
+    try:
+        with open(given.get("transcript_path") or "", encoding="utf-8", errors="replace") as handle:
+            for line in handle:
+                try:
+                    event = json.loads(line)
+                except ValueError:
+                    continue
+                message = event.get("message") if isinstance(event, dict) else None
+                if event.get("type") == "assistant" and isinstance(message, dict):
+                    said = [b.get("text", "") for b in message.get("content") or [] if isinstance(b, dict) and b.get("type") == "text"]
+                    if any(said):
+                        text = "\n".join(said)
+    except OSError:
+        return ""
+    return text
+
+
+def admitted_gaps(text):
+    """Lines of the agent's last message in which it says something is not covered."""
+    found = []
+    for line in text.splitlines():
+        line = line.strip().lstrip("-*• ").strip()
+        if line and ADMITS.search(line) and line not in found:
+            found.append(line)
+    return found
 
 
 def number(name, default=None):
@@ -146,9 +204,9 @@ def session_room(now):
     return max(room or 0.0, 0.0)
 
 
-def nudge(now, given=0):
+def nudge(now, given=0, said=""):
     """The message for a session that is stopping with room left, or an empty string. `given`
-    is how many such messages it has had."""
+    is how many such messages it has had, `said` its last message."""
     room = session_room(now)
     if room < NUDGE_MIN_MONEY or now["session_share"] is None:
         return ""
@@ -156,11 +214,11 @@ def nudge(now, given=0):
         limit = now["session_deadline"]
         return NUDGE.format(used=now["session_spent"], share=now["session_share"],
                             gone=now["seconds"], limit=limit if limit is not None else "?")
-    lines = open_ledger_lines()
+    lines = ["ledger: " + line for line in open_ledger_lines()] + admitted_gaps(said)
     if not lines:
         return ""
-    shown = "\n".join("  " + line[:200] for line in lines[:8])
-    return OPEN.format(left=room, seconds=now["seconds_left"], count=len(lines), lines=shown)
+    shown = "\n".join("  - " + line[:260] for line in lines[:8])
+    return OPEN.format(left=room, seconds=now["seconds_left"], lines=shown)
 
 
 def main(argv):
@@ -175,7 +233,8 @@ def main(argv):
             given = int(argv[argv.index("--nudge") + 1])
         except (IndexError, ValueError):
             given = 0
-        text = nudge(now, given)
+        said = last_message(argv[argv.index("--last") + 1]) if "--last" in argv and argv.index("--last") + 1 < len(argv) else ""
+        text = nudge(now, given, said)
         if text:
             print(text)
     elif "--session-room" in argv:

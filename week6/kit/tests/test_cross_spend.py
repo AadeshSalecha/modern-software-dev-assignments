@@ -20,22 +20,33 @@ def write(path, text):
 
 
 class Better(unittest.TestCase):
-    def score(self, usable=True, changed=True, shipped=0, other=0):
-        fails = [{"author": "shipped"}] * shipped + [{"author": "b"}] * other
-        return {"usable": usable, "changed": changed, "fails": fails, "passed": 0}
+    def score(self, usable=True, changed=True, fails=()):
+        return {"usable": usable, "changed": changed, "passed": 0,
+                "fails": [{"author": author, "how": how} for author, how in fails]}
 
     def test_a_tie_goes_to_a(self):
         self.assertEqual(cross.better({"a": self.score(), "b": self.score()}), "a")
 
-    def test_fewer_failures_wins(self):
-        self.assertEqual(cross.better({"a": self.score(other=2), "b": self.score(other=1)}), "b")
+    def test_the_other_author_s_scenarios_do_not_decide(self):
+        a = self.score(fails=[("b", "as written")] * 5)
+        self.assertEqual(cross.better({"a": a, "b": self.score()}), "a")
 
-    def test_a_repair_that_breaks_a_shipped_scenario_loses_to_one_that_fails_more_new_ones(self):
-        self.assertEqual(cross.better({"a": self.score(shipped=1), "b": self.score(other=3)}), "b")
+    def test_nor_do_the_variants(self):
+        a = self.score(fails=[("a", "handed over before the last drain"), ("a", "every service restarted before the last drain")])
+        self.assertEqual(cross.better({"a": a, "b": self.score()}), "a")
+
+    def test_a_scenario_its_own_author_fails_and_the_other_passes_does(self):
+        a = self.score(fails=[("a", "as written")])
+        self.assertEqual(cross.better({"a": a, "b": self.score()}), "b")
+        self.assertEqual(cross.better({"a": a, "b": self.score(fails=[("b", "as written")])}), "a")
+
+    def test_breaking_a_shipped_scenario_loses(self):
+        a = self.score(fails=[("shipped", "as written")])
+        self.assertEqual(cross.better({"a": a, "b": self.score(fails=[("b", "as written")] * 3)}), "b")
 
     def test_unchanged_or_unbuildable_loses(self):
-        self.assertEqual(cross.better({"a": self.score(changed=False), "b": self.score(other=4)}), "b")
-        self.assertEqual(cross.better({"a": self.score(usable=False), "b": self.score(other=4)}), "b")
+        self.assertEqual(cross.better({"a": self.score(changed=False), "b": self.score(fails=[("b", "as written")] * 4)}), "b")
+        self.assertEqual(cross.better({"a": self.score(usable=False), "b": self.score(fails=[("b", "as written")] * 4)}), "b")
 
 
 class Reports(unittest.TestCase):
@@ -50,6 +61,28 @@ class Reports(unittest.TestCase):
         self.assertIn("1 identical", text)
         self.assertIn('only in b: {"id": 2}', text)
         self.assertIn("n: a has 1, b has 2", text)
+
+
+class PrivateFormat(unittest.TestCase):
+    SCENARIO = {"steps": [{"do": "event"}, {"do": "bus", "message": {"type": "cancel"}}, {"do": "drain"}]}
+
+    def outcome(self, status):
+        return {"problems": [], "result": {"statuses": {"_bus1": status}}}
+
+    def test_refs_are_added_to_bus_steps_only_where_missing(self):
+        scenario = {"steps": [{"do": "bus", "ref": "mine"}, {"do": "bus"}, {"do": "event"}]}
+        changed = cross.with_bus_refs(scenario)
+        self.assertEqual([step.get("ref") for step in changed["steps"]], ["mine", "_bus1", None])
+        self.assertNotIn("ref", scenario["steps"][1])
+
+    def test_a_message_only_the_repair_accepts_marks_the_scenario(self):
+        found = cross.private_bus_step(self.SCENARIO, self.outcome(422), [self.outcome(200)])
+        self.assertIn("step 2 cancel: 422 as shipped, 200 on the repair", found)
+
+    def test_messages_the_shipped_release_accepts_or_both_refuse_do_not(self):
+        self.assertEqual(cross.private_bus_step(self.SCENARIO, self.outcome(200), [self.outcome(200)]), "")
+        self.assertEqual(cross.private_bus_step(self.SCENARIO, self.outcome(422), [self.outcome(422)]), "")
+        self.assertEqual(cross.private_bus_step(self.SCENARIO, {"problems": ["x"], "result": None}, [self.outcome(200)]), "")
 
 
 class OtherWork(unittest.TestCase):
@@ -106,6 +139,16 @@ class Spend(unittest.TestCase):
             write(log, json.dumps(message) + "\n")
             self.assertGreater(spend.cost_of(log, self.CARD), 1.0)
 
+    def test_a_codex_session_that_was_cut_off_is_priced_by_its_steps(self):
+        with tempfile.TemporaryDirectory() as top:
+            log = os.path.join(top, "b.codex.m.jsonl")
+            write(log, (json.dumps({"type": "item.completed", "item": {"type": "command_execution"}}) + "\n") * 40)
+            cut = spend.cost_of(log, self.CARD)
+            self.assertAlmostEqual(cut, 40 * spend.CODEX_DOLLARS_PER_ITEM * 10.0 / 5.0)
+            with open(log, "a", encoding="utf-8") as handle:
+                handle.write(json.dumps({"type": "turn.completed", "usage": {"input_tokens": 100000, "cached_input_tokens": 0, "output_tokens": 0}}) + "\n")
+            self.assertAlmostEqual(spend.cost_of(log, self.CARD), 0.1)
+
     def test_codex_turns_are_priced_with_cached_input_apart(self):
         with tempfile.TemporaryDirectory() as top:
             log = os.path.join(top, "b.codex.m.jsonl")
@@ -160,6 +203,28 @@ class Budget(unittest.TestCase):
         os.environ["KIT_DEADLINE"] = "300"
         self.log("b.codex.m.jsonl", "s2", 48000)    # the run is at 0.68 of 0.72
         self.assertEqual(self.budget.nudge(self.budget.state()), "")
+
+    def test_later_messages_name_what_the_agent_itself_left_open(self):
+        self.log("a.claude.m.jsonl", "s1", 20000)
+        now = self.budget.state()
+        said = ("The fix is in and the gate is clear.\n- **Not covered:** two api copies racing on one key.\n"
+                "- I have no scenario for an attempt already in flight.\n- Report: 53 entries.")
+        text = self.budget.nudge(now, 1, said)
+        self.assertIn("two api copies racing", text)
+        self.assertIn("attempt already in flight", text)
+        self.assertNotIn("53 entries", text)
+        self.assertEqual(self.budget.nudge(now, 1, "All of it is verified by scenarios."), "")
+
+    def test_the_last_message_is_read_from_what_the_harness_hands_the_hook(self):
+        given = os.path.join(self.top.name, "stop.json")
+        write(given, json.dumps({"last_assistant_message": "x is untested"}))
+        self.assertEqual(self.budget.last_message(given), "x is untested")
+        transcript = os.path.join(self.top.name, "t.jsonl")
+        write(transcript, json.dumps({"type": "assistant", "message": {"content": [{"type": "text", "text": "first"}]}}) + "\n"
+              + json.dumps({"type": "assistant", "message": {"content": [{"type": "text", "text": "y is not covered"}]}}) + "\n")
+        write(given, json.dumps({"transcript_path": transcript}))
+        self.assertEqual(self.budget.last_message(given), "y is not covered")
+        self.assertEqual(self.budget.last_message(os.path.join(self.top.name, "missing.json")), "")
 
     def test_room(self):
         self.log("a.claude.m.jsonl", "s1", 50000)   # 0.50 of 0.72
