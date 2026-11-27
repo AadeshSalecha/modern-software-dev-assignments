@@ -65,7 +65,7 @@ JUDGE="${KIT_JUDGE:-claude:claude-sonnet-5-5:medium}"
 # this design made no request to it at all), a Claude Code session takes its place: that
 # harness is known to work wherever the main solver does.
 SECOND_FALLBACK="${KIT_SECOND_FALLBACK-claude:claude-haiku-5-5:medium}"
-THIRD_FALLBACK="${KIT_THIRD_FALLBACK-claude:claude-haiku-5-5:medium}"
+THIRD_FALLBACK="${KIT_THIRD_FALLBACK-claude:claude-sonnet-5-5:low}" # Haiku rarely finishes this in time
 REPORT_END=${KIT_REPORT_END:-220}      # the report-only session is stopped this many seconds after the start
 
 # One limit for money and one clock for the whole run, which kit/budget.py reports to this

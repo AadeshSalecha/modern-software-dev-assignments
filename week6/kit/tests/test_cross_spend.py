@@ -112,30 +112,49 @@ class ThreeReports(unittest.TestCase):
                     taken = json.load(handle)
             return state, taken, "\n".join(lines)
 
-    X, Y, Z = {"affected": [1]}, {"affected": [2]}, {"affected": [3]}
+    @staticmethod
+    def report(entries, total=10, skipped=5):
+        return {"affected": [{"id": n} for n in entries], "totals_minor": {"USD": total}, "skipped_rows": skipped}
 
     def test_all_the_same(self):
-        self.assertEqual(self.state(a=self.X, b=self.X, c=self.X)[:2], ("same", None))
-        self.assertEqual(self.state(a=self.X, b=self.X)[:2], ("same", None))
+        x = self.report([1, 2])
+        self.assertEqual(self.state(a=x, b=x, c=x)[:2], ("same", None))
+        self.assertEqual(self.state(a=x, b=x)[:2], ("same", None))
 
     def test_the_raw_file_report_agreeing_with_a_keeps_a(self):
-        self.assertEqual(self.state(a=self.X, b=self.Y, c=self.X)[:2], ("same", None))
+        self.assertEqual(self.state(a=self.report([1]), b=self.report([2]), c=self.report([1]))[:2], ("same", None))
 
-    def test_the_raw_file_report_agreeing_with_b_takes_b(self):
-        self.assertEqual(self.state(a=self.X, b=self.Y, c=self.Y)[:2], ("settled", self.Y))
+    def test_the_raw_file_report_agreeing_with_b_takes_b_s_part(self):
+        state, taken, _ = self.state(a=self.report([1], total=10), b=self.report([2], total=20), c=self.report([2], total=20))
+        self.assertEqual(state, "settled")
+        self.assertEqual(taken, self.report([2], total=20))
 
-    def test_the_two_database_reports_against_the_raw_file_one_needs_deciding(self):
-        state, taken, lines = self.state(a=self.X, b=self.X, c=self.Y)
+    def test_parts_are_settled_one_by_one(self):
+        # c confirms b's entries and a's totals: the report handed in has each
+        state, taken, _ = self.state(a=self.report([1], total=10), b=self.report([2], total=20), c=self.report([2], total=10))
+        self.assertEqual(state, "settled")
+        self.assertEqual(taken, self.report([2], total=10))
+
+    def test_a_lone_figure_from_the_raw_files_does_not_call_for_a_decision(self):
+        # the usual case: the raw-file parser has the entries and totals and miscounts corrupted rows
+        state, taken, lines = self.state(a=self.report([1, 2]), b=self.report([1, 2]), c=self.report([1, 2], skipped=9))
+        self.assertEqual((state, taken), ("same", None))
+        self.assertIn("a's stands", lines)
+
+    def test_the_two_database_reports_against_the_raw_file_one_on_the_entries_needs_deciding(self):
+        state, taken, lines = self.state(a=self.report([1]), b=self.report([1]), c=self.report([2]))
         self.assertEqual((state, taken), ("decide", None))
+        self.assertIn("affected: a=b, c (in dispute", lines)
         self.assertIn("a against c", lines)
 
     def test_three_different_or_two_without_the_third_need_deciding(self):
-        self.assertEqual(self.state(a=self.X, b=self.Y, c=self.Z)[0], "decide")
-        self.assertEqual(self.state(a=self.X, b=self.Y)[0], "decide")
+        self.assertEqual(self.state(a=self.report([1]), b=self.report([2]), c=self.report([3]))[0], "decide")
+        self.assertEqual(self.state(a=self.report([1]), b=self.report([2]))[0], "decide")
 
     def test_without_a_report_from_a_another_is_taken(self):
-        self.assertEqual(self.state(a=None, b=self.Y)[:2], ("settled", self.Y))
-        self.assertEqual(self.state(a=None, b=self.Y, c=self.Z)[:2], ("settled", self.Z))
+        y, z = self.report([2]), self.report([3])
+        self.assertEqual(self.state(a=None, b=y)[:2], ("settled", y))
+        self.assertEqual(self.state(a=None, b=y, c=z)[:2], ("settled", z))
         self.assertEqual(self.state(a=None, b=None)[0], "none")
 
 

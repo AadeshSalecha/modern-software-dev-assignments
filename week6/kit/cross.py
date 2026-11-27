@@ -353,18 +353,56 @@ def load_reports(roots):
     return found
 
 
+def agreeing(values):
+    """[[names with equal values], ...] for {name: value}, in name order."""
+    groups = []
+    for name in sorted(values):
+        for group in groups:
+            if values[group[0]] == values[name]:
+                group.append(name)
+                break
+        else:
+            groups.append([name])
+    return groups
+
+
+def settle(values):
+    """Which workspace's value to hand in for one thing that was reported, given {name: value}
+    from "a" and "b" (both made with the kit's evidence database) and "c" (made from the raw
+    files, without it). Returns (name, settled?, why).
+
+    Two ways to the answer that share nothing settle it: where "c" agrees with "a" or with
+    "b", that value stands. Agreement between "a" and "b" alone does not, because they read
+    the same database; and nothing is ever decided by counting.
+    """
+    groups = agreeing(values)
+    names = sorted(values)
+    if len(groups) == 1:
+        return names[0], True, "all the same"
+    with_c = next((group for group in groups if "c" in group), None)
+    if with_c and len(with_c) > 1:
+        other = "a" if "a" in with_c else with_c[0]
+        return other, True, f"c, made from the raw files, agrees with {other}"
+    if "a" not in values:
+        return ("c" if "c" in values else names[0]), True, "a has none"
+    return "a", False, "they differ and nothing settles it"
+
+
 def compare_reports(roots, decided_dir=None):
-    """Compare the reports of up to three workspaces: "a" and "b" (both made with the kit's
-    evidence database) and "c" (made from the raw files, without it).
+    """Compare the reports of up to three workspaces, part by part.
+
+    A JSON report that is an object is compared key by key (its list of entries, its totals,
+    its counts). For each key settle() says whose value stands. A key whose value is a list or
+    an object and that nothing settles needs someone to work it out. A single number that
+    nothing settles does not: there "a" stands, because the one such number in these reports
+    is a count of corrupted rows, which the kit's loader takes from the evidence contract and
+    a one-off parser tends to get slightly wrong, and one figure is not worth a session.
 
     Returns (state, lines):
       none     nobody wrote a report
-      same     every report there is says the same, and "a" has one
-      settled  the reports say which one to hand in without anyone having to judge; it is
-               written to decided_dir. That is the case when "a" has none; when the report
-               from the raw files agrees with one of the two others (two independent ways to
-               the same answer); and never on a count of votes alone
-      decide   they differ and nothing settles it: someone has to work it out
+      same     "a" has a report and nothing about it is to change
+      settled  the report to hand in differs from "a"'s and is written to decided_dir
+      decide   a list or an object in the report is in dispute
     """
     files = load_reports(roots)
     if not files:
@@ -372,43 +410,57 @@ def compare_reports(roots, decided_dir=None):
     order = {"none": 0, "same": 1, "settled": 2, "decide": 3}
     worst, lines = "none", []
     for base, owners in sorted(files.items()):
-        names = sorted(owners)
-        groups = []  # workspaces that agree with each other
-        for name in names:
-            for group in groups:
-                if owners[group[0]][1] == owners[name][1]:
-                    group.append(name)
-                    break
+        contents = {name: content for name, (_, content) in owners.items()}
+        told = ", ".join("=".join(group) for group in agreeing(contents))
+        whole, whole_settled, why = settle(contents)
+        by_key = base.endswith(".json") and "a" in contents and all(isinstance(c, dict) for c in contents.values())
+        state, merged = "same", None
+        if len(agreeing(contents)) == 1:
+            lines.append(f"out/{base}: {told} ({len(contents)} report(s), all the same)")
+            state = "same" if "a" in contents else "settled"
+            merged = None if "a" in contents else contents[whole]
+        elif not by_key:
+            lines.append(f"out/{base}: {told} ({why})")
+            if whole_settled:
+                state, merged = ("same", None) if whole == "a" else ("settled", contents[whole])
             else:
-                groups.append([name])
-        told = ", ".join("=".join(group) for group in groups)
-        take, state, why = None, "decide", ""
-        if len(groups) == 1:
-            if "a" in names:
-                state, why = "same", f"{len(names)} report(s), all the same"
-            else:
-                take, state, why = names[0], "settled", f"a has none; taking {names[0]}'s"
-        elif "a" not in names:
-            # b and c differ and a has nothing: the one made from the raw files stands alone
-            take, state, why = ("c" if "c" in names else names[0]), "settled", "a has none and the others differ"
+                state = "decide"
         else:
-            with_c = next((group for group in groups if "c" in group), None)
-            if with_c and len(with_c) > 1:
-                take = "a" if "a" in with_c else with_c[0]
-                state = "settled"
-                why = f"the report made from the raw files agrees with {'a' if take == 'a' else take}"
-        lines.append(f"out/{base}: {told} ({why or 'they differ and nothing settles it'})")
-        if state == "settled" and decided_dir and take != "a":
+            lines.append(f"out/{base}: {told}; part by part:")
+            merged = dict(contents["a"])
+            for key in sorted(set().union(*contents.values())):
+                values = {name: content[key] for name, content in contents.items() if key in content}
+                name, settled, key_why = settle(values)
+                plain = not any(isinstance(value, (list, dict)) for value in values.values())
+                if len(agreeing(values)) == 1 and len(values) == len(contents):
+                    continue
+                if settled or plain:
+                    keep = name if settled else ("a" if "a" in values else name)
+                    if keep in values:
+                        merged[key] = values[keep]
+                    note = key_why if settled else "a single figure nothing settles: a's stands"
+                    lines.append(f"  {key}: {', '.join('='.join(g) for g in agreeing(values))} ({note}; taking {keep}'s)")
+                else:
+                    state = "decide"
+                    lines.append(f"  {key}: {', '.join('='.join(g) for g in agreeing(values))} (in dispute: {key_why})")
+            if state != "decide":
+                state = "same" if merged == contents["a"] else "settled"
+                if state == "same":
+                    merged = None
+        if state == "settled" and decided_dir and merged is not None:
             os.makedirs(decided_dir, exist_ok=True)
-            shutil.copy(owners[take][0], os.path.join(decided_dir, base))
-        if state == "settled" and take == "a":
-            state = "same"  # a stays as it is
-        if len(groups) > 1 and base.endswith(".json"):
+            with open(os.path.join(decided_dir, base), "w", encoding="utf-8") as handle:
+                if base.endswith(".json"):
+                    json.dump(merged, handle, indent=2)
+                else:
+                    handle.write(merged)
+        groups = agreeing(contents)
+        if state == "decide" and base.endswith(".json"):
             for i, first in enumerate(groups):
                 for second in groups[i + 1:]:
                     x, y = first[0], second[0]
                     lines.append(f"  {x} against {y} (in the lines below, \"a\" stands for {x} and \"b\" for {y}):")
-                    lines += ["    " + line for line in differences(owners[x][1], owners[y][1])[:26]]
+                    lines += ["    " + line for line in differences(contents[x], contents[y])[:26]]
         if order[state] > order[worst]:
             worst = state
     return worst, lines
