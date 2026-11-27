@@ -1,0 +1,203 @@
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/api/src/main.ts week6/app/services/api/src/main.ts
+--- clean-app/services/api/src/main.ts	2026-11-26 10:01:16.143626922 +0000
++++ week6/app/services/api/src/main.ts	2026-11-27 11:34:53.041739378 +0000
+@@ -339,6 +339,43 @@
+   });
+ });
+ 
++// Release 2.3.1 accepted resends its router did not turn into deliveries. Once per store, tell
++// the router which resend requests exist so it can deliver the ones it dropped.
++function reconcileResends(): void {
++  const db = store.db;
++  db.exec("begin immediate");
++  try {
++    const done = db
++      .prepare("select value from meta where key = 'resend_reconcile'")
++      .get();
++    if (!done) {
++      const rows = db
++        .prepare(
++          "select seq, data from outbox where type = 'resend.requested' and status != 'rejected' order by seq",
++        )
++        .all() as unknown as { seq: number; data: string }[];
++      if (rows.length > 0) {
++        store.enqueue("resend.reconcile", now(), {
++          requests: rows.map((row) => {
++            const data = JSON.parse(row.data);
++            return {
++              seq: row.seq,
++              event_id: data.event_id,
++              endpoint_id: data.endpoint_id,
++            };
++          }),
++        });
++      }
++      db.prepare("insert into meta (key, value) values ('resend_reconcile', 1)").run();
++    }
++    db.exec("commit");
++  } catch (problem) {
++    db.exec("rollback");
++    throw problem;
++  }
++}
++reconcileResends();
++
+ server.listen(portBase + 1, "127.0.0.1", () =>
+   log("api.started", { release: RELEASE }),
+ );
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/bus.py week6/app/services/router/bus.py
+--- clean-app/services/router/bus.py	2026-11-26 10:01:16.144267697 +0000
++++ week6/app/services/router/bus.py	2026-11-27 11:34:45.899939513 +0000
+@@ -113,6 +113,20 @@
+     if type_ == "resend.requested":
+         body = {"event_id": need(data, "event_id", str), "endpoint_id": need(data, "endpoint_id", str)}
+         return producer, str(seq), "resend", body
++    if type_ == "resend.reconcile":
++        items = need(data, "requests", list)
++        requests = []
++        for item in items:
++            if not isinstance(item, dict):
++                raise Malformed("bad request entry")
++            requests.append(
++                {
++                    "seq": need(item, "seq", int),
++                    "event_id": need(item, "event_id", str),
++                    "endpoint_id": need(item, "endpoint_id", str),
++                }
++            )
++        return producer, str(seq), "reconcile", {"requests": requests}
+     raise Malformed("unknown message type")
+ 
+ 
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/main.py week6/app/services/router/main.py
+--- clean-app/services/router/main.py	2026-11-26 10:01:16.144267697 +0000
++++ week6/app/services/router/main.py	2026-11-27 11:34:45.900989263 +0000
+@@ -51,7 +51,7 @@
+             return 200, {"applied": False}
+         now = self.clock.now()
+         self.db.execute("insert into bus_seen (producer, ident) values (?, ?)", (producer, ident))
+-        routing.apply(self.db, self.log, now, kind, body)
++        routing.apply(self.db, self.log, now, kind, body, producer, ident)
+         self.db.commit()
+         self.crash(1)
+         return 200, {"applied": True}
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/routing.py week6/app/services/router/routing.py
+--- clean-app/services/router/routing.py	2026-11-26 10:01:16.144267697 +0000
++++ week6/app/services/router/routing.py	2026-11-27 11:34:53.039247326 +0000
+@@ -17,14 +17,16 @@
+     return "*" in event_types or type_ in event_types
+ 
+ 
+-def create_delivery(db, log, now, event_id, endpoint_id, resend_of=None):
++def create_delivery(db, log, now, event_id, endpoint_id, resend_of=None, request_ident=None):
+     version = db.execute("select version from endpoints where id = ?", (endpoint_id,)).fetchone()[0]
+     delivery_id = next_id(db, "dlv")
+     ord_ = db.execute("select value from meta where key = 'dlv'").fetchone()[0]
++    if resend_of == "self":
++        resend_of = delivery_id
+     db.execute(
+         "insert into deliveries (id, ord, event_id, endpoint_id, endpoint_version, resend_of, state, "
+-        "available_at, created_at) values (?, ?, ?, ?, ?, ?, 'queued', ?, ?)",
+-        (delivery_id, ord_, event_id, endpoint_id, version, resend_of, now, now),
++        "available_at, created_at, request_ident) values (?, ?, ?, ?, ?, ?, 'queued', ?, ?, ?)",
++        (delivery_id, ord_, event_id, endpoint_id, version, resend_of, now, now, request_ident),
+     )
+     log.write(
+         "delivery.created", delivery=delivery_id, event=event_id, endpoint=endpoint_id, version=version,
+@@ -96,7 +98,9 @@
+     for event in missed:
+         if not subscribed(endpoint["event_types"], event["type"]):
+             continue
+-        if first_delivery(db, event["id"], endpoint["id"]):
++        if db.execute(
++            "select 1 from deliveries where event_id = ? and endpoint_id = ?", (event["id"], endpoint["id"])
++        ).fetchone():
+             continue
+         create_delivery(db, log, now, event["id"], endpoint["id"])
+ 
+@@ -140,18 +144,66 @@
+         catch_up(db, log, now, endpoint, disabled_at)
+ 
+ 
+-def apply_resend(db, log, now, body):
+-    original = first_delivery(db, body["event_id"], body["endpoint_id"])
+-    if original is None:
++def resend_target(db, event_id, endpoint_id):
++    """The resend's first delivery to link to, or None if the request names something it may not."""
++    event = db.execute("select merchant_id from events where id = ?", (event_id,)).fetchone()
++    endpoint = db.execute("select merchant_id from endpoints where id = ?", (endpoint_id,)).fetchone()
++    if event is None or endpoint is None or event["merchant_id"] != endpoint["merchant_id"]:
++        return False
++    return True
++
++
++def create_resend(db, log, now, event_id, endpoint_id, request_ident):
++    earlier = db.execute(
++        "select id from deliveries where event_id = ? and endpoint_id = ? "
++        "order by resend_of is not null, ord limit 1",
++        (event_id, endpoint_id),
++    ).fetchone()
++    create_delivery(
++        db, log, now, event_id, endpoint_id, resend_of=earlier["id"] if earlier else "self",
++        request_ident=request_ident,
++    )
++
++
++def apply_resend(db, log, now, body, ident=None):
++    if not resend_target(db, body["event_id"], body["endpoint_id"]):
+         log.write("resend.skipped", level="warn", event=body["event_id"], endpoint=body["endpoint_id"])
+         return
+-    create_delivery(db, log, now, body["event_id"], body["endpoint_id"], resend_of=original["id"])
++    create_resend(db, log, now, body["event_id"], body["endpoint_id"], ident)
++
++
++def apply_reconcile(db, log, now, body):
++    """Give the resends the shipped release accepted but did not deliver their delivery, once.
++
++    Requests the shipped release applied have a bus_seen row but no delivery carrying their ident.
++    Those that did get a delivery are the pair's resend deliveries without an ident.
++    """
++    pending = {}
++    for req in sorted(body["requests"], key=lambda r: r["seq"]):
++        ident = str(req["seq"])
++        if not db.execute("select 1 from bus_seen where producer = 'api' and ident = ?", (ident,)).fetchone():
++            continue
++        if db.execute("select 1 from deliveries where request_ident = ?", (ident,)).fetchone():
++            continue
++        pending.setdefault((req["event_id"], req["endpoint_id"]), []).append(ident)
++    for (event_id, endpoint_id), idents in pending.items():
++        if not resend_target(db, event_id, endpoint_id):
++            continue
++        have = db.execute(
++            "select count(*) from deliveries where event_id = ? and endpoint_id = ? and resend_of is not null "
++            "and request_ident is null",
++            (event_id, endpoint_id),
++        ).fetchone()[0]
++        for ident in idents[have:]:
++            create_resend(db, log, now, event_id, endpoint_id, ident)
+ 
+ 
+-def apply(db, log, now, kind, body):
++def apply(db, log, now, kind, body, producer=None, ident=None):
+     if kind == "event":
+         route_event(db, log, now, body)
+     elif kind == "endpoint":
+         apply_endpoint(db, log, now, body)
++    elif kind == "reconcile":
++        apply_reconcile(db, log, now, body)
+     else:
+-        apply_resend(db, log, now, body)
++        apply_resend(db, log, now, body, ident if producer == "api" else None)
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/store.py week6/app/services/router/store.py
+--- clean-app/services/router/store.py	2026-11-26 10:01:16.144267697 +0000
++++ week6/app/services/router/store.py	2026-11-27 11:34:45.900829663 +0000
+@@ -77,6 +77,9 @@
+     db.execute("pragma journal_mode = wal")
+     db.execute("pragma synchronous = normal")
+     db.executescript(SCHEMA)
++    columns = [row[1] for row in db.execute("pragma table_info(deliveries)")]
++    if "request_ident" not in columns:
++        db.execute("alter table deliveries add column request_ident text")
+     db.commit()
+     return db
+ 

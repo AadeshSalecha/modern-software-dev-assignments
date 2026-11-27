@@ -1,0 +1,237 @@
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/api/src/main.ts week6/app/services/api/src/main.ts
+--- clean-app/services/api/src/main.ts	2026-11-26 10:01:16.143626922 +0000
++++ week6/app/services/api/src/main.ts	2026-11-27 10:48:48.959275475 +0000
+@@ -24,6 +24,7 @@
+ 
+ const store = new Store(stateDir);
+ const keys = new RecentKeys();
++store.replayHistory();
+ 
+ // --- clock, crash points, log (contracts/harness.md) ----------------------
+ 
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/api/src/store.ts week6/app/services/api/src/store.ts
+--- clean-app/services/api/src/store.ts	2026-11-26 10:01:16.143626922 +0000
++++ week6/app/services/api/src/store.ts	2026-11-27 10:48:48.955315679 +0000
+@@ -91,6 +91,37 @@
+     }
+   }
+ 
++  // INC-2318: republish the history of every endpoint that was ever switched back on, once, so
++  // the router can deliver what earlier switch-ons missed. The router applies each change once.
++  replayHistory(): void {
++    this.transaction(() => {
++      const done = this.db
++        .prepare("select value from meta where key = 'history_replayed'")
++        .get();
++      if (done) return;
++      const rows = this.db
++        .prepare(
++          `select h.endpoint_id, h.version, h.config, h.at from endpoint_history h
++           where h.endpoint_id in (
++             select a.endpoint_id from endpoint_history a join endpoint_history b
++               on b.endpoint_id = a.endpoint_id and b.version = a.version - 1
++             where json_extract(a.config, '$.enabled') = 1 and json_extract(b.config, '$.enabled') = 0)
++           order by h.at, h.endpoint_id, h.version`,
++        )
++        .all() as unknown as {
++        config: string;
++        at: number;
++      }[];
++      for (const row of rows)
++        this.enqueue("endpoint.changed", row.at, {
++          endpoint: JSON.parse(row.config),
++        });
++      this.db
++        .prepare("insert into meta (key, value) values ('history_replayed', 1)")
++        .run();
++    });
++  }
++
+   // Opaque ids from a stored counter. Call inside a transaction.
+   nextId(prefix: string): string {
+     this.db
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/bus.py week6/app/services/router/bus.py
+--- clean-app/services/router/bus.py	2026-11-26 10:01:16.144267697 +0000
++++ week6/app/services/router/bus.py	2026-11-27 10:48:42.448395250 +0000
+@@ -62,7 +62,7 @@
+     }
+ 
+ 
+-def endpoint_body(endpoint_id, merchant, url, secret, types, enabled, version):
++def endpoint_body(endpoint_id, merchant, url, secret, types, enabled, version, at=None):
+     if not isinstance(types, list) or not all(isinstance(t, str) for t in types):
+         raise Malformed("event types must be a list of strings")
+     for type_ in types:
+@@ -76,6 +76,7 @@
+         "event_types": types,
+         "enabled": bool(enabled),
+         "version": version,
++        "at": at,
+     }
+ 
+ 
+@@ -108,6 +109,7 @@
+             need(ep, "event_types", list),
+             need(ep, "enabled", bool),
+             need(ep, "version", int),
++            msg["at"] if isinstance(msg.get("at"), int) and not isinstance(msg.get("at"), bool) else None,
+         )
+         return producer, str(seq), "endpoint", body
+     if type_ == "resend.requested":
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/routing.py week6/app/services/router/routing.py
+--- clean-app/services/router/routing.py	2026-11-26 10:01:16.144267697 +0000
++++ week6/app/services/router/routing.py	2026-11-27 10:48:42.448902243 +0000
+@@ -5,8 +5,6 @@
+ 
+ from store import next_id
+ 
+-CATCH_UP_SECONDS = 24 * 3600
+-
+ # INC-2188 workaround (2.3.1). With it on, an endpoint change does not create deliveries
+ # at the endpoint's new version, so a delivery that was queued keeps going under the
+ # version it was created for. Leave it on until deliveries stop being keyed by version.
+@@ -86,14 +84,8 @@
+             create_delivery(db, log, now, event["id"], ep["id"])
+ 
+ 
+-def catch_up(db, log, now, endpoint, since):
+-    """Deliver what the endpoint missed while it was disabled."""
+-    floor = max(since, now - CATCH_UP_SECONDS)
+-    missed = db.execute(
+-        "select id, type from events where merchant_id = ? and routed_at >= ? order by routed_at, rowid",
+-        (endpoint["merchant_id"], floor),
+-    ).fetchall()
+-    for event in missed:
++def owe(db, log, now, endpoint, events):
++    for event in events:
+         if not subscribed(endpoint["event_types"], event["type"]):
+             continue
+         if first_delivery(db, event["id"], endpoint["id"]):
+@@ -101,21 +93,78 @@
+         create_delivery(db, log, now, event["id"], endpoint["id"])
+ 
+ 
++def catch_up(db, log, now, endpoint, since, since_pos):
++    """Deliver what the endpoint missed while it was disabled: events that reached the router
++    after the switch-off, however long ago."""
++    if since_pos is not None:
++        missed = db.execute(
++            "select id, type from events where merchant_id = ? and rowid > ? order by rowid",
++            (endpoint["merchant_id"], since_pos),
++        ).fetchall()
++    else:
++        missed = db.execute(
++            "select id, type from events where merchant_id = ? and routed_at >= ? order by routed_at, rowid",
++            (endpoint["merchant_id"], since),
++        ).fetchall()
++    owe(db, log, now, endpoint, missed)
++
++
++def record_history(db, endpoint, at):
++    cur = db.execute(
++        "insert or ignore into endpoint_history (endpoint_id, version, merchant_id, event_types, enabled, at) "
++        "values (?, ?, ?, ?, ?, ?)",
++        (endpoint["id"], endpoint["version"], endpoint["merchant_id"], json.dumps(endpoint["event_types"]),
++         int(endpoint["enabled"]), at),
++    )
++    return cur.rowcount > 0
++
++
++def replay_history(db, log, now, endpoint):
++    """An older change of an endpoint, republished by the api from its history. Remember it, and if it
++    switched the endpoint on, deliver what that off period owed and the shipped release dropped."""
++    if endpoint.get("at") is None:
++        return
++    if not record_history(db, endpoint, endpoint["at"]) or not endpoint["enabled"]:
++        return
++    version = endpoint["version"]
++    start = None
++    while True:
++        prev = db.execute(
++            "select * from endpoint_history where endpoint_id = ? and version = ?",
++            (endpoint["id"], version - 1),
++        ).fetchone()
++        if prev is None or prev["enabled"]:
++            break
++        start = prev
++        version -= 1
++    if start is None:
++        return
++    missed = db.execute(
++        "select id, type from events where merchant_id = ? and created >= ? and created < ? order by created, rowid",
++        (endpoint["merchant_id"], start["at"], endpoint["at"]),
++    ).fetchall()
++    owe(db, log, now, endpoint, missed)
++
++
+ def apply_endpoint(db, log, now, endpoint):
+     old = db.execute("select * from endpoints where id = ?", (endpoint["id"],)).fetchone()
+     if old is not None and endpoint["version"] <= old["version"]:
+         log.write("endpoint.stale", endpoint=endpoint["id"], version=endpoint["version"])
++        replay_history(db, log, now, endpoint)
+         return
+     was_enabled = bool(old["enabled"]) if old is not None else None
+     disabled_at = old["disabled_at"] if old is not None else None
++    disabled_pos = old["disabled_pos"] if old is not None else None
+     if not endpoint["enabled"] and was_enabled is not False:
+         disabled_at = now
++        disabled_pos = db.execute("select coalesce(max(rowid), 0) from events").fetchone()[0]
++    record_history(db, endpoint, endpoint["at"] if endpoint.get("at") is not None else now)
+     db.execute(
+-        "insert into endpoints (id, merchant_id, url, secret, event_types, enabled, version, disabled_at) "
+-        "values (?, ?, ?, ?, ?, ?, ?, ?) "
++        "insert into endpoints (id, merchant_id, url, secret, event_types, enabled, version, disabled_at, "
++        "disabled_pos) values (?, ?, ?, ?, ?, ?, ?, ?, ?) "
+         "on conflict (id) do update set url = excluded.url, secret = excluded.secret, "
+         "event_types = excluded.event_types, enabled = excluded.enabled, version = excluded.version, "
+-        "disabled_at = excluded.disabled_at",
++        "disabled_at = excluded.disabled_at, disabled_pos = excluded.disabled_pos",
+         (
+             endpoint["id"],
+             endpoint["merchant_id"],
+@@ -125,6 +174,7 @@
+             int(endpoint["enabled"]),
+             endpoint["version"],
+             None if endpoint["enabled"] else disabled_at,
++            None if endpoint["enabled"] else disabled_pos,
+         ),
+     )
+     log.write(
+@@ -137,7 +187,7 @@
+     if old is not None and not INC_2188_WORKAROUND:
+         follow_version(db, log, now, endpoint["id"], endpoint["version"])
+     if endpoint["enabled"] and was_enabled is False and disabled_at is not None:
+-        catch_up(db, log, now, endpoint, disabled_at)
++        catch_up(db, log, now, endpoint, disabled_at, disabled_pos)
+ 
+ 
+ def apply_resend(db, log, now, body):
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/store.py week6/app/services/router/store.py
+--- clean-app/services/router/store.py	2026-11-26 10:01:16.144267697 +0000
++++ week6/app/services/router/store.py	2026-11-27 10:48:42.447598488 +0000
+@@ -25,6 +25,15 @@
+     version integer not null,
+     disabled_at integer
+ );
++create table if not exists endpoint_history (
++    endpoint_id text not null,
++    version integer not null,
++    merchant_id text not null,
++    event_types text not null,
++    enabled integer not null,
++    at integer not null,
++    primary key (endpoint_id, version)
++);
+ create table if not exists events (
+     id text primary key,
+     merchant_id text not null,
+@@ -77,6 +86,9 @@
+     db.execute("pragma journal_mode = wal")
+     db.execute("pragma synchronous = normal")
+     db.executescript(SCHEMA)
++    columns = [r[1] for r in db.execute("pragma table_info(endpoints)")]
++    if "disabled_pos" not in columns:
++        db.execute("alter table endpoints add column disabled_pos integer")
+     db.commit()
+     return db
+ 

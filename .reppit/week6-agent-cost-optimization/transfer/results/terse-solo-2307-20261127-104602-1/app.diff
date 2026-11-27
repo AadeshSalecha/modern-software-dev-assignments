@@ -1,0 +1,129 @@
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/api/src/main.ts week6/app/services/api/src/main.ts
+--- clean-app/services/api/src/main.ts	2026-11-26 10:01:16.143626922 +0000
++++ week6/app/services/api/src/main.ts	2026-11-27 10:48:01.931890078 +0000
+@@ -23,6 +23,7 @@
+ const routerUrl = `http://127.0.0.1:${portBase + 2}`;
+ 
+ const store = new Store(stateDir);
++store.replayResends();
+ const keys = new RecentKeys();
+ 
+ // --- clock, crash points, log (contracts/harness.md) ----------------------
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/api/src/store.ts week6/app/services/api/src/store.ts
+--- clean-app/services/api/src/store.ts	2026-11-26 10:01:16.143626922 +0000
++++ week6/app/services/api/src/store.ts	2026-11-27 10:48:01.931328279 +0000
+@@ -202,6 +202,41 @@
+       .run(type, now, JSON.stringify(data));
+   }
+ 
++  // Resends the shipped release published may have been dropped by the router. Publish them
++  // again once, with how many later requests the same pair has; the router tells which it
++  // already served. Old rows become 'replayed', so a second start does nothing.
++  replayResends(): void {
++    this.transaction(() => {
++      if (this.db.prepare("select 1 from meta where key = 'resends_replayed'").get())
++        return;
++      this.db
++        .prepare("insert into meta (key, value) values ('resends_replayed', 1)")
++        .run();
++      const rows = this.db
++        .prepare(
++          "select seq, at, data from outbox where type = 'resend.requested' and status = 'published' order by seq",
++        )
++        .all() as unknown as { seq: number; at: number; data: string }[];
++      const seen = new Map<string, number>();
++      for (let i = rows.length - 1; i >= 0; i--) {
++        const d = JSON.parse(rows[i].data);
++        const key = `${d.event_id}\u0000${d.endpoint_id}`;
++        const later = seen.get(key) ?? 0;
++        seen.set(key, later + 1);
++        this.enqueue("resend.requested", rows[i].at, {
++          event_id: d.event_id,
++          endpoint_id: d.endpoint_id,
++          legacy_later: later,
++        });
++      }
++      this.db
++        .prepare(
++          "update outbox set status = 'replayed' where type = 'resend.requested' and status = 'published'",
++        )
++        .run();
++    });
++  }
++
+   pending(): OutboxRow[] {
+     return this.db
+       .prepare(
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/bus.py week6/app/services/router/bus.py
+--- clean-app/services/router/bus.py	2026-11-26 10:01:16.144267697 +0000
++++ week6/app/services/router/bus.py	2026-11-27 10:47:53.553172518 +0000
+@@ -112,6 +112,8 @@
+         return producer, str(seq), "endpoint", body
+     if type_ == "resend.requested":
+         body = {"event_id": need(data, "event_id", str), "endpoint_id": need(data, "endpoint_id", str)}
++        if "legacy_later" in data:
++            body["legacy_later"] = need(data, "legacy_later", int)
+         return producer, str(seq), "resend", body
+     raise Malformed("unknown message type")
+ 
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/routing.py week6/app/services/router/routing.py
+--- clean-app/services/router/routing.py	2026-11-26 10:01:16.144267697 +0000
++++ week6/app/services/router/routing.py	2026-11-27 10:47:53.552452992 +0000
+@@ -141,11 +141,31 @@
+ 
+ 
+ def apply_resend(db, log, now, body):
+-    original = first_delivery(db, body["event_id"], body["endpoint_id"])
+-    if original is None:
+-        log.write("resend.skipped", level="warn", event=body["event_id"], endpoint=body["endpoint_id"])
++    event_id, endpoint_id = body["event_id"], body["endpoint_id"]
++    event = db.execute("select merchant_id from events where id = ?", (event_id,)).fetchone()
++    endpoint = db.execute("select merchant_id from endpoints where id = ?", (endpoint_id,)).fetchone()
++    if event is None or endpoint is None or event["merchant_id"] != endpoint["merchant_id"]:
++        log.write("resend.skipped", level="warn", event=event_id, endpoint=endpoint_id)
+         return
+-    create_delivery(db, log, now, body["event_id"], body["endpoint_id"], resend_of=original["id"])
++    later = body.get("legacy_later")
++    if later is not None:
++        # A request the shipped release already handled: it created a delivery for the
++        # latest requests of a pair only (those after the first delivery existed).
++        made = db.execute(
++            "select count(*) from deliveries where event_id = ? and endpoint_id = ? "
++            "and resend_of is not null and by_request is null",
++            (event_id, endpoint_id),
++        ).fetchone()[0]
++        if later < made:
++            log.write("resend.covered", event=event_id, endpoint=endpoint_id)
++            return
++    original = first_delivery(db, event_id, endpoint_id)
++    delivery_id = create_delivery(db, log, now, event_id, endpoint_id, resend_of=original["id"] if original else "self")
++    db.execute(
++        "update deliveries set by_request = 1, resend_of = case when resend_of = 'self' then id else resend_of end "
++        "where id = ?",
++        (delivery_id,),
++    )
+ 
+ 
+ def apply(db, log, now, kind, body):
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/store.py week6/app/services/router/store.py
+--- clean-app/services/router/store.py	2026-11-26 10:01:16.144267697 +0000
++++ week6/app/services/router/store.py	2026-11-27 10:47:53.552741547 +0000
+@@ -46,7 +46,8 @@
+     lease_id text,
+     created_at integer not null,
+     finished_at integer,
+-    last_status integer
++    last_status integer,
++    by_request integer
+ );
+ create index if not exists deliveries_by_key on deliveries (event_id, endpoint_id, endpoint_version);
+ create index if not exists deliveries_by_state on deliveries (state, available_at);
+@@ -77,6 +78,8 @@
+     db.execute("pragma journal_mode = wal")
+     db.execute("pragma synchronous = normal")
+     db.executescript(SCHEMA)
++    if not any(r[1] == 'by_request' for r in db.execute('pragma table_info(deliveries)')):
++        db.execute('alter table deliveries add column by_request integer')
+     db.commit()
+     return db
+ 

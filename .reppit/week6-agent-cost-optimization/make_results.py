@@ -57,6 +57,9 @@ DESCRIPTIONS = collections.OrderedDict(
         ("v3c-budget-sonnet-terra", "Commit 7bfe15c with the real pairing on the Mac."),
         ("rep-new-starter", "Report only (KIT_VARIANT=report), rewritten report skill (commit 0e0854c): one Sonnet session answers the report request and nothing else. Repair is 0 by construction."),
         ("v3d-budget-sonnet-terra", "Commit 0e0854c, the zip for submission 2, with the real pairing on the Mac."),
+        ("v4-haiku-haiku", "After submission 2 (commit 92c089b): tolerant workspace copy, fallback solvers, a third session that derives the report from the raw files. Haiku as second solver and for the raw-file report."),
+        ("v4b-haiku-sonnetlow", "Commit e0b42c6: reports compared part by part. Haiku as second solver, Sonnet at effort low for the raw-file report."),
+        ("raw-sonnetlow-starter", "Only the raw-file report session (KIT_VARIANT=raw-report), Sonnet at effort low. Repair is 0 by construction."),
         ("v2d-from-zip", "The zip for submission 2, unpacked, nothing set (commit b407568). No Codex in the container, so the second solver cannot start: the run shows that case."),
     ]
 )
@@ -95,7 +98,9 @@ def transfer_section():
         "Incidents built to test the setup on tickets it was not designed around; see",
         "`transfer/README.md` and each folder's `NOTES.md`. Scored by each incident's `judge.py` with the",
         "assignment's formulas. Labels without an incident number are INC-2231. `rep-` labels are",
-        "report-only runs (repair 0 by construction); `sub1-` is the first submission's version;",
+        "report-only runs with the kit and `raw-` report-only runs from the raw files (repair 0 by",
+        "construction in both); `terse-` are tickets with the recovery requirement cut to half a",
+        "sentence, run with one Sonnet session; `sub1-` is the first submission's version;",
         "`v2zip-` the two-solver version of 2026-11-26; `v3c-`/`v3d-` the budget-aware versions.",
         "",
         "| Setup | Run | Result | Repair | Impact | Cost | Requests | Time | Incident | Regr. | Compat |",

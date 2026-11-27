@@ -48,7 +48,11 @@ Rebuilt by `make_results.py`.
 | v3c-budget-sonnet-terra | 2/2 | 1.00 | 1.00 | $0.502 | $0.47 to $0.54 | 40 | 366 s | 370 s |
 | rep-new-starter | 0/4 | 0.00 | 1.00 | $0.074 | $0.07 to $0.08 | 6 | 32 s | 34 s |
 | v3d-budget-sonnet-terra | 1/1 | 1.00 | 1.00 | $0.443 | $0.44 to $0.44 | 41 | 344 s | 344 s |
+| v4-haiku-haiku | 2/2 | 1.00 | 1.00 | $0.376 | $0.37 to $0.38 | 56 | 322 s | 358 s |
+| v4b-haiku-sonnetlow | 1/1 | 1.00 | 1.00 | $0.467 | $0.47 to $0.47 | 43 | 203 s | 203 s |
+| raw-sonnetlow-starter | 0/1 | 0.00 | 0.93 | $0.254 | $0.25 to $0.25 | 13 | 82 s | 82 s |
 | v2d-from-zip | 1/1 | 1.00 | 1.00 | $0.243 | $0.24 to $0.24 | 13 | 113 s | 113 s |
+| v4-sonnet-terra-terra | 1/1 | 1.00 | 1.00 | $0.655 | $0.66 to $0.66 | 60 | 388 s | 388 s |
 
 ## baseline
 
@@ -493,6 +497,43 @@ Commit 0e0854c, the zip for submission 2, with the real pairing on the Mac.
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | mac-20261127-103337-1 | PASS | 1.00 | 1.00 | $0.443 | 41 | 344 s | 9/9 | 10/10 | 2/2 | 20,431 | 1,676,146 | 48,104 |
 
+## v4-haiku-haiku
+
+After submission 2 (commit 92c089b): tolerant workspace copy, fallback solvers, a third session that derives the report from the raw files. Haiku as second solver and for the raw-file report.
+
+| Run | Result | Repair | Impact | Cost | Requests | Time | Incident | Regr. | Compat | Output | Cache read | Cache write |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 20261127-110945-1 | PASS | 1.00 | 1.00 | $0.369 | 57 | 358 s | 9/9 | 10/10 | 2/2 | 60,446 | 2,080,118 | 148,587 |
+| 20261127-110945-2 | PASS | 1.00 | 1.00 | $0.382 | 55 | 286 s | 9/9 | 10/10 | 2/2 | 67,561 | 2,121,346 | 159,913 |
+
+## v4b-haiku-sonnetlow
+
+Commit e0b42c6: reports compared part by part. Haiku as second solver, Sonnet at effort low for the raw-file report.
+
+| Run | Result | Repair | Impact | Cost | Requests | Time | Incident | Regr. | Compat | Output | Cache read | Cache write |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 20261127-113307-1 | PASS | 1.00 | 1.00 | $0.467 | 43 | 203 s | 9/9 | 10/10 | 2/2 | 30,242 | 1,172,759 | 103,381 |
+
+## raw-sonnetlow-starter
+
+Only the raw-file report session (KIT_VARIANT=raw-report), Sonnet at effort low. Repair is 0 by construction.
+
+| Run | Result | Repair | Impact | Cost | Requests | Time | Incident | Regr. | Compat | Output | Cache read | Cache write |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 20261127-112822-1 | FAIL | 0.00 | 0.93 | $0.254 | 13 | 82 s | 0/9 | 10/10 | 2/2 | 8,653 | 374,924 | 51,819 |
+
+Failures:
+- 20261127-112822-1: [incident] a payment sent again after the api stopped before answering is one event
+- 20261127-112822-1: [incident] a payment sent again after an api restart is one event
+- 20261127-112822-1: [incident] a payment sent again after the api stopped while publishing is one event
+- 20261127-112822-1: [incident] a payment sent again two hours after an api restart is one event
+- 20261127-112822-1: [incident] a repeat the deployed release queued for a retry is not sent once the release is replaced
+- 20261127-112822-1: [incident] a repeat whose original was delivered is never sent
+- 20261127-112822-1: [incident] repeats of several payments are each stopped
+- 20261127-112822-1: [incident] a repeat that is being sent when the release is replaced is not retried
+- 20261127-112822-1: [incident] starting the replaced release twice stops nothing more
+- 20261127-112822-1: impact figures 5/6 right, precision 1.0, recall 1.0
+
 ## v2d-from-zip
 
 The zip for submission 2, unpacked, nothing set (commit b407568). No Codex in the container, so the second solver cannot start: the run shows that case.
@@ -501,12 +542,22 @@ The zip for submission 2, unpacked, nothing set (commit b407568). No Codex in th
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 20261126-210148-1 | PASS | 1.00 | 1.00 | $0.243 | 13 | 113 s | 9/9 | 10/10 | 2/2 | 8,859 | 381,754 | 46,394 |
 
+## v4-sonnet-terra-terra
+
+
+
+| Run | Result | Repair | Impact | Cost | Requests | Time | Incident | Regr. | Compat | Output | Cache read | Cache write |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| mac-20261127-120946-1 | PASS | 1.00 | 1.00 | $0.655 | 60 | 388 s | 9/9 | 10/10 | 2/2 | 30,155 | 2,542,394 | 58,622 |
+
 ## Other incidents (INC-2231, INC-2307, INC-2318)
 
 Incidents built to test the setup on tickets it was not designed around; see
 `transfer/README.md` and each folder's `NOTES.md`. Scored by each incident's `judge.py` with the
 assignment's formulas. Labels without an incident number are INC-2231. `rep-` labels are
-report-only runs (repair 0 by construction); `sub1-` is the first submission's version;
+report-only runs with the kit and `raw-` report-only runs from the raw files (repair 0 by
+construction in both); `terse-` are tickets with the recovery requirement cut to half a
+sentence, run with one Sonnet session; `sub1-` is the first submission's version;
 `v2zip-` the two-solver version of 2026-11-26; `v3c-`/`v3d-` the budget-aware versions.
 
 | Setup | Run | Result | Repair | Impact | Cost | Requests | Time | Incident | Regr. | Compat |
@@ -516,6 +567,15 @@ report-only runs (repair 0 by construction); `sub1-` is the first submission's v
 | codex-luna | 20261126-170021-1 | PASS | 1.0 | 1.0 | $0.029 | 23 | 481 s | 9/9 | 9/9 | 4/4 |
 | codex-terra | 20261126-165400-1 | PASS | 1.0 | 1.0 | $0.110 | 19 | 183 s | 9/9 | 9/9 | 4/4 |
 | codex-terra | 20261126-165400-2 | PASS | 1.0 | 1.0 | $0.147 | 21 | 186 s | 9/9 | 9/9 | 4/4 |
+| raw-haiku-2231 | 20261127-112336-1 | FAIL | 0.0 | 0.0 | $0.038 | 21 | 221 s | 0/9 | 9/9 | 4/4 |
+| raw-haiku-2307 | 20261127-112336-1 | FAIL | 0.0 | 0.0 | $0.046 | 26 | 221 s | 0/19 | 21/21 | 6/6 |
+| raw-haiku-2318 | 20261127-112336-1 | FAIL | 0.0 | 0.96 | $0.049 | 25 | 221 s | 0/19 | 19/19 | 6/6 |
+| raw-sonnet-2231 | 20261127-112336-1 | FAIL | 0.0 | 0.9429 | $0.197 | 10 | 79 s | 0/9 | 9/9 | 4/4 |
+| raw-sonnet-2307 | 20261127-112336-1 | FAIL | 0.0 | 1.0 | $0.230 | 11 | 88 s | 0/19 | 21/21 | 6/6 |
+| raw-sonnet-2318 | 20261127-112337-1 | FAIL | 0.0 | 1.0 | $0.180 | 13 | 69 s | 0/19 | 19/19 | 6/6 |
+| raw-sonnetlow-2231 | 20261127-112822-1 | FAIL | 0.0 | 0.9429 | $0.237 | 17 | 91 s | 0/9 | 9/9 | 4/4 |
+| raw-sonnetlow-2307 | 20261127-112822-1 | FAIL | 0.0 | 1.0 | $0.210 | 12 | 79 s | 0/19 | 21/21 | 6/6 |
+| raw-sonnetlow-2318 | 20261127-112822-1 | FAIL | 0.0 | 1.0 | $0.172 | 15 | 70 s | 0/19 | 19/19 | 6/6 |
 | rep-new-2231 | 20261127-092755-1 | FAIL | 0.0 | 1.0 | $0.072 | 5 | 27 s | 0/9 | 9/9 | 4/4 |
 | rep-new-2231 | 20261127-092755-2 | FAIL | 0.0 | 1.0 | $0.081 | 6 | 33 s | 0/9 | 9/9 | 4/4 |
 | rep-new-2307 | 20261127-092755-1 | FAIL | 0.0 | 1.0 | $0.094 | 6 | 41 s | 0/19 | 21/21 | 6/6 |
@@ -537,6 +597,12 @@ report-only runs (repair 0 by construction); `sub1-` is the first submission's v
 | sub1-2307 | 20261127-093346-2 | FAIL | 1.0 | 0.6222 | $0.199 | 10 | 105 s | 19/19 | 21/21 | 6/6 |
 | sub1-2318 | 20261127-093346-1 | FAIL | 0.8232 | 1.0 | $0.635 | 31 | 381 s | 17/19 | 19/19 | 4/6 |
 | sub1-2318 | 20261127-093346-2 | PASS | 1.0 | 1.0 | $0.598 | 32 | 363 s | 19/19 | 19/19 | 6/6 |
+| terse-solo-2231 | 20261127-104602-1 | PASS | 1.0 | 1.0 | $0.439 | 20 | 199 s | 9/9 | 9/9 | 4/4 |
+| terse-solo-2231 | 20261127-104602-2 | PASS | 1.0 | 1.0 | $0.365 | 23 | 184 s | 9/9 | 9/9 | 4/4 |
+| terse-solo-2307 | 20261127-104602-1 | PASS | 1.0 | 1.0 | $0.471 | 24 | 244 s | 19/19 | 21/21 | 6/6 |
+| terse-solo-2307 | 20261127-104602-2 | PASS | 1.0 | 1.0 | $0.393 | 24 | 219 s | 19/19 | 21/21 | 6/6 |
+| terse-solo-2318 | 20261127-104602-1 | PASS | 1.0 | 1.0 | $0.577 | 20 | 300 s | 19/19 | 19/19 | 6/6 |
+| terse-solo-2318 | 20261127-104602-2 | PASS | 1.0 | 1.0 | $0.500 | 20 | 251 s | 19/19 | 19/19 | 6/6 |
 | v2-sonnet-plus-haiku | 20261126-195841-1 | PASS | 1.0 | 1.0 | $0.423 | 53 | 342 s | 9/9 | 9/9 | 4/4 |
 | v2c-sonnet-plus-haiku | 20261126-204327-1 | PASS | 1.0 | 1.0 | $0.304 | 34 | 252 s | 9/9 | 9/9 | 4/4 |
 | v2c-sonnet-plus-haiku | 20261126-204327-2 | PASS | 1.0 | 1.0 | $0.524 | 67 | 388 s | 9/9 | 9/9 | 4/4 |
@@ -560,6 +626,10 @@ report-only runs (repair 0 by construction); `sub1-` is the first submission's v
 | v3d-2231-sonnet-terra | 20261127-105117-1 | PASS | 1.0 | 1.0 | $0.649 | 55 | 385 s | 9/9 | 9/9 | 4/4 |
 | v3d-2307-sonnet-terra | 20261127-103927-1 | PASS | 1.0 | 1.0 | $0.538 | 38 | 364 s | 19/19 | 21/21 | 6/6 |
 | v3d-2318-sonnet-terra | 20261127-104554-1 | PASS | 1.0 | 1.0 | $0.689 | 44 | 314 s | 19/19 | 19/19 | 6/6 |
+| v4-2231-haiku | 20261127-110945-1 | PASS | 1.0 | 1.0 | $0.562 | 74 | 378 s | 9/9 | 9/9 | 4/4 |
+| v4-2318-haiku | 20261127-110945-1 | PASS | 1.0 | 1.0 | $0.588 | 61 | 412 s | 19/19 | 19/19 | 6/6 |
+| v4b-2231 | 20261127-113307-1 | PASS | 1.0 | 1.0 | $0.559 | 45 | 282 s | 9/9 | 9/9 | 4/4 |
+| v4b-2307 | 20261127-113307-1 | PASS | 1.0 | 1.0 | $0.713 | 46 | 267 s | 19/19 | 21/21 | 6/6 |
 
 ## Notes from reading the logs
 

@@ -1,0 +1,213 @@
+{
+ "passed": false,
+ "repair": 0.0,
+ "impact": {
+  "impact": 1.0,
+  "precision": 1.0,
+  "recall": 1.0,
+  "figures_right": 9,
+  "figures": 9,
+  "problem": null,
+  "reported": {
+   "merchants": [
+    "m_juniper",
+    "m_kestrel",
+    "m_larch",
+    "m_oak",
+    "m_pine"
+   ],
+   "entries": 35,
+   "skipped_rows": 82
+  }
+ },
+ "categories": {
+  "incident": {
+   "passed": 0,
+   "total": 19,
+   "failed": [
+    {
+     "name": "a resend to an endpoint registered after the event arrives, once",
+     "problems": [
+      "ep_b: 0 requests, expected 1",
+      "ep_b: 0 accepted, expected 1",
+      "ep_b: 0 events, expected 1",
+      "ep_b: 0 deliveries, expected 1"
+     ]
+    },
+    {
+     "name": "a resend to an endpoint that did not take the event's type when it was accepted, and does now, arrives",
+     "problems": [
+      "ep_a: 0 requests, expected 1",
+      "ep_a: 0 accepted, expected 1",
+      "ep_a: 0 events, expected 1",
+      "ep_a: 0 deliveries, expected 1"
+     ]
+    },
+    {
+     "name": "a resend to an endpoint that does not take the event's type arrives all the same; the next event of that type is not sent",
+     "problems": [
+      "ep_a: 0 requests, expected 1",
+      "ep_a: 0 accepted, expected 1",
+      "ep_a: 0 events, expected 1",
+      "ep_a: 0 deliveries, expected 1"
+     ]
+    },
+    {
+     "name": "an event missed while the endpoint was switched off for more than a day can be resent",
+     "problems": [
+      "ep_a: 0 requests, expected 1",
+      "ep_a: 0 accepted, expected 1",
+      "ep_a: 0 events, expected 1",
+      "ep_a: 0 deliveries, expected 1"
+     ]
+    },
+    {
+     "name": "two resends of one event to one endpoint that never had it are two deliveries",
+     "problems": [
+      "ep_b: 0 requests, expected 2",
+      "ep_b: 0 accepted, expected 2",
+      "ep_b: 0 events, expected 1",
+      "ep_b: 0 deliveries, expected 2"
+     ]
+    },
+    {
+     "name": "a resend to a switched-off endpoint that never had the event waits and goes out when the endpoint is switched on",
+     "problems": [
+      "ep_b: 0 requests, expected 1",
+      "ep_b: 0 accepted, expected 1",
+      "ep_b: 0 events, expected 1",
+      "ep_b: 0 deliveries, expected 1"
+     ]
+    },
+    {
+     "name": "a resend to an endpoint that never had the event is retried when the first attempt fails",
+     "problems": [
+      "ep_b: 0 requests, expected 2",
+      "ep_b: 0 accepted, expected 1",
+      "ep_b: 0 events, expected 1",
+      "ep_b: 0 deliveries, expected 1"
+     ]
+    },
+    {
+     "name": "an event that arrived as a version 1 message can be resent to an endpoint registered after it",
+     "problems": [
+      "ep_b: 0 requests, expected 1",
+      "ep_b: 0 accepted, expected 1",
+      "ep_b: 0 events, expected 1",
+      "ep_b: 0 deliveries, expected 1"
+     ]
+    },
+    {
+     "name": "the api restarts between accepting a resend and passing it on; it still arrives, once",
+     "problems": [
+      "ep_b: 0 requests, expected 1",
+      "ep_b: 0 accepted, expected 1",
+      "ep_b: 0 events, expected 1",
+      "ep_b: 0 deliveries, expected 1"
+     ]
+    },
+    {
+     "name": "restarting every service after such a resend has arrived does not send it again",
+     "problems": [
+      "ep_b: 0 requests, expected 1",
+      "ep_b: 0 accepted, expected 1",
+      "ep_b: 0 events, expected 1",
+      "ep_b: 0 deliveries, expected 1"
+     ]
+    },
+    {
+     "name": "the router stops right after applying such a resend (crash point 1); it arrives once",
+     "problems": [
+      "ep_b: 0 requests, expected 1",
+      "ep_b: 0 accepted, expected 1",
+      "ep_b: 0 events, expected 1",
+      "ep_b: 0 deliveries, expected 1"
+     ]
+    },
+    {
+     "name": "the api stops after the router took such a resend and before it noted that (crash point 3); it arrives once",
+     "problems": [
+      "ep_b: 0 requests, expected 1",
+      "ep_b: 0 accepted, expected 1",
+      "ep_b: 0 events, expected 1",
+      "ep_b: 0 deliveries, expected 1"
+     ]
+    },
+    {
+     "name": "a resend the deployed release accepted and dropped arrives once the release is replaced",
+     "problems": [
+      "ep_b: 0 requests, expected 1",
+      "ep_b: 0 accepted, expected 1",
+      "ep_b: 0 events, expected 1",
+      "ep_b: 0 deliveries, expected 1"
+     ]
+    },
+    {
+     "name": "a resend the deployed release dropped because of the endpoint's event types arrives once the release is replaced",
+     "problems": [
+      "ep_a: 0 requests, expected 1",
+      "ep_a: 0 accepted, expected 1",
+      "ep_a: 0 events, expected 1",
+      "ep_a: 0 deliveries, expected 1"
+     ]
+    },
+    {
+     "name": "a resend the deployed release accepted and had not passed on when it was replaced arrives, once",
+     "problems": [
+      "ep_b: 0 requests, expected 1",
+      "ep_b: 0 accepted, expected 1",
+      "ep_b: 0 events, expected 1",
+      "ep_b: 0 deliveries, expected 1"
+     ]
+    },
+    {
+     "name": "two resends the deployed release dropped for one event and endpoint are two deliveries once it is replaced",
+     "problems": [
+      "ep_b: 0 requests, expected 2",
+      "ep_b: 0 accepted, expected 2",
+      "ep_b: 0 events, expected 1",
+      "ep_b: 0 deliveries, expected 2"
+     ]
+    },
+    {
+     "name": "starting the replaced release again does not send a recovered resend a second time",
+     "problems": [
+      "ep_b: 0 requests, expected 1",
+      "ep_b: 0 accepted, expected 1",
+      "ep_b: 0 events, expected 1",
+      "ep_b: 0 deliveries, expected 1"
+     ]
+    },
+    {
+     "name": "a dropped resend to a switched-off endpoint waits after the release is replaced and goes out when the endpoint is switched on",
+     "problems": [
+      "ep_b: 0 requests, expected 1",
+      "ep_b: 0 accepted, expected 1",
+      "ep_b: 0 events, expected 1",
+      "ep_b: 0 deliveries, expected 1"
+     ]
+    },
+    {
+     "name": "once the release is replaced, a resend that had been dropped arrives and one that had worked is not repeated",
+     "problems": [
+      "ep_b: 0 requests, expected 1",
+      "ep_b: 0 accepted, expected 1",
+      "ep_b: 0 events, expected 1",
+      "ep_b: 0 deliveries, expected 1"
+     ]
+    }
+   ]
+  },
+  "regressions": {
+   "passed": 21,
+   "total": 21,
+   "failed": []
+  },
+  "compat": {
+   "passed": 6,
+   "total": 6,
+   "failed": []
+  }
+ },
+ "build_problem": null
+}

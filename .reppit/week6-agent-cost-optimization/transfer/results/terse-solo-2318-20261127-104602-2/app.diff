@@ -1,0 +1,210 @@
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/api/src/main.ts week6/app/services/api/src/main.ts
+--- clean-app/services/api/src/main.ts	2026-11-26 10:01:16.143626922 +0000
++++ week6/app/services/api/src/main.ts	2026-11-27 10:53:20.454181684 +0000
+@@ -31,6 +31,7 @@
+   ? Number(process.env.SWITCHYARD_CLOCK)
+   : null;
+ const now = (): number => clockNow ?? Math.floor(Date.now() / 1000);
++store.backfill(now());
+ 
+ let crashPoint: number | null = null;
+ let crashHits = 0;
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/api/src/store.ts week6/app/services/api/src/store.ts
+--- clean-app/services/api/src/store.ts	2026-11-26 10:01:16.143626922 +0000
++++ week6/app/services/api/src/store.ts	2026-11-27 10:53:16.452933450 +0000
+@@ -216,6 +216,62 @@
+       .run(status, seq);
+   }
+ 
++  // Earlier releases lost the events an endpoint missed while it was off whenever
++  // the off period was longer than a day. Work out, from the endpoint history, the
++  // events owed at each past switch-on and hand them to the router (which skips
++  // whatever it already delivered). Done once per store.
++  backfill(now: number): void {
++    this.transaction(() => {
++      const done = this.db
++        .prepare("select value from meta where key = 'owed_backfill'")
++        .get();
++      if (done) return;
++      const rows = this.db
++        .prepare(
++          "select endpoint_id, config, at from endpoint_history order by endpoint_id, version",
++        )
++        .all() as unknown as { endpoint_id: string; config: string; at: number }[];
++      let prevId = "";
++      let prev: boolean | undefined;
++      let offAt = 0;
++      for (const row of rows) {
++        const cfg = JSON.parse(row.config) as Endpoint;
++        if (row.endpoint_id !== prevId) {
++          prevId = row.endpoint_id;
++          prev = undefined;
++        }
++        if (!cfg.enabled && prev !== false) offAt = row.at;
++        if (cfg.enabled && prev === false) {
++          const owed = (
++            this.db
++              .prepare(
++                "select id, type from events where merchant_id = ? and created >= ? and created < ? order by rowid",
++              )
++              .all(cfg.merchant_id, offAt, row.at) as unknown as {
++              id: string;
++              type: string;
++            }[]
++          )
++            .filter(
++              (e) =>
++                cfg.event_types.includes("*") ||
++                cfg.event_types.includes(e.type),
++            )
++            .map((e) => e.id);
++          if (owed.length > 0)
++            this.enqueue("endpoint.backfill", now, {
++              endpoint_id: cfg.id,
++              event_ids: owed,
++            });
++        }
++        prev = cfg.enabled;
++      }
++      this.db
++        .prepare("insert into meta (key, value) values ('owed_backfill', 1)")
++        .run();
++    });
++  }
++
+   summary(): Record<string, unknown> {
+     const count = (sql: string) =>
+       (this.db.prepare(sql).get() as { n: number }).n;
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/bus.py week6/app/services/router/bus.py
+--- clean-app/services/router/bus.py	2026-11-26 10:01:16.144267697 +0000
++++ week6/app/services/router/bus.py	2026-11-27 10:53:08.814601451 +0000
+@@ -113,6 +113,12 @@
+     if type_ == "resend.requested":
+         body = {"event_id": need(data, "event_id", str), "endpoint_id": need(data, "endpoint_id", str)}
+         return producer, str(seq), "resend", body
++    if type_ == "endpoint.backfill":
++        ids = need(data, "event_ids", list)
++        if not all(isinstance(i, str) for i in ids):
++            raise Malformed("event_ids must be strings")
++        body = {"endpoint_id": need(data, "endpoint_id", str), "event_ids": ids}
++        return producer, str(seq), "backfill", body
+     raise Malformed("unknown message type")
+ 
+ 
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/routing.py week6/app/services/router/routing.py
+--- clean-app/services/router/routing.py	2026-11-26 10:01:16.144267697 +0000
++++ week6/app/services/router/routing.py	2026-11-27 10:53:08.814358992 +0000
+@@ -5,8 +5,6 @@
+ 
+ from store import next_id
+ 
+-CATCH_UP_SECONDS = 24 * 3600
+-
+ # INC-2188 workaround (2.3.1). With it on, an endpoint change does not create deliveries
+ # at the endpoint's new version, so a delivery that was queued keeps going under the
+ # version it was created for. Leave it on until deliveries stop being keyed by version.
+@@ -86,12 +84,11 @@
+             create_delivery(db, log, now, event["id"], ep["id"])
+ 
+ 
+-def catch_up(db, log, now, endpoint, since):
+-    """Deliver what the endpoint missed while it was disabled."""
+-    floor = max(since, now - CATCH_UP_SECONDS)
++def catch_up(db, log, now, endpoint, since_seq):
++    """Deliver what the endpoint missed while it was disabled: events routed after it went off."""
+     missed = db.execute(
+-        "select id, type from events where merchant_id = ? and routed_at >= ? order by routed_at, rowid",
+-        (endpoint["merchant_id"], floor),
++        "select id, type from events where merchant_id = ? and rowid > ? order by rowid",
++        (endpoint["merchant_id"], since_seq),
+     ).fetchall()
+     for event in missed:
+         if not subscribed(endpoint["event_types"], event["type"]):
+@@ -108,14 +105,16 @@
+         return
+     was_enabled = bool(old["enabled"]) if old is not None else None
+     disabled_at = old["disabled_at"] if old is not None else None
++    disabled_seq = old["disabled_seq"] if old is not None else None
+     if not endpoint["enabled"] and was_enabled is not False:
+         disabled_at = now
++        disabled_seq = db.execute("select coalesce(max(rowid), 0) from events").fetchone()[0]
+     db.execute(
+-        "insert into endpoints (id, merchant_id, url, secret, event_types, enabled, version, disabled_at) "
+-        "values (?, ?, ?, ?, ?, ?, ?, ?) "
++        "insert into endpoints (id, merchant_id, url, secret, event_types, enabled, version, disabled_at, disabled_seq) "
++        "values (?, ?, ?, ?, ?, ?, ?, ?, ?) "
+         "on conflict (id) do update set url = excluded.url, secret = excluded.secret, "
+         "event_types = excluded.event_types, enabled = excluded.enabled, version = excluded.version, "
+-        "disabled_at = excluded.disabled_at",
++        "disabled_at = excluded.disabled_at, disabled_seq = excluded.disabled_seq",
+         (
+             endpoint["id"],
+             endpoint["merchant_id"],
+@@ -125,6 +124,7 @@
+             int(endpoint["enabled"]),
+             endpoint["version"],
+             None if endpoint["enabled"] else disabled_at,
++            None if endpoint["enabled"] else disabled_seq,
+         ),
+     )
+     log.write(
+@@ -136,8 +136,21 @@
+     )
+     if old is not None and not INC_2188_WORKAROUND:
+         follow_version(db, log, now, endpoint["id"], endpoint["version"])
+-    if endpoint["enabled"] and was_enabled is False and disabled_at is not None:
+-        catch_up(db, log, now, endpoint, disabled_at)
++    if endpoint["enabled"] and was_enabled is False and disabled_seq is not None:
++        catch_up(db, log, now, endpoint, disabled_seq)
++
++
++def apply_backfill(db, log, now, body):
++    """Owed events of past switch-ons that an earlier release did not deliver (computed by the api)."""
++    ep = db.execute("select id, merchant_id from endpoints where id = ?", (body["endpoint_id"],)).fetchone()
++    if ep is None:
++        log.write("backfill.skipped", level="warn", endpoint=body["endpoint_id"])
++        return
++    for event_id in body["event_ids"]:
++        event = db.execute("select id from events where id = ? and merchant_id = ?", (event_id, ep["merchant_id"])).fetchone()
++        if event is None or first_delivery(db, event_id, ep["id"]):
++            continue
++        create_delivery(db, log, now, event_id, ep["id"])
+ 
+ 
+ def apply_resend(db, log, now, body):
+@@ -153,5 +166,7 @@
+         route_event(db, log, now, body)
+     elif kind == "endpoint":
+         apply_endpoint(db, log, now, body)
++    elif kind == "backfill":
++        apply_backfill(db, log, now, body)
+     else:
+         apply_resend(db, log, now, body)
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/store.py week6/app/services/router/store.py
+--- clean-app/services/router/store.py	2026-11-26 10:01:16.144267697 +0000
++++ week6/app/services/router/store.py	2026-11-27 10:53:08.814784194 +0000
+@@ -23,7 +23,8 @@
+     event_types text not null,
+     enabled integer not null,
+     version integer not null,
+-    disabled_at integer
++    disabled_at integer,
++    disabled_seq integer
+ );
+ create table if not exists events (
+     id text primary key,
+@@ -77,6 +78,14 @@
+     db.execute("pragma journal_mode = wal")
+     db.execute("pragma synchronous = normal")
+     db.executescript(SCHEMA)
++    if not any(r["name"] == "disabled_seq" for r in db.execute("pragma table_info(endpoints)")):
++        db.execute("alter table endpoints add column disabled_seq integer")
++    # An endpoint that is off in a store written by the shipped release: where its off period starts.
++    db.execute(
++        "update endpoints set disabled_seq = (select coalesce(max(e.rowid), 0) from events e "
++        "where e.routed_at < endpoints.disabled_at) "
++        "where enabled = 0 and disabled_seq is null and disabled_at is not null"
++    )
+     db.commit()
+     return db
+ 

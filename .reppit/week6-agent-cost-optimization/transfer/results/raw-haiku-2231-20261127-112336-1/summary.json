@@ -1,0 +1,109 @@
+{
+  "passed": false,
+  "score": {
+    "passed": false,
+    "repair": 0.0,
+    "impact": {
+      "impact": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "figures_right": 0,
+      "figures": 0,
+      "problem": "report missing or malformed: FileNotFoundError(2, 'No such file or directory')"
+    },
+    "categories": {
+      "incident": {
+        "passed": 0,
+        "total": 9,
+        "failed": [
+          {
+            "name": "an endpoint switched off through the api gets nothing more, after an archive message for it",
+            "problems": [
+              "ep_a: 1 requests, expected 0"
+            ]
+          },
+          {
+            "name": "a rotated secret signs the next delivery, after an archive message for the endpoint",
+            "problems": [
+              "e1 -> ep_a: receipt 1 is not signed with the expected secret"
+            ]
+          },
+          {
+            "name": "a new address gets the next delivery, after an archive message for the endpoint",
+            "problems": [
+              "e1 -> ep_a: received at ['/hooks/ep_a'], expected ['/hooks/ep_a/new']"
+            ]
+          },
+          {
+            "name": "an archive message that arrives after a switch-off does not switch the endpoint back on",
+            "problems": [
+              "ep_a: 1 requests, expected 0"
+            ]
+          },
+          {
+            "name": "a switch-off the deployed release lost takes effect once the release is replaced",
+            "problems": [
+              "ep_a: 1 requests, expected 0"
+            ]
+          },
+          {
+            "name": "a delivery queued for an endpoint whose switch-off was lost is not sent once the release is replaced",
+            "problems": [
+              "ep_a: 1 requests, expected 0"
+            ]
+          },
+          {
+            "name": "an endpoint the deployed release took an archive message for can be switched off after the release is replaced",
+            "problems": [
+              "ep_a: 1 requests, expected 0"
+            ]
+          },
+          {
+            "name": "a rotated secret the deployed release lost signs deliveries once the release is replaced",
+            "problems": [
+              "e1 -> ep_a: receipt 1 is not signed with the expected secret"
+            ]
+          },
+          {
+            "name": "starting the replaced release again changes nothing more",
+            "problems": [
+              "ep_a: 1 requests, expected 0"
+            ]
+          }
+        ]
+      },
+      "regressions": {
+        "passed": 9,
+        "total": 9,
+        "failed": []
+      },
+      "compat": {
+        "passed": 4,
+        "total": 4,
+        "failed": []
+      }
+    },
+    "build_problem": null
+  },
+  "exit_code": 0,
+  "timed_out": false,
+  "seconds": 220.9,
+  "error": null,
+  "cost_usd": 0.03831784,
+  "requests": 21,
+  "rejected": [
+    "endpoint_not_available"
+  ],
+  "upstream_errors": 0,
+  "by_model": {
+    "claude-haiku-5-5": {
+      "requests": 21,
+      "cost_usd": 0.03831784,
+      "input": 42,
+      "output": 38979,
+      "cache_read": 905164,
+      "cache_write": 78180,
+      "cache_write_1h": 0
+    }
+  }
+}

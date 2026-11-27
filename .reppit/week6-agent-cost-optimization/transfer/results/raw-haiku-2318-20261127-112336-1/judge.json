@@ -1,0 +1,240 @@
+{
+ "passed": false,
+ "repair": 0.0,
+ "impact": {
+  "impact": 0.96,
+  "precision": 1.0,
+  "recall": 1.0,
+  "figures_right": 9,
+  "figures": 10,
+  "problem": null,
+  "reported": {
+   "endpoints": [
+    "ep_harbor_1",
+    "ep_isle_1",
+    "ep_isle_2",
+    "ep_juniper_1",
+    "ep_moss_1",
+    "ep_nettle_1"
+   ],
+   "entries": 71,
+   "skipped_rows": 861
+  }
+ },
+ "categories": {
+  "incident": {
+   "passed": 0,
+   "total": 19,
+   "failed": [
+    {
+     "name": "an endpoint switched off for more than a day gets the event accepted meanwhile when it is switched on",
+     "problems": [
+      "e1 -> ep_a: 0 deliveries, expected 1",
+      "ep_a: 0 requests, expected 1",
+      "ep_a: 0 accepted, expected 1",
+      "ep_a: 0 events, expected 1"
+     ]
+    },
+    {
+     "name": "an endpoint switched off for three days gets the events of every one of those days, each once; the merchant's other endpoint got them as they came",
+     "problems": [
+      "e1 -> ep_a: 0 deliveries, expected 1",
+      "e2 -> ep_a: 0 deliveries, expected 1",
+      "ep_a: 2 requests, expected 4",
+      "ep_a: 2 accepted, expected 4"
+     ]
+    },
+    {
+     "name": "an endpoint created switched off gets the events accepted since its creation when it is first switched on more than a day later, and none from before it existed",
+     "problems": [
+      "e1 -> ep_a: 0 deliveries, expected 1",
+      "ep_a: 1 requests, expected 2",
+      "ep_a: 1 accepted, expected 2",
+      "ep_a: 1 events, expected 2"
+     ]
+    },
+    {
+     "name": "switched off for an hour, on, then off for more than a day and on: each event arrives once",
+     "problems": [
+      "e2 -> ep_a: 0 deliveries, expected 1",
+      "ep_a: 1 requests, expected 2",
+      "ep_a: 1 accepted, expected 2",
+      "ep_a: 1 events, expected 2"
+     ]
+    },
+    {
+     "name": "switched off for more than a day, on, then off for a minute and on: each event arrives once, at the switch-on that ended its off period",
+     "problems": [
+      "e1 -> ep_a: 0 deliveries, expected 1",
+      "ep_a: 1 requests, expected 2",
+      "ep_a: 1 accepted, expected 2",
+      "ep_a: 1 events, expected 2"
+     ]
+    },
+    {
+     "name": "a secret rotated and a second switch-off while the endpoint is off do not move the start of the off period; the event arrives signed with the new secret",
+     "problems": [
+      "e1 -> ep_a: 0 deliveries, expected 1",
+      "ep_a: 0 requests, expected 1",
+      "ep_a: 0 accepted, expected 1",
+      "ep_a: 0 events, expected 1"
+     ]
+    },
+    {
+     "name": "subscription narrowed while off for more than a day: only the types subscribed to at the switch-on are delivered",
+     "problems": [
+      "e2 -> ep_a: 0 deliveries, expected 1",
+      "ep_a: 0 requests, expected 1",
+      "ep_a: 0 accepted, expected 1",
+      "ep_a: 0 events, expected 1"
+     ]
+    },
+    {
+     "name": "subscription widened while off for more than a day: every type subscribed to at the switch-on is delivered",
+     "problems": [
+      "e1 -> ep_a: 0 deliveries, expected 1",
+      "e2 -> ep_a: 0 deliveries, expected 1",
+      "ep_a: 0 requests, expected 2",
+      "ep_a: 0 accepted, expected 2"
+     ]
+    },
+    {
+     "name": "api, router and worker are restarted while the endpoint is off for more than a day",
+     "problems": [
+      "e1 -> ep_a: 0 deliveries, expected 1",
+      "e2 -> ep_a: 0 deliveries, expected 1",
+      "ep_a: 0 requests, expected 2",
+      "ep_a: 0 accepted, expected 2"
+     ]
+    },
+    {
+     "name": "the router goes down right after it applies the switch-on and is started again",
+     "problems": [
+      "e1 -> ep_a: 0 deliveries, expected 1",
+      "e2 -> ep_a: 0 deliveries, expected 1",
+      "ep_a: 0 requests, expected 2",
+      "ep_a: 0 accepted, expected 2"
+     ]
+    },
+    {
+     "name": "an endpoint that exists only in the archive, switched off and on by version 2 messages more than a day apart, gets the version 2 event that arrived meanwhile",
+     "problems": [
+      "a1 -> ep_old: 0 deliveries, expected 1",
+      "ep_old: 0 requests, expected 1",
+      "ep_old: 0 accepted, expected 1",
+      "ep_old: 0 events, expected 1"
+     ]
+    },
+    {
+     "name": "version 1 and version 2 events that arrive while an endpoint is off for more than a day are delivered when it is switched on, with the api's own",
+     "problems": [
+      "old1 -> ep_a: 0 deliveries, expected 1",
+      "a1 -> ep_a: 0 deliveries, expected 1",
+      "e1 -> ep_a: 0 deliveries, expected 1",
+      "ep_a: 0 requests, expected 3"
+     ]
+    },
+    {
+     "name": "an event the deployed release skipped at a switch-on is delivered once the release is replaced",
+     "problems": [
+      "e1 -> ep_a: 0 deliveries, expected 1",
+      "ep_a: 0 requests, expected 1",
+      "ep_a: 0 accepted, expected 1",
+      "ep_a: 0 events, expected 1"
+     ]
+    },
+    {
+     "name": "of two events owed at a switch-on the deployed release delivered one; the other arrives once the release is replaced, the first is not sent again, the merchant's other endpoint gets nothing more",
+     "problems": [
+      "e1 -> ep_a: 0 deliveries, expected 1",
+      "ep_a: 1 requests, expected 2",
+      "ep_a: 1 accepted, expected 2",
+      "ep_a: 1 events, expected 2"
+     ]
+    },
+    {
+     "name": "only the skipped events of a type the endpoint was subscribed to at that switch-on are delivered once the release is replaced, whatever it subscribes to by then",
+     "problems": [
+      "e1 -> ep_a: 0 deliveries, expected 1",
+      "ep_a: 0 requests, expected 1",
+      "ep_a: 0 accepted, expected 1",
+      "ep_a: 0 events, expected 1"
+     ]
+    },
+    {
+     "name": "starting the replaced release again delivers nothing more",
+     "problems": [
+      "e1 -> ep_a: 0 deliveries, expected 1",
+      "ep_a: 1 requests, expected 2",
+      "ep_a: 1 accepted, expected 2",
+      "ep_a: 1 events, expected 2"
+     ]
+    },
+    {
+     "name": "two off periods under the deployed release, a short one it caught up and a long one it skipped: once the release is replaced the skipped event arrives and the other is not sent again",
+     "problems": [
+      "e2 -> ep_a: 0 deliveries, expected 1",
+      "ep_a: 1 requests, expected 2",
+      "ep_a: 1 accepted, expected 2",
+      "ep_a: 1 events, expected 2"
+     ]
+    },
+    {
+     "name": "an endpoint with a skipped event is switched off again when the release is replaced: the event waits and arrives once, with the newer one, when the endpoint is switched on",
+     "problems": [
+      "e1 -> ep_a: 0 deliveries, expected 1",
+      "ep_a: 1 requests, expected 2",
+      "ep_a: 1 accepted, expected 2",
+      "ep_a: 1 events, expected 2"
+     ]
+    },
+    {
+     "name": "an endpoint is off when the release is replaced and is switched on later, more than a day after it was switched off: it gets the events from before and after the replacement",
+     "problems": [
+      "e1 -> ep_a: 0 deliveries, expected 1",
+      "ep_a: 1 requests, expected 2",
+      "ep_a: 1 accepted, expected 2",
+      "ep_a: 1 events, expected 2"
+     ]
+    }
+   ],
+   "classes": {
+    "plain": {
+     "passed": 0,
+     "total": 3
+    },
+    "several times": {
+     "passed": 0,
+     "total": 3
+    },
+    "types": {
+     "passed": 0,
+     "total": 2
+    },
+    "restart or crash": {
+     "passed": 0,
+     "total": 2
+    },
+    "older bus versions": {
+     "passed": 0,
+     "total": 2
+    },
+    "already skipped": {
+     "passed": 0,
+     "total": 7
+    }
+   }
+  },
+  "regressions": {
+   "passed": 19,
+   "total": 19,
+   "failed": []
+  },
+  "compat": {
+   "passed": 6,
+   "total": 6,
+   "failed": []
+  }
+ },
+ "build_problem": null
+}

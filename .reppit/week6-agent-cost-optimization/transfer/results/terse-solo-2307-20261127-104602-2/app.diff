@@ -1,0 +1,160 @@
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/api/src/store.ts week6/app/services/api/src/store.ts
+--- clean-app/services/api/src/store.ts	2026-11-26 10:01:16.143626922 +0000
++++ week6/app/services/api/src/store.ts	2026-11-27 10:53:23.417092718 +0000
+@@ -77,6 +77,35 @@
+     this.db.exec("pragma journal_mode = wal");
+     this.db.exec("pragma synchronous = normal");
+     this.db.exec(SCHEMA);
++    this.replayLostResends();
++  }
++
++  // The shipped release's router dropped resends it had no earlier delivery for. Once, hand the
++  // router the published requests per event and endpoint; it creates only what is missing.
++  replayLostResends(): void {
++    this.transaction(() => {
++      const done = this.db
++        .prepare("select 1 from meta where key = 'resend_replay'")
++        .get();
++      if (done) return;
++      const rows = this.db
++        .prepare(
++          "select data from outbox where type = 'resend.requested' and status in ('published', 'pending') order by seq",
++        )
++        .all() as { data: string }[];
++      const groups = new Map<string, { event_id: string; endpoint_id: string; requests: number }>();
++      for (const row of rows) {
++        const d = JSON.parse(row.data);
++        const key = `${d.event_id}\u0000${d.endpoint_id}`;
++        const g = groups.get(key) ?? { event_id: d.event_id, endpoint_id: d.endpoint_id, requests: 0 };
++        g.requests += 1;
++        groups.set(key, g);
++      }
++      this.db.exec("update outbox set status = 'published' where type = 'resend.requested' and status = 'pending'");
++      const at = Math.floor(Date.now() / 1000);
++      for (const g of groups.values()) this.enqueue("resend.requested", at, g);
++      this.db.prepare("insert into meta (key, value) values ('resend_replay', 1)").run();
++    });
+   }
+ 
+   transaction<T>(work: () => T): T {
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/bus.py week6/app/services/router/bus.py
+--- clean-app/services/router/bus.py	2026-11-26 10:01:16.144267697 +0000
++++ week6/app/services/router/bus.py	2026-11-27 10:51:09.185864451 +0000
+@@ -112,6 +112,8 @@
+         return producer, str(seq), "endpoint", body
+     if type_ == "resend.requested":
+         body = {"event_id": need(data, "event_id", str), "endpoint_id": need(data, "endpoint_id", str)}
++        if "requests" in data:
++            body["requests"] = need(data, "requests", int)
+         return producer, str(seq), "resend", body
+     raise Malformed("unknown message type")
+ 
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/main.py week6/app/services/router/main.py
+--- clean-app/services/router/main.py	2026-11-26 10:01:16.144267697 +0000
++++ week6/app/services/router/main.py	2026-11-27 10:51:47.925189332 +0000
+@@ -105,7 +105,8 @@
+             "next_wake": leases.next_wake(self.db),
+             "endpoints": rows("select id, merchant_id, url, enabled, version, disabled_at from endpoints order by id"),
+             "deliveries": rows(
+-                "select id, event_id, endpoint_id, endpoint_version, resend_of, state, attempts, available_at, lease_id, "
++                "select id, event_id, endpoint_id, endpoint_version, case when is_resend = 1 then coalesce(resend_of, id) else resend_of end as resend_of, "
++                "state, attempts, available_at, lease_id, "
+                 "created_at, finished_at, last_status from deliveries order by ord"
+             ),
+             "leases": rows("select id, worker_id, granted_at, expires_at, closed_at from leases order by granted_at, id"),
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/routing.py week6/app/services/router/routing.py
+--- clean-app/services/router/routing.py	2026-11-26 10:01:16.144267697 +0000
++++ week6/app/services/router/routing.py	2026-11-27 10:51:09.185625632 +0000
+@@ -17,14 +17,14 @@
+     return "*" in event_types or type_ in event_types
+ 
+ 
+-def create_delivery(db, log, now, event_id, endpoint_id, resend_of=None):
++def create_delivery(db, log, now, event_id, endpoint_id, resend_of=None, is_resend=False):
+     version = db.execute("select version from endpoints where id = ?", (endpoint_id,)).fetchone()[0]
+     delivery_id = next_id(db, "dlv")
+     ord_ = db.execute("select value from meta where key = 'dlv'").fetchone()[0]
+     db.execute(
+         "insert into deliveries (id, ord, event_id, endpoint_id, endpoint_version, resend_of, state, "
+-        "available_at, created_at) values (?, ?, ?, ?, ?, ?, 'queued', ?, ?)",
+-        (delivery_id, ord_, event_id, endpoint_id, version, resend_of, now, now),
++        "available_at, created_at, is_resend) values (?, ?, ?, ?, ?, ?, 'queued', ?, ?, ?)",
++        (delivery_id, ord_, event_id, endpoint_id, version, resend_of, now, now, int(is_resend)),
+     )
+     log.write(
+         "delivery.created", delivery=delivery_id, event=event_id, endpoint=endpoint_id, version=version,
+@@ -37,14 +37,14 @@
+     """A delivery is one event to one version of an endpoint (2.3)."""
+     return db.execute(
+         "select id from deliveries where event_id = ? and endpoint_id = ? and endpoint_version = ? "
+-        "and resend_of is null",
++        "and resend_of is null and is_resend = 0",
+         (event_id, endpoint_id, version),
+     ).fetchone()
+ 
+ 
+ def first_delivery(db, event_id, endpoint_id):
+     return db.execute(
+-        "select id from deliveries where event_id = ? and endpoint_id = ? and resend_of is null order by ord",
++        "select id from deliveries where event_id = ? and endpoint_id = ? and resend_of is null and is_resend = 0 order by ord",
+         (event_id, endpoint_id),
+     ).fetchone()
+ 
+@@ -53,7 +53,7 @@
+     """Give every unfinished event of the endpoint a delivery at its current version."""
+     unfinished = db.execute(
+         "select distinct event_id from deliveries where endpoint_id = ? and state in ('queued', 'leased') "
+-        "and resend_of is null order by ord",
++        "and resend_of is null and is_resend = 0 order by ord",
+         (endpoint_id,),
+     ).fetchall()
+     for row in unfinished:
+@@ -140,12 +140,31 @@
+         catch_up(db, log, now, endpoint, disabled_at)
+ 
+ 
++def resend_one(db, log, now, event_id, endpoint_id):
++    event = db.execute("select merchant_id from events where id = ?", (event_id,)).fetchone()
++    ep = db.execute("select merchant_id from endpoints where id = ?", (endpoint_id,)).fetchone()
++    if event is None or ep is None or event["merchant_id"] != ep["merchant_id"]:
++        log.write("resend.skipped", level="warn", event=event_id, endpoint=endpoint_id)
++        return
++    original = first_delivery(db, event_id, endpoint_id)
++    create_delivery(db, log, now, event_id, endpoint_id, resend_of=original["id"] if original else None,
++                    is_resend=True)
++
++
+ def apply_resend(db, log, now, body):
+-    original = first_delivery(db, body["event_id"], body["endpoint_id"])
+-    if original is None:
+-        log.write("resend.skipped", level="warn", event=body["event_id"], endpoint=body["endpoint_id"])
++    requests = body.get("requests")
++    if requests is None:
++        resend_one(db, log, now, body["event_id"], body["endpoint_id"])
+         return
+-    create_delivery(db, log, now, body["event_id"], body["endpoint_id"], resend_of=original["id"])
++    # Replay of requests the shipped release consumed: it created a delivery for some of them
++    # (resend_of set, is_resend 0) and skipped the rest. Create what is missing.
++    have = db.execute(
++        "select count(*) from deliveries where event_id = ? and endpoint_id = ? and resend_of is not null "
++        "and is_resend = 0",
++        (body["event_id"], body["endpoint_id"]),
++    ).fetchone()[0]
++    for _ in range(max(0, requests - have)):
++        resend_one(db, log, now, body["event_id"], body["endpoint_id"])
+ 
+ 
+ def apply(db, log, now, kind, body):
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/store.py week6/app/services/router/store.py
+--- clean-app/services/router/store.py	2026-11-26 10:01:16.144267697 +0000
++++ week6/app/services/router/store.py	2026-11-27 10:51:09.185134607 +0000
+@@ -77,6 +77,9 @@
+     db.execute("pragma journal_mode = wal")
+     db.execute("pragma synchronous = normal")
+     db.executescript(SCHEMA)
++    cols = [r[1] for r in db.execute("pragma table_info(deliveries)")]
++    if "is_resend" not in cols:
++        db.execute("alter table deliveries add column is_resend integer not null default 0")
+     db.commit()
+     return db
+ 
