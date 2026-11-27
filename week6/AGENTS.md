@@ -69,7 +69,7 @@ Not about the incident, do not open: `assignment.md`, `writeup.md`, `tools/`, `r
   docs, the changelog, `app/bin` or `app/scenarios`: none of it is judged, all of it costs.
 - Use the map and line ranges; do not print whole files or directories. Send independent
   reads and commands together in one step.
-- Run tests and scenarios through `kit/check.sh` and `kit/rollout.py`; their output is
+- Run tests and scenarios through `bash kit/check.sh` and `python3 kit/rollout.py`; their output is
   already short. `app/bin/evaluate` prints thousands of lines and proves little.
 - Two skills hold the detail: `evidence-report` (answering a report question from the
   evidence) and `replay-scenarios` (reproducing a defect and proving a repair, including

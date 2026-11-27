@@ -34,7 +34,7 @@ Work in this order.
    change your repair until it passes. Where yours is what the text requires, or the text
    requires neither, change nothing. More code is not a better repair: every added line can
    break something that works today, so never take over their change wholesale.
-4. Run `kit/check.sh --only repair` and fix what it reports.
+4. Run `bash kit/check.sh --only repair` and fix what it reports.
 
 Do not edit their scenarios, and leave `out/` alone: the reports are compared separately.
 Finish in at most eight lines: each difference, which behaviour is right, and the sentence

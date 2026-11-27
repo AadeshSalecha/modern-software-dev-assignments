@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# stand-in for dry runs. FAKE_CODEX=dead: fails at once, as a harness that cannot start would.
+if [ "${FAKE_CODEX:-ok}" = "dead" ]; then echo "fake-codex: cannot reach the model provider" >&2; exit 1; fi
+echo "fake-codex cwd=$(basename "$PWD") stage=${KIT_STAGE:-unset} session=${KIT_SESSION:-unset} :: $(echo "$*" | tr '\n' ' ' | cut -c1-50)"
+mkdir -p out
+if [ "${KIT_STAGE:-}" = "report" ]; then
+  echo "{\"affected\":[],\"totals_minor\":{\"USD\":${FAKE_C_USD:-1}},\"skipped_rows\":1}" > out/impact.json
+  echo "# fake raw-file report script" > report.py
+else
+  echo "{\"affected\":[],\"totals_minor\":{\"USD\":${FAKE_B_USD:-1}},\"skipped_rows\":1}" > out/impact.json
+  echo "# fake repair b" >> app/services/router/routing.py
+fi
+echo '{"type":"turn.completed","usage":{"input_tokens":50000,"cached_input_tokens":40000,"output_tokens":3000}}'
+sleep 3

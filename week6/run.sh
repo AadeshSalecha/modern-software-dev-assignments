@@ -45,6 +45,10 @@ TASK_FILE="${1:?usage: ./run.sh <task-file>}"
 cd "$(dirname "$0")" || exit 1
 ROOT=$PWD
 STARTED=$(date +%s)
+# An upload keeps no file modes, and the grader makes run.sh executable again and nothing
+# else. So nothing here is started by its path: every helper goes through bash or python3.
+# The modes are put back as well, for agents that start a helper by its path.
+chmod u+x kit/*.sh kit/*.py 2>/dev/null
 SOLVE_END=${KIT_SOLVE_END:-300}        # solvers are stopped this many seconds after the start
 HARD_STOP=${KIT_HARD_STOP:-570}        # everything here is finished by then, 30 s before the grader's limit
 FIX_END=$((HARD_STOP - 130))           # the comparison session is stopped then, so its result can be checked
@@ -156,7 +160,7 @@ finish() {
   done
   if [ "$PREPARED" -eq 1 ]; then
     stop_services
-    kit/prepare.sh --restore
+    bash kit/prepare.sh --restore
   fi
   # The second workspace is a copy of everything: what was worth keeping is in work/cross/.
   if [ -n "$B_ROOT" ] && [ "$B_ROOT" != "$ROOT" ] && [ -d "$B_ROOT/kit" ] && [ "${KIT_KEEP_B:-}" != "1" ]; then
@@ -368,13 +372,34 @@ if [ "${KIT_VARIANT:-}" = "flags" ]; then
   exit 0
 fi
 
-kit/prepare.sh
+bash kit/prepare.sh
 prepared=$?
 if [ "$prepared" -eq 3 ]; then
   exit 3 # the development checkout: prepare.sh has said why
 fi
 PREPARED=1
-mkdir -p work/logs work/cross
+mkdir -p work/logs work/cross work/scenarios out
+# Everything after this leans on what preparation leaves behind: the snapshot of the release
+# (comparisons, release replacement, the second workspace) and the evidence database (the
+# report). If it did not get that far, for whatever reason, the two are made here.
+if [ ! -d .pristine/app/services ] || [ ! -s work/start.txt ] || { [ -d incident ] && [ ! -s work/evidence.db ]; }; then
+  echo "run.sh: preparation did not complete (status $prepared); making the snapshot and the evidence database here"
+  if [ ! -d .pristine/app/services ] && [ -d app/services ]; then
+    mkdir -p .pristine/app
+    for part in services bin scenarios; do
+      [ -d "app/$part" ] && [ ! -e ".pristine/app/$part" ] && cp -R "app/$part" ".pristine/app/$part" 2>/dev/null
+    done
+  fi
+  [ -s work/start.txt ] || echo "preparation was cut short: the notes that normally stand here are missing" >work/start.txt
+  if [ -d incident ] && [ ! -s work/evidence.db ]; then
+    python3 kit/evidence.py build incident work/evidence.db >work/evidence.txt 2>&1 ||
+      echo "evidence: loading failed: $(tail -1 work/evidence.txt)" >>work/start.txt
+  fi
+fi
+echo "run.sh: prepared after $(elapsed) s: snapshot $([ -d .pristine/app/services ] && echo yes || echo NO)," \
+  "evidence database $([ -s work/evidence.db ] && echo yes || echo NO)," \
+  "service notes $([ -f app/services/router/AGENTS.md ] && echo yes || echo NO)," \
+  "harness $([ -f work/.no_harness ] && echo NO || echo yes)"
 PROMPT="$(compose kit/prompt.md)"
 
 if [ "${KIT_VARIANT:-}" = "raw-report" ]; then
@@ -399,7 +424,7 @@ if [ "${KIT_VARIANT:-}" = "report" ]; then
   cat >work/.report-only.md <<'EOF'
 Answer only the report request of the ticket below (its second part). Do not change anything
 under `app/`. Read `.claude/skills/evidence-report/SKILL.md` first, write the file under
-`out/` with a script `work/report.py`, run `kit/check.sh --only report`, and finish in three
+`out/` with a script `work/report.py`, run `bash kit/check.sh --only report`, and finish in three
 lines.
 
 Start-of-run notes:
@@ -432,7 +457,7 @@ improve() {
   keep=0
   verdict="there was no time left to check it"
   if [ "$(elapsed)" -lt $((HARD_STOP - 80)) ]; then
-    limited 45 kit/check.sh --only repair >work/cross/gate-after.txt 2>&1
+    limited 45 bash kit/check.sh --only repair >work/cross/gate-after.txt 2>&1
     gate_after=$?
     stop_services
     # The repair as it was, as a workspace of its own, so that both are run on the same scenarios.
@@ -611,7 +636,7 @@ if [ -n "$SECOND" ] || [ -n "$THIRD" ]; then
     fi
     gate_now=""
     if [ "$want_fix" -eq 1 ] && affordable "$fix_line" $((FIX_END - 80)); then
-      limited 60 kit/check.sh --only repair >work/cross/gate.txt 2>&1
+      limited 60 bash kit/check.sh --only repair >work/cross/gate.txt 2>&1
       gate_now=$?
       stop_services
       fix_prompt="$(cat kit/prompt-reconcile.md work/cross/fix.txt 2>/dev/null)"

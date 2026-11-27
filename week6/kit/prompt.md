@@ -23,7 +23,7 @@ Work in this order, in as few steps as you can. Send independent commands togeth
    part-way. `kit/check.sh` passing shows only what the shipped scenarios cover: every case
    the ticket names, each "including …" on its own, needs a scenario that exercises exactly
    that case. A requirement you could not meet is a failed job, not a note for the summary.
-5. **Check.** Run `kit/check.sh`. Fix what it reports, tick each ledger line you have
+5. **Check.** Run `bash kit/check.sh`. Fix what it reports, tick each ledger line you have
    actually verified, and stop. It runs again when you stop and sends you back if it fails.
 
 Budget: being right is worth far more here than being quick or cheap. `python3 kit/budget.py`

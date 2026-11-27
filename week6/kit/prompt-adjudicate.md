@@ -27,7 +27,7 @@ Method:
    each set is built from every file that can show a member: a script that takes a set from
    one file misses the members whose row was cut there.
 4. Write the final file under `out/` with a script, `work/report-final.py`, in exactly the
-   shape the ticket asks for, then run `kit/check.sh --only report`.
+   shape the ticket asks for, then run `bash kit/check.sh --only report`.
 
 Do not edit anything under `app/`. Finish with one line per difference: what differed,
 which reading is right, and the ticket sentence or raw line that decides it.

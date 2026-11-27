@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# stand-in for dry runs. main solver: a harmless code change and a report. resumed: FAKE_FIX
+# decides (good: another harmless change; break: a syntax error; repair: mends FAKE_A=break).
+# judge: rewrites the report. report (the report-only session): a report from FAKE_C_USD.
+args="$(echo "$*" | tr '\n' ' ')"
+echo "fake-claude cwd=$(basename "$PWD") stage=${KIT_STAGE:-unset} session=${KIT_SESSION:-unset} :: $(echo "$args" | sed 's/^-p //' | cut -c1-60)"
+echo '{"type":"assistant","message":{"id":"fake","model":"fake","content":[],"usage":{}}}'
+mkdir -p out work/scenarios
+if [ "${KIT_STAGE:-}" = "judge" ]; then
+  echo '{"affected":[],"totals_minor":{"USD":7},"skipped_rows":1}' > out/impact.json
+elif [ "${KIT_STAGE:-}" = "report" ]; then
+  echo "{\"affected\":[],\"totals_minor\":{\"USD\":${FAKE_C_USD:-1}},\"skipped_rows\":1}" > out/impact.json
+  echo "# fake raw-file report script" > report.py
+elif echo "$args" | grep -q -- "--resume"; then
+  echo "fake-claude: resumed; other.diff has $(wc -l < work/cross/other.diff 2>/dev/null) lines"
+  case "${FAKE_FIX:-good}" in
+    good) echo "# compared" >> app/services/router/main.py ;;
+    break) echo "def broken(:" >> app/services/router/main.py ;;
+    repair) sed -i '/def broken(:/d' app/services/router/main.py ;;
+  esac
+else
+  if [ "${FAKE_A:-good}" = "break" ]; then echo "def broken(:" >> app/services/router/main.py; else echo "# fake repair a" >> app/services/router/main.py; fi
+  echo '{"affected":[],"totals_minor":{"USD":1},"skipped_rows":1}' > out/impact.json
+fi
+sleep 2

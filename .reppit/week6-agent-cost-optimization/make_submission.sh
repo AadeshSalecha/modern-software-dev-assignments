@@ -12,7 +12,7 @@
 # Both forms leave out past practice logs (runs/ holds earlier reports and diffs of app/),
 # scratch output, the starter's scoring files, caches, and writeup.md (it describes the starter
 # incident's cause; it is handed in through the repository link, not the zip).
-set -euo pipefail
+set -euo pipefail  # a failing pipe counts: the dry run at the end is piped through sed
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 MODE=slim
 if [ "${1:-}" = "--full" ]; then
@@ -59,3 +59,15 @@ for needed in run.sh AGENTS.md CLAUDE.md .claude/settings.json kit/prepare.sh ki
 done
 files=$(echo "$listing" | grep -vc '/$')
 echo "$OUT ($MODE): $files files, $(du -h "$OUT" | cut -f1)"
+
+# An upload keeps no file modes and the grader runs the zip as another account with an emptied
+# environment. Three submissions ran without their preparation step because nothing here looked
+# at the zip that way. So every zip is played once as uploaded, with stand-in harnesses and no
+# model (KIT_NO_DRYRUN=1 skips it; node 24 or newer has to be first on PATH).
+if [ "${KIT_NO_DRYRUN:-}" != "1" ]; then
+  echo "playing the zip as uploaded (no file modes, emptied environment, stand-in harnesses) ..."
+  if ! "$REPO/.reppit/week6-agent-cost-optimization/dryrun/as_uploaded.sh" "$OUT" | sed 's/^/  /'; then
+    echo "the zip does not survive an upload; see the lines above" >&2
+    exit 1
+  fi
+fi
