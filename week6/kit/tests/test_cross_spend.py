@@ -318,23 +318,22 @@ class Budget(unittest.TestCase):
         self.assertTrue(195 <= now["seconds_left"] <= 201)
         self.assertIn("this session $0.20 of the $0.36", self.budget.line(now))
 
-    def test_a_session_with_room_is_told_once_what_to_spend_it_on(self):
-        self.log("a.claude.m.jsonl", "s1", 20000)
-        text = self.budget.nudge(self.budget.state())
-        self.assertIn("about $0.20 of the $0.36", text)
-        self.assertIn("--handed-over", text)
+    def test_a_session_that_names_nothing_open_is_let_go_whatever_money_is_left(self):
+        self.log("a.claude.m.jsonl", "s1", 20000)   # 0.20 of its 0.36, and the run has 0.52 left
+        self.assertEqual(self.budget.nudge(self.budget.state()), "")
+        self.assertEqual(self.budget.nudge(self.budget.state(), 0, "All of it is verified by scenarios."), "")
 
-    def test_no_word_when_the_share_is_used_or_time_is_short_or_the_run_is_near_its_limit(self):
-        self.log("a.claude.m.jsonl", "s1", 32000)   # 0.32 of 0.36
-        self.assertEqual(self.budget.nudge(self.budget.state()), "")
+    def test_no_word_when_time_is_short_or_the_run_is_near_its_limit(self):
+        said = "Not verified: a second copy of the api."
         self.log("a.claude.m.jsonl", "s1", 20000)
+        self.assertIn("second copy", self.budget.nudge(self.budget.state(), 0, said))
         os.environ["KIT_DEADLINE"] = "150"          # 50 s left
-        self.assertEqual(self.budget.nudge(self.budget.state()), "")
+        self.assertEqual(self.budget.nudge(self.budget.state(), 0, said), "")
         os.environ["KIT_DEADLINE"] = "300"
         self.log("b.codex.m.jsonl", "s2", 48000)    # the run is at 0.68 of 0.72
-        self.assertEqual(self.budget.nudge(self.budget.state()), "")
+        self.assertEqual(self.budget.nudge(self.budget.state(), 0, said), "")
 
-    def test_later_messages_name_what_the_agent_itself_left_open(self):
+    def test_messages_name_what_the_agent_itself_left_open(self):
         self.log("a.claude.m.jsonl", "s1", 20000)
         now = self.budget.state()
         said = ("The fix is in and the gate is clear.\n- **Not covered:** two api copies racing on one key.\n"
@@ -343,7 +342,8 @@ class Budget(unittest.TestCase):
         self.assertIn("two api copies racing", text)
         self.assertIn("attempt already in flight", text)
         self.assertNotIn("53 entries", text)
-        self.assertEqual(self.budget.nudge(now, 1, "All of it is verified by scenarios."), "")
+        self.assertEqual(self.budget.open_items("Report: 53 entries."), [])
+        self.assertEqual(len(self.budget.open_items(said)), 2)
 
     def test_a_gap_the_agent_admits_is_followed_up_while_the_run_has_money_whatever_its_share(self):
         self.log("a.claude.m.jsonl", "s1", 35000)   # 0.35 of its 0.36: no room of its own

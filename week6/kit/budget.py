@@ -11,11 +11,11 @@
     python3 kit/budget.py --nudge N [--last FILE]
                                        for the stop hook, which has sent N such messages so far
                                        and saved what the harness handed it in FILE: a message
-                                       if this session is stopping with a good part of its
-                                       share unused, else nothing. The first lists checks to
-                                       spend it on; later ones name what is still open by the
-                                       agent's own account (unticked ledger lines, and cases
-                                       its last message says are not covered)
+                                       naming what is still open by the agent's own account
+                                       (unticked ledger lines, and cases its last message says
+                                       are not covered), while the run has money and the
+                                       session time; else nothing
+    python3 kit/budget.py --open FILE  those open items, one per line (for a follow-up prompt)
 
 The run has one limit for money and one clock. run.sh exports what is needed:
 
@@ -45,26 +45,7 @@ import spend  # noqa: E402
 NUDGE_MIN_MONEY = 0.05    # dollars of the session's share still unused
 NUDGE_MIN_SECONDS = 75    # seconds before the session is stopped
 OPEN_MIN_MONEY = 0.12     # dollars the whole run still has, for a round on what the agent says is open
-NUDGE = """Budget check (kit/budget.py): this session has used about ${used:.2f} of the ${share:.2f} set aside
-for it, and {gone} of its {limit} seconds. Nothing is gained by handing in early, and one missed
-case costs far more than everything that is left. Use what is left to look for a miss. Work
-through this list in order, and change code only when a check fails:
-
-1. `work/ledger.md`: every line needs a scenario or a query that proves it. Do the lines that
-   are not ticked, and the ones ticked on reasoning alone.
-2. Each way into the defect, and each case the ticket names ("including ...", "regardless of
-   ...", "even when ..."): one scenario each that fails on the shipped release
-   (`--release old`) and passes on your change.
-3. `python3 kit/rollout.py work/scenarios/*.json --handed-over` and the same with
-   `--restarted`. A failure there is a lead, not a verdict: decide it by the ticket.
-4. The report: for each set in the ticket's definition, check a second file that records
-   the same members (no file is complete: `select * from skipped`), and read each sentence
-   of the report request against your script once more.
-
-Stop when the list is done or about a minute is left. `python3 kit/budget.py` shows where you are."""
-
-
-OPEN = """Budget check (kit/budget.py): about ${left:.2f} and {seconds} s are left for this session, and
+OPEN = """Budget check (kit/budget.py): the run has about ${left:.2f} left and this session {seconds} s, and
 by your own account these are not shown to hold:
 
 {lines}
@@ -207,31 +188,28 @@ def session_room(now):
     return max(room or 0.0, 0.0)
 
 
+def open_items(said):
+    """What the agent itself has left open: unticked ledger lines, and lines of its last
+    message that say something is not covered."""
+    return ["ledger: " + line for line in open_ledger_lines()] + admitted_gaps(said)
+
+
 def nudge(now, given=0, said=""):
-    """The message for a session that is stopping with room left, or an empty string. `given`
-    is how many such messages it has had, `said` its last message."""
-    room = session_room(now)
-    if now is None or now["session_share"] is None:
+    """The message for a session that is stopping while, by its own account, something is not
+    shown to hold, or an empty string. It is sent while the RUN has money and the session has
+    time, whatever is left of the session's own share: that share is a plan, not a limit.
+    (There used to be a second message, a fixed list of checks for a session with money left.
+    In nine rounds it cost 19 cents and led to no change; this one led to a fix.)"""
+    if now is None or now["seconds_left"] is None or now["seconds_left"] < NUDGE_MIN_SECONDS:
         return ""
-    # What the agent itself says is open is followed up while the RUN has money and the session
-    # has time, whatever is left of the session's own share: that share is a plan, not a limit.
-    run_room = now["money_left"] if now["money_left"] is not None else room
-    timed = now["seconds_left"] is not None and now["seconds_left"] >= NUDGE_MIN_SECONDS
-    gaps = ["ledger: " + line for line in open_ledger_lines()] + admitted_gaps(said)
-    if gaps and timed and run_room >= OPEN_MIN_MONEY and room < NUDGE_MIN_MONEY:
-        shown = "\n".join("  - " + line[:260] for line in gaps[:8])
-        return OPEN.format(left=run_room, seconds=now["seconds_left"], lines=shown)
-    if room < NUDGE_MIN_MONEY:
+    run_room = now["money_left"]
+    if run_room is None or run_room < OPEN_MIN_MONEY:
         return ""
-    if given == 0:
-        limit = now["session_deadline"]
-        return NUDGE.format(used=now["session_spent"], share=now["session_share"],
-                            gone=now["seconds"], limit=limit if limit is not None else "?")
-    lines = ["ledger: " + line for line in open_ledger_lines()] + admitted_gaps(said)
-    if not lines:
+    gaps = open_items(said)
+    if not gaps:
         return ""
-    shown = "\n".join("  - " + line[:260] for line in lines[:8])
-    return OPEN.format(left=room, seconds=now["seconds_left"], lines=shown)
+    shown = "\n".join("  - " + line[:260] for line in gaps[:8])
+    return OPEN.format(left=run_room, seconds=now["seconds_left"], lines=shown)
 
 
 def main(argv):
@@ -250,6 +228,10 @@ def main(argv):
         text = nudge(now, given, said)
         if text:
             print(text)
+    elif "--open" in argv:
+        said = last_message(argv[argv.index("--open") + 1]) if argv.index("--open") + 1 < len(argv) else ""
+        for item in open_items(said):
+            print("- " + item[:260])
     elif "--session-room" in argv:
         return 0 if session_room(now) >= NUDGE_MIN_MONEY else 1
     elif "--room" in argv:

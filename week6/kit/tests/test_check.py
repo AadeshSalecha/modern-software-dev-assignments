@@ -137,5 +137,45 @@ class LedgerAndCommandTest(unittest.TestCase):
         self.assertEqual(check.test_command(self.tmp.name), "node --test")
 
 
+
+class ReuseTest(unittest.TestCase):
+    """The stop hook uses the last result again only for the same tree with nothing blocking."""
+
+    def tree(self, top):
+        for path, text in (("app/services/api/src/main.ts", "a"), ("app/services/router/main.py", "b"),
+                           ("app/services/worker/main.go", "c"), ("work/scenarios/x.json", "{}"),
+                           ("work/ledger.md", "- [ ] x"), ("out/report.json", "{}"), ("task.md", "t")):
+            os.makedirs(os.path.dirname(os.path.join(top, path)), exist_ok=True)
+            with open(os.path.join(top, path), "w", encoding="utf-8") as handle:
+                handle.write(text)
+
+    def stamp(self, top, only=None):
+        return check.tree_stamp(os.path.join(top, "task.md"), only, root=top, app=os.path.join(top, "app"))
+
+    def test_the_stamp_changes_with_code_scenarios_report_and_scope_and_not_with_caches(self):
+        with tempfile.TemporaryDirectory() as top:
+            self.tree(top)
+            first = self.stamp(top)
+            self.assertEqual(first, self.stamp(top))
+            self.assertNotEqual(first, self.stamp(top, only="repair"))
+            os.makedirs(os.path.join(top, "app/services/router/__pycache__"))
+            with open(os.path.join(top, "app/services/router/__pycache__/main.pyc"), "w") as handle:
+                handle.write("x")
+            self.assertEqual(first, self.stamp(top))
+            for path in ("app/services/router/main.py", "work/scenarios/x.json", "out/report.json", "work/ledger.md"):
+                before = self.stamp(top)
+                with open(os.path.join(top, path), "a", encoding="utf-8") as handle:
+                    handle.write("more")
+                self.assertNotEqual(before, self.stamp(top), path)
+
+    def test_only_the_hook_reuses_and_only_a_result_without_blocking_lines(self):
+        last = {"stamp": "s", "hard": False, "soft": True, "by_agent": True, "text": "check: nothing blocking"}
+        self.assertTrue(check.reusable(last, "s", hook=True))
+        self.assertFalse(check.reusable(last, "s", hook=False))          # the agent asked: work it out
+        self.assertFalse(check.reusable(last, "other", hook=True))       # something changed
+        self.assertFalse(check.reusable(dict(last, hard=True), "s", hook=True))
+        self.assertFalse(check.reusable(None, "s", hook=True))
+
+
 if __name__ == "__main__":
     unittest.main()

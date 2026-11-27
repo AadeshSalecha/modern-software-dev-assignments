@@ -49,18 +49,19 @@ STARTED=$(date +%s)
 # else. So nothing here is started by its path: every helper goes through bash or python3.
 # The modes are put back as well, for agents that start a helper by its path.
 chmod u+x kit/*.sh kit/*.py 2>/dev/null
-SOLVE_END=${KIT_SOLVE_END:-300}        # solvers are stopped this many seconds after the start
+SOLVE_END=${KIT_SOLVE_END:-300}        # solvers are stopped this many seconds after the start (see after prep)
 HARD_STOP=${KIT_HARD_STOP:-570}        # everything here is finished by then, 30 s before the grader's limit
-FIX_END=$((HARD_STOP - 130))           # the comparison session is stopped then, so its result can be checked
+FIX_END=$((HARD_STOP - 95))            # the follow-up session is stopped then; checking its result took 43 to 61 s
 # Spending lines, in dollars of estimated spend so far. Full cost credit ends at $0.75 and each
 # cent above costs about half a point; the repair is worth more than a few of those, so the
-# run may end near $0.85. A follow-up session for the main solver costs 8 to 15 cents. With a
-# second repair to compare with it starts below FIX_BUDGET, six cents higher when a run as
-# written fails on the main repair; without one it starts below REVIEW_BUDGET, because then
-# the run has spent less to begin with. A report decision costs about 15 cents: two different
+# run may end near $0.85. On a larger incident the three first sessions cost $0.70 to $0.81,
+# and with the old line of 0.60 the follow-up never started there. It costs 5 to 17 cents
+# (median 6). With a second repair to compare with it starts below FIX_BUDGET, four cents
+# higher when a run as written fails on the main repair; without one it starts below
+# REVIEW_BUDGET, because then the run has spent less to begin with. A report decision costs about 15 cents: two different
 # reports mean one of them is wrong, and the report is a third of the correctness score.
-FIX_BUDGET=${KIT_FIX_BUDGET:-0.74}
-REVIEW_BUDGET=${KIT_REVIEW_BUDGET:-0.68}
+FIX_BUDGET=${KIT_FIX_BUDGET:-0.78}
+REVIEW_BUDGET=${KIT_REVIEW_BUDGET:-0.70}
 JUDGE_BUDGET=${KIT_JUDGE_BUDGET:-0.78}
 RECONCILE=${KIT_RECONCILE:-always}     # always: compare the two repairs every time; fails: only when a run fails
 
@@ -79,7 +80,7 @@ REPORT_END=${KIT_REPORT_END:-220}      # the report-only session is stopped this
 # script, to the stop hook and to the agents. Sessions that have room are given more of it:
 # the main solver is told once if it stops with a good part of its share unused, and the
 # follow-up sessions run at effort high when the run can afford that (KIT_ADAPT=0: never).
-export KIT_MONEY="${KIT_MONEY:-0.85}"  # dollars the run means to stay under; full cost credit ends at 0.75
+export KIT_MONEY="${KIT_MONEY:-0.88}"  # dollars the run means to stay under; full cost credit ends at 0.75
 MAIN_SHARE=${KIT_MAIN_SHARE:-0.36}     # of which the main solver's first session may use this much
 SECOND_SHARE=${KIT_SECOND_SHARE:-0.18} # and the second solver this much (it is told; see also its time limit)
 export KIT_STARTED=$STARTED
@@ -209,7 +210,7 @@ agent() { # agent <harness:model:effort> <start|resume> <seconds> <name> <prompt
       )
       if [ "$mode" = "resume" ] && [ -s "work/.session.$stage" ]; then
         KIT_STAGE="$stage" limited "$seconds" claude -p "$prompt" --resume "$(cat "work/.session.$stage")" \
-          --max-turns 40 "${flags[@]}"
+          --max-turns 16 "${flags[@]}"
       else
         python3 -c 'import uuid; print(uuid.uuid4())' >"work/.session.$stage"
         KIT_STAGE="$stage" limited "$seconds" claude -p "$prompt" --session-id "$(cat "work/.session.$stage")" \
@@ -412,6 +413,13 @@ if [ ! -d .pristine/app/services ] || [ ! -s work/start.txt ] || { [ -d incident
     python3 kit/evidence.py build incident work/evidence.db >work/evidence.txt 2>&1 ||
       echo "evidence: loading failed: $(tail -1 work/evidence.txt)" >>work/start.txt
   fi
+fi
+# The solvers' time counts from here, not from the start: the first Go build in an empty home
+# takes half a minute that no practice run pays, and it must not come out of the solve.
+if [ -z "${KIT_SOLVE_END:-}" ]; then
+  SOLVE_END=$(($(elapsed) + 295))
+  [ "$SOLVE_END" -lt 300 ] && SOLVE_END=300
+  [ "$SOLVE_END" -gt 335 ] && SOLVE_END=335
 fi
 echo "run.sh: prepared after $(elapsed) s: snapshot $([ -d .pristine/app/services ] && echo yes || echo NO)," \
   "evidence database $([ -s work/evidence.db ] && echo yes || echo NO)," \
@@ -676,11 +684,11 @@ if [ "${KIT_NO_CROSS:-}" != "1" ]; then
       fi
     fi
     # A run as written that fails on the main repair is the strongest evidence there is, and
-    # worth six cents more. Money is kept back for a report decision that has started, and for
+    # worth four cents more. Money is kept back for a report decision that has started, and for
     # a session whose cached context has expired (a resumed session pays to write it again).
     fix_line=$FIX_BUDGET
     [ "$fix_kind" = "review" ] && fix_line=$REVIEW_BUDGET
-    [ "$A_WRITTEN" -gt 0 ] && fix_line=$(python3 -c "print($fix_line + 0.06)")
+    [ "$A_WRITTEN" -gt 0 ] && fix_line=$(python3 -c "print($fix_line + 0.04)")
     [ -n "$JUDGE_PID" ] && fix_line=$(python3 -c "print($fix_line - 0.08)")
     if [ $(($(elapsed) - A_ENDED)) -gt 230 ]; then
       fix_line=$(python3 -c "print($fix_line - 0.15)")
@@ -691,7 +699,7 @@ if [ "${KIT_NO_CROSS:-}" != "1" ]; then
     gate_now=""
     gate_blocks=0
     followed=0
-    if [ "$A_CHANGED" = "1" ] && [ "$(elapsed)" -lt $((FIX_END - 60)) ]; then
+    if [ "$A_CHANGED" = "1" ] && [ "$(elapsed)" -lt $((FIX_END - 70)) ]; then
       limited 60 bash kit/check.sh --only repair >work/cross/gate.txt 2>&1
       gate_now=$?
       stop_services
@@ -702,10 +710,17 @@ if [ "${KIT_NO_CROSS:-}" != "1" ]; then
         echo "run.sh: the main repair fails its own gate after $(elapsed) s: $(sed -n 2p work/cross/gate.txt | cut -c1-140)"
       fi
     fi
-    if [ "$want_fix" -eq 1 ] && [ -n "$gate_now" ] && affordable "$fix_line" $((FIX_END - 80)); then
+    if [ "$want_fix" -eq 1 ] && [ -n "$gate_now" ] && affordable "$fix_line" $((FIX_END - 85)); then
       fix_prompt="$(cat "kit/prompt-$([ "$fix_kind" = "review" ] && echo review || echo reconcile).md" work/cross/fix.txt 2>/dev/null)"
       [ -s work/cross/fix.txt ] || fix_prompt="$fix_prompt
 (none: your repair passes every run)"
+      still_open=$(python3 kit/budget.py --open work/.stop_input.json 2>/dev/null | head -8)
+      if [ -n "$still_open" ]; then
+        fix_prompt="$fix_prompt
+
+By your own account when you stopped, these were not shown to hold. Close each one: a scenario or a query that runs, or the sentence of the ticket or a contract that makes it unnecessary.
+$still_open"
+      fi
       if [ "$gate_blocks" -eq 1 ]; then
         fix_prompt="$fix_prompt
 
@@ -719,7 +734,7 @@ $(head -30 work/cross/gate.txt)"
     # 4c. Still failing its own gate, with money and time left: one more session on exactly
     #     that. Handing in a repair whose own checks fail is what the budget is there to prevent.
     if [ -n "$gate_now" ] && [ "$gate_now" -ne 0 ] && grep -q '^BLOCKING' work/cross/gate.txt 2>/dev/null &&
-      [ "$(elapsed)" -lt $((FIX_END - 90)) ] && python3 kit/budget.py --room 0.12 2>/dev/null; then
+      [ "$(elapsed)" -lt $((FIX_END - 50)) ] && python3 kit/budget.py --room 0.12 2>/dev/null; then
       finish_prompt="$(cat kit/prompt-finish.md)
 
 $(python3 kit/budget.py 2>/dev/null)

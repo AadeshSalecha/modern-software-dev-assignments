@@ -51,6 +51,10 @@ enabled is shown as a note: the contract does not allow it, so it needs the tick
 | `drain` | [`limit`, `restart`] | ticks everything and moves the clock forward until nothing is due |
 | `upgrade` | | api, router and worker stop and start again from your working tree on the same state; the scenario starts on the release as shipped |
 
+Leave `secret` out and a valid one is made for you. If you set one, here or in a `bus`
+message, it has to be `whsec_` followed by base64: with anything else every attempt fails its
+signature and the delivery ends `dead` without the merchant seeing a request.
+
 Expectations:
 
 - `{"delivery": {"event": ref, "endpoint": id}, ...}` with any of `state`, `count`

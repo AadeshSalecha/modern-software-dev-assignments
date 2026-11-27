@@ -48,6 +48,8 @@ SERVICES = ("api", "router", "worker")
 SOFT_LIMIT = 1  # the stop hook sends the to-consider items back this many times
 SOFT_COUNTER = os.path.join(ROOT, "work", ".soft_blocks")
 NO_HARNESS = os.path.join(ROOT, "work", ".no_harness")
+LAST_RESULT = os.path.join(ROOT, "work", ".gate.json")
+STAMP_SKIP = ("__pycache__", ".pytest_cache", ".build", "state", "node_modules", "dist", "build")
 BUDGET_SECONDS = 150  # for all scenario runs together
 CRASH = re.compile(r"\bcrash\((\d+)\)")
 
@@ -428,6 +430,46 @@ def scenario_checks(bins):
     return hard, soft
 
 
+def tree_stamp(task, only, root=ROOT, app=None):
+    """A fingerprint of everything this script reads that an agent can change: the three
+    services, its scenarios, its ledger, the files under out/ and the ticket. Two runs with
+    the same fingerprint check the same thing."""
+    import hashlib
+    app = app or rollout.NEW_APP
+    files = [os.path.join(root, "work", "ledger.md"), task]
+    for top in [os.path.join(app, "services", service) for service in SERVICES] + [
+            os.path.join(root, "work", "scenarios"), os.path.join(root, "out")]:
+        for folder, folders, names in os.walk(top):
+            folders[:] = sorted(name for name in folders if name not in STAMP_SKIP)
+            files += [os.path.join(folder, name) for name in sorted(names) if not name.endswith(".pyc")]
+    digest = hashlib.sha256(f"only={only}\n".encode())
+    for path in files:
+        try:
+            info = os.stat(path)
+        except OSError:
+            continue
+        digest.update(f"{os.path.relpath(path, root)}\0{info.st_size}\0{info.st_mtime_ns}\n".encode())
+    return digest.hexdigest()
+
+
+def reusable(last, stamp, hook):
+    """The stop hook runs this script each time the agent wants to stop, mostly on a tree that
+    has not changed since the last run: a third of a solver's time went to waiting for it.
+    The last result is used again when the hook asks, nothing has changed, and nothing
+    blocked. A result with blocking lines is always made afresh, and so is every run the
+    agent starts itself."""
+    return bool(hook and isinstance(last, dict) and last.get("stamp") == stamp and not last.get("hard")
+                and isinstance(last.get("text"), str))
+
+
+def last_result():
+    try:
+        with open(LAST_RESULT, encoding="utf-8") as handle:
+            return json.load(handle)
+    except (OSError, ValueError):
+        return None
+
+
 def soft_count():
     try:
         with open(SOFT_COUNTER, encoding="utf-8") as handle:
@@ -447,6 +489,25 @@ def main(argv):
             only = argv[index + 1]
 
     hard, soft, notes = [], [], []
+    try:
+        stamp = tree_stamp(task, only)
+    except Exception:  # noqa: BLE001 - never a reason to fail
+        stamp = None
+    last = last_result() if stamp else None
+    if reusable(last, stamp, hook):
+        # Nothing has changed since this was last worked out, and nothing blocked then. Notes
+        # the agent saw in a run of its own are not sent back; notes it has only been shown by
+        # the hook follow the usual rule (once).
+        asked = soft_count()
+        again = bool(last.get("soft")) and not last.get("by_agent") and asked < SOFT_LIMIT
+        if again:
+            try:
+                with open(SOFT_COUNTER, "w", encoding="utf-8") as handle:
+                    handle.write(str(asked + 1))
+            except OSError:
+                pass
+        print(last["text"])
+        return 1 if again else 0
     signal.signal(signal.SIGTERM, rollout.stop_everything)
     if only == "report":
         pass
@@ -499,7 +560,17 @@ def main(argv):
         lines.insert(0, "check: all clear" if not (soft or notes) else "check: nothing blocking")
     if len(lines) > 40:
         lines = lines[:39] + [f"... {len(lines) - 39} more lines"]
-    print("\n".join(lines))
+    text = "\n".join(lines)
+    print(text)
+    if stamp:
+        try:
+            # A run by the agent has put the notes in front of it; a run by the hook has not
+            # unless it sends them back now.
+            with open(LAST_RESULT, "w", encoding="utf-8") as handle:
+                json.dump({"stamp": stamp, "hard": bool(hard), "soft": bool(soft or notes),
+                           "by_agent": (not hook) or soft_blocks, "text": text}, handle)
+        except OSError:
+            pass
     return 1 if (hard or soft_blocks) else 0
 
 
