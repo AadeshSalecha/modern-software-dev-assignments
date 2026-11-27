@@ -173,6 +173,24 @@ submission 1, and no request to `gpt-6.1-terra`: the run was one Sonnet session.
   the Sonnet session cost $0.24 and $0.39 in the two graded runs.
 - **One Gradescope submission is left.** The zip is built and unchanged since e0b42c6.
 
+## Status after the third graded run (2026-11-27)
+
+Submission 3: repair 0.71 (12 of 17, regressions 51 of 51, compat 8 of 8), impact 1.00,
+$0.5704 (Sonnet $0.4606, `gpt-6.1-terra` $0.1098), 55 requests, 237.9 s. Correctness 28.45 of
+35 (was 17.12), cost 35 of 35. No submissions are left.
+
+- **Report fixed.** 0.11 to 1.00. The raw-file report session ran; Sonnet's totals fit a main
+  session plus a report decision. Not provable from the grader's output.
+- **Repair unchanged a third time.** terra's totals (6,936 output tokens, 0.57 M input) are
+  about one session, against 13,400 to 15,000 and 1.4 to 1.7 M for second solver plus report
+  session locally, and the run ended at 238 s. No Haiku line, so no fallback. The second solver
+  did not hand in a repair: no usable workspace copy (then `run.sh` goes on without one; the
+  fallback covers a harness that does not start, not a missing folder) or Codex stopped early.
+- **Scoring formula** that fits all three results: 35 × (7 × repair + 4 × impact) / 11.
+- **If there were a fourth run:** start the second solver in a folder made of links, like the
+  report session's; a second pass by the main session if it cannot start; a different model
+  or effort per session so the cost line shows which sessions ran.
+
 ## Out of scope
 
 Anything that needs to know the held-out ticket. We only get category counts back.
