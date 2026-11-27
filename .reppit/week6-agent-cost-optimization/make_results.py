@@ -49,6 +49,7 @@ DESCRIPTIONS = collections.OrderedDict(
         ("v2c-sonnet-plus-haiku", "Comparison session after every cross-check, kept only if no worse; one prompt sentence on every way into the defect; Sonnet main, Haiku medium second (commit 65eb375). Run 1 used both follow-ups."),
         ("v2e-zip-sonnet-low", "A later zip (commit 8a6fdb5: failing runs saved as replayable files), unpacked, with Sonnet at effort low as the second solver so that every step runs here. The comparison session ran in both runs."),
         ("v2f-zip-sonnet-low", "The zip for submission 2 (commit 54cab27: the main session always does the comparison, the better repair is chosen after it; spending lines 0.64 and 0.70), unpacked, Sonnet at effort low as the second solver."),
+        ("v2g-sonnet-terra", "The submitted pairing at the commit of the zip for submission 2 (51ef415), on the Mac with nothing set: Sonnet main, `gpt-6.1-terra` (Codex) second, comparison session in every run."),
         ("v2d-from-zip", "The zip for submission 2, unpacked, nothing set (commit b407568). No Codex in the container, so the second solver cannot start: the run shows that case."),
     ]
 )
