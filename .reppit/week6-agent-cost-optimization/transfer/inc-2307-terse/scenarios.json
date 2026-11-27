@@ -1,0 +1,3104 @@
+[
+ [
+  "incident",
+  {
+   "name": "a resend to an endpoint registered after the event arrives, once",
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 5,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 6,
+     "do": "drain"
+    },
+    {
+     "at": 20,
+     "do": "endpoint.create",
+     "id": "ep_b",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 21,
+     "do": "drain"
+    },
+    {
+     "at": 30,
+     "do": "resend",
+     "event": "e1",
+     "endpoint": "ep_b"
+    },
+    {
+     "at": 31,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "endpoint": "ep_b",
+     "requests": 1,
+     "accepted": 1,
+     "deliveries": 1,
+     "events": 1
+    },
+    {
+     "endpoint": "ep_a",
+     "requests": 1,
+     "accepted": 1,
+     "deliveries": 1,
+     "events": 1
+    }
+   ]
+  }
+ ],
+ [
+  "incident",
+  {
+   "name": "a resend to an endpoint that did not take the event's type when it was accepted, and does now, arrives",
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme",
+     "event_types": [
+      "payment.captured"
+     ]
+    },
+    {
+     "at": 5,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "refund.created",
+     "amount_minor": 300,
+     "currency": "EUR"
+    },
+    {
+     "at": 6,
+     "do": "drain"
+    },
+    {
+     "at": 20,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "event_types": [
+      "*"
+     ]
+    },
+    {
+     "at": 21,
+     "do": "drain"
+    },
+    {
+     "at": 30,
+     "do": "resend",
+     "event": "e1",
+     "endpoint": "ep_a"
+    },
+    {
+     "at": 31,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "endpoint": "ep_a",
+     "requests": 1,
+     "accepted": 1,
+     "deliveries": 1,
+     "events": 1
+    }
+   ]
+  }
+ ],
+ [
+  "incident",
+  {
+   "name": "a resend to an endpoint that does not take the event's type arrives all the same; the next event of that type is not sent",
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme",
+     "event_types": [
+      "payment.captured"
+     ]
+    },
+    {
+     "at": 5,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "refund.created",
+     "amount_minor": 300,
+     "currency": "EUR"
+    },
+    {
+     "at": 6,
+     "do": "drain"
+    },
+    {
+     "at": 30,
+     "do": "resend",
+     "event": "e1",
+     "endpoint": "ep_a"
+    },
+    {
+     "at": 31,
+     "do": "drain"
+    },
+    {
+     "at": 40,
+     "do": "event",
+     "ref": "e2",
+     "merchant": "m_acme",
+     "type": "refund.created",
+     "amount_minor": 450,
+     "currency": "EUR"
+    },
+    {
+     "at": 41,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "endpoint": "ep_a",
+     "requests": 1,
+     "accepted": 1,
+     "deliveries": 1,
+     "events": 1
+    },
+    {
+     "delivery": {
+      "event": "e2",
+      "endpoint": "ep_a"
+     },
+     "count": 0
+    }
+   ]
+  }
+ ],
+ [
+  "incident",
+  {
+   "name": "an event missed while the endpoint was switched off for more than a day can be resent",
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 1,
+     "do": "drain"
+    },
+    {
+     "at": 10,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": false
+    },
+    {
+     "at": 11,
+     "do": "drain"
+    },
+    {
+     "at": 100,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 101,
+     "do": "drain"
+    },
+    {
+     "at": 90100,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": true
+    },
+    {
+     "at": 90101,
+     "do": "drain"
+    },
+    {
+     "at": 90200,
+     "do": "resend",
+     "event": "e1",
+     "endpoint": "ep_a"
+    },
+    {
+     "at": 90201,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "endpoint": "ep_a",
+     "requests": 1,
+     "accepted": 1,
+     "deliveries": 1,
+     "events": 1
+    }
+   ]
+  }
+ ],
+ [
+  "incident",
+  {
+   "name": "two resends of one event to one endpoint that never had it are two deliveries",
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 5,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 6,
+     "do": "drain"
+    },
+    {
+     "at": 20,
+     "do": "endpoint.create",
+     "id": "ep_b",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 21,
+     "do": "drain"
+    },
+    {
+     "at": 30,
+     "do": "resend",
+     "event": "e1",
+     "endpoint": "ep_b"
+    },
+    {
+     "at": 31,
+     "do": "drain"
+    },
+    {
+     "at": 40,
+     "do": "resend",
+     "event": "e1",
+     "endpoint": "ep_b"
+    },
+    {
+     "at": 41,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "endpoint": "ep_b",
+     "requests": 2,
+     "accepted": 2,
+     "deliveries": 2,
+     "events": 1
+    },
+    {
+     "endpoint": "ep_a",
+     "requests": 1,
+     "accepted": 1,
+     "deliveries": 1,
+     "events": 1
+    }
+   ]
+  }
+ ],
+ [
+  "incident",
+  {
+   "name": "a resend to a switched-off endpoint that never had the event waits and goes out when the endpoint is switched on",
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 5,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 6,
+     "do": "drain"
+    },
+    {
+     "at": 20,
+     "do": "endpoint.create",
+     "id": "ep_b",
+     "merchant": "m_acme",
+     "enabled": false
+    },
+    {
+     "at": 21,
+     "do": "drain"
+    },
+    {
+     "at": 30,
+     "do": "resend",
+     "event": "e1",
+     "endpoint": "ep_b"
+    },
+    {
+     "at": 31,
+     "do": "drain"
+    },
+    {
+     "at": 200,
+     "do": "endpoint.update",
+     "id": "ep_b",
+     "enabled": true
+    },
+    {
+     "at": 201,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "endpoint": "ep_b",
+     "requests": 1,
+     "accepted": 1,
+     "deliveries": 1,
+     "events": 1
+    },
+    {
+     "delivery": {
+      "event": "e1",
+      "endpoint": "ep_b"
+     },
+     "first_receipt_at_least": 200
+    }
+   ]
+  }
+ ],
+ [
+  "incident",
+  {
+   "name": "a resend to an endpoint that never had the event is retried when the first attempt fails",
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 5,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 6,
+     "do": "drain"
+    },
+    {
+     "at": 20,
+     "do": "endpoint.create",
+     "id": "ep_b",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 21,
+     "do": "drain"
+    },
+    {
+     "at": 25,
+     "do": "receiver.script",
+     "path": "/hooks/ep_b",
+     "responses": [
+      500
+     ],
+     "default": 200
+    },
+    {
+     "at": 30,
+     "do": "resend",
+     "event": "e1",
+     "endpoint": "ep_b"
+    },
+    {
+     "at": 31,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "endpoint": "ep_b",
+     "requests": 2,
+     "accepted": 1,
+     "deliveries": 1,
+     "events": 1
+    }
+   ]
+  }
+ ],
+ [
+  "incident",
+  {
+   "name": "an event that arrived as a version 1 message can be resent to an endpoint registered after it",
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 1,
+     "do": "drain"
+    },
+    {
+     "at": 10,
+     "do": "bus",
+     "ref": "old1",
+     "message": {
+      "id": "evt_legacy0000001",
+      "merchant": "m_acme",
+      "event_type": "payment.captured",
+      "amount": "12.5",
+      "currency": "USD",
+      "payment": "pay_legacy0000001",
+      "ts": "2026-11-02T00:00:00Z"
+     }
+    },
+    {
+     "at": 11,
+     "do": "drain"
+    },
+    {
+     "at": 20,
+     "do": "endpoint.create",
+     "id": "ep_b",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 21,
+     "do": "drain"
+    },
+    {
+     "at": 30,
+     "do": "bus",
+     "ref": "ask",
+     "message": {
+      "v": 3,
+      "producer": "api",
+      "seq": 9001,
+      "type": "resend.requested",
+      "at": 1793577630,
+      "data": {
+       "event_id": "evt_legacy0000001",
+       "endpoint_id": "ep_b"
+      }
+     }
+    },
+    {
+     "at": 31,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "status": "ask",
+     "is": 200
+    },
+    {
+     "endpoint": "ep_b",
+     "requests": 1,
+     "accepted": 1,
+     "deliveries": 1,
+     "events": 1
+    },
+    {
+     "delivery": {
+      "event": "old1",
+      "endpoint": "ep_b"
+     },
+     "amount_minor": 1250,
+     "currency": "USD"
+    }
+   ]
+  }
+ ],
+ [
+  "incident",
+  {
+   "name": "the api restarts between accepting a resend and passing it on; it still arrives, once",
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 5,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 6,
+     "do": "drain"
+    },
+    {
+     "at": 20,
+     "do": "endpoint.create",
+     "id": "ep_b",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 21,
+     "do": "drain"
+    },
+    {
+     "at": 30,
+     "do": "resend",
+     "event": "e1",
+     "endpoint": "ep_b"
+    },
+    {
+     "at": 31,
+     "do": "restart",
+     "service": "api"
+    },
+    {
+     "at": 32,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "endpoint": "ep_b",
+     "requests": 1,
+     "accepted": 1,
+     "deliveries": 1,
+     "events": 1
+    }
+   ]
+  }
+ ],
+ [
+  "incident",
+  {
+   "name": "restarting every service after such a resend has arrived does not send it again",
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 5,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 6,
+     "do": "drain"
+    },
+    {
+     "at": 20,
+     "do": "endpoint.create",
+     "id": "ep_b",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 21,
+     "do": "drain"
+    },
+    {
+     "at": 30,
+     "do": "resend",
+     "event": "e1",
+     "endpoint": "ep_b"
+    },
+    {
+     "at": 31,
+     "do": "drain"
+    },
+    {
+     "at": 40,
+     "do": "restart",
+     "service": "worker"
+    },
+    {
+     "at": 41,
+     "do": "restart",
+     "service": "api"
+    },
+    {
+     "at": 42,
+     "do": "restart",
+     "service": "router"
+    },
+    {
+     "at": 43,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "endpoint": "ep_b",
+     "requests": 1,
+     "accepted": 1,
+     "deliveries": 1,
+     "events": 1
+    },
+    {
+     "endpoint": "ep_a",
+     "requests": 1,
+     "accepted": 1,
+     "deliveries": 1,
+     "events": 1
+    }
+   ]
+  }
+ ],
+ [
+  "incident",
+  {
+   "name": "the router stops right after applying such a resend (crash point 1); it arrives once",
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 5,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 6,
+     "do": "drain"
+    },
+    {
+     "at": 20,
+     "do": "endpoint.create",
+     "id": "ep_b",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 21,
+     "do": "drain"
+    },
+    {
+     "at": 29,
+     "do": "crash_at",
+     "service": "router",
+     "point": 1
+    },
+    {
+     "at": 30,
+     "do": "resend",
+     "event": "e1",
+     "endpoint": "ep_b"
+    },
+    {
+     "at": 31,
+     "do": "drain",
+     "restart": true
+    }
+   ],
+   "expect": [
+    {
+     "endpoint": "ep_b",
+     "requests": 1,
+     "accepted": 1,
+     "deliveries": 1,
+     "events": 1
+    }
+   ]
+  }
+ ],
+ [
+  "incident",
+  {
+   "name": "the api stops after the router took such a resend and before it noted that (crash point 3); it arrives once",
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 5,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 6,
+     "do": "drain"
+    },
+    {
+     "at": 20,
+     "do": "endpoint.create",
+     "id": "ep_b",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 21,
+     "do": "drain"
+    },
+    {
+     "at": 29,
+     "do": "crash_at",
+     "service": "api",
+     "point": 3
+    },
+    {
+     "at": 30,
+     "do": "resend",
+     "event": "e1",
+     "endpoint": "ep_b"
+    },
+    {
+     "at": 31,
+     "do": "drain",
+     "restart": true
+    }
+   ],
+   "expect": [
+    {
+     "endpoint": "ep_b",
+     "requests": 1,
+     "accepted": 1,
+     "deliveries": 1,
+     "events": 1
+    }
+   ]
+  }
+ ],
+ [
+  "incident",
+  {
+   "name": "a resend the deployed release accepted and dropped arrives once the release is replaced",
+   "start": "deployed",
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 5,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 6,
+     "do": "drain"
+    },
+    {
+     "at": 20,
+     "do": "endpoint.create",
+     "id": "ep_b",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 21,
+     "do": "drain"
+    },
+    {
+     "at": 30,
+     "do": "resend",
+     "event": "e1",
+     "endpoint": "ep_b"
+    },
+    {
+     "at": 31,
+     "do": "drain"
+    },
+    {
+     "at": 60,
+     "do": "upgrade"
+    },
+    {
+     "at": 61,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "endpoint": "ep_b",
+     "requests": 1,
+     "accepted": 1,
+     "deliveries": 1,
+     "events": 1
+    },
+    {
+     "endpoint": "ep_a",
+     "requests": 1,
+     "accepted": 1,
+     "deliveries": 1,
+     "events": 1
+    }
+   ]
+  }
+ ],
+ [
+  "incident",
+  {
+   "name": "a resend the deployed release dropped because of the endpoint's event types arrives once the release is replaced",
+   "start": "deployed",
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme",
+     "event_types": [
+      "payment.captured"
+     ]
+    },
+    {
+     "at": 5,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "refund.created",
+     "amount_minor": 300,
+     "currency": "EUR"
+    },
+    {
+     "at": 6,
+     "do": "drain"
+    },
+    {
+     "at": 30,
+     "do": "resend",
+     "event": "e1",
+     "endpoint": "ep_a"
+    },
+    {
+     "at": 31,
+     "do": "drain"
+    },
+    {
+     "at": 60,
+     "do": "upgrade"
+    },
+    {
+     "at": 61,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "endpoint": "ep_a",
+     "requests": 1,
+     "accepted": 1,
+     "deliveries": 1,
+     "events": 1
+    }
+   ]
+  }
+ ],
+ [
+  "incident",
+  {
+   "name": "a resend the deployed release accepted and had not passed on when it was replaced arrives, once",
+   "start": "deployed",
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 5,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 6,
+     "do": "drain"
+    },
+    {
+     "at": 20,
+     "do": "endpoint.create",
+     "id": "ep_b",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 21,
+     "do": "drain"
+    },
+    {
+     "at": 30,
+     "do": "resend",
+     "event": "e1",
+     "endpoint": "ep_b"
+    },
+    {
+     "at": 31,
+     "do": "upgrade"
+    },
+    {
+     "at": 32,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "endpoint": "ep_b",
+     "requests": 1,
+     "accepted": 1,
+     "deliveries": 1,
+     "events": 1
+    }
+   ]
+  }
+ ],
+ [
+  "incident",
+  {
+   "name": "two resends the deployed release dropped for one event and endpoint are two deliveries once it is replaced",
+   "start": "deployed",
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 5,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 6,
+     "do": "drain"
+    },
+    {
+     "at": 20,
+     "do": "endpoint.create",
+     "id": "ep_b",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 21,
+     "do": "drain"
+    },
+    {
+     "at": 30,
+     "do": "resend",
+     "event": "e1",
+     "endpoint": "ep_b"
+    },
+    {
+     "at": 31,
+     "do": "drain"
+    },
+    {
+     "at": 40,
+     "do": "resend",
+     "event": "e1",
+     "endpoint": "ep_b"
+    },
+    {
+     "at": 41,
+     "do": "drain"
+    },
+    {
+     "at": 60,
+     "do": "upgrade"
+    },
+    {
+     "at": 61,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "endpoint": "ep_b",
+     "requests": 2,
+     "accepted": 2,
+     "deliveries": 2,
+     "events": 1
+    }
+   ]
+  }
+ ],
+ [
+  "incident",
+  {
+   "name": "starting the replaced release again does not send a recovered resend a second time",
+   "start": "deployed",
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 5,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 6,
+     "do": "drain"
+    },
+    {
+     "at": 20,
+     "do": "endpoint.create",
+     "id": "ep_b",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 21,
+     "do": "drain"
+    },
+    {
+     "at": 30,
+     "do": "resend",
+     "event": "e1",
+     "endpoint": "ep_b"
+    },
+    {
+     "at": 31,
+     "do": "drain"
+    },
+    {
+     "at": 60,
+     "do": "upgrade"
+    },
+    {
+     "at": 61,
+     "do": "drain"
+    },
+    {
+     "at": 70,
+     "do": "restart",
+     "service": "worker"
+    },
+    {
+     "at": 71,
+     "do": "restart",
+     "service": "api"
+    },
+    {
+     "at": 72,
+     "do": "restart",
+     "service": "router"
+    },
+    {
+     "at": 73,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "endpoint": "ep_b",
+     "requests": 1,
+     "accepted": 1,
+     "deliveries": 1,
+     "events": 1
+    },
+    {
+     "endpoint": "ep_a",
+     "requests": 1,
+     "accepted": 1,
+     "deliveries": 1,
+     "events": 1
+    }
+   ]
+  }
+ ],
+ [
+  "incident",
+  {
+   "name": "a dropped resend to a switched-off endpoint waits after the release is replaced and goes out when the endpoint is switched on",
+   "start": "deployed",
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 5,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 6,
+     "do": "drain"
+    },
+    {
+     "at": 20,
+     "do": "endpoint.create",
+     "id": "ep_b",
+     "merchant": "m_acme",
+     "enabled": false
+    },
+    {
+     "at": 21,
+     "do": "drain"
+    },
+    {
+     "at": 30,
+     "do": "resend",
+     "event": "e1",
+     "endpoint": "ep_b"
+    },
+    {
+     "at": 31,
+     "do": "drain"
+    },
+    {
+     "at": 60,
+     "do": "upgrade"
+    },
+    {
+     "at": 61,
+     "do": "drain"
+    },
+    {
+     "at": 200,
+     "do": "endpoint.update",
+     "id": "ep_b",
+     "enabled": true
+    },
+    {
+     "at": 201,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "endpoint": "ep_b",
+     "requests": 1,
+     "accepted": 1,
+     "deliveries": 1,
+     "events": 1
+    },
+    {
+     "delivery": {
+      "event": "e1",
+      "endpoint": "ep_b"
+     },
+     "first_receipt_at_least": 200
+    }
+   ]
+  }
+ ],
+ [
+  "incident",
+  {
+   "name": "once the release is replaced, a resend that had been dropped arrives and one that had worked is not repeated",
+   "start": "deployed",
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 5,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 6,
+     "do": "drain"
+    },
+    {
+     "at": 20,
+     "do": "endpoint.create",
+     "id": "ep_b",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 21,
+     "do": "drain"
+    },
+    {
+     "at": 30,
+     "do": "resend",
+     "event": "e1",
+     "endpoint": "ep_a"
+    },
+    {
+     "at": 35,
+     "do": "resend",
+     "event": "e1",
+     "endpoint": "ep_b"
+    },
+    {
+     "at": 36,
+     "do": "drain"
+    },
+    {
+     "at": 60,
+     "do": "upgrade"
+    },
+    {
+     "at": 61,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "endpoint": "ep_b",
+     "requests": 1,
+     "accepted": 1,
+     "deliveries": 1,
+     "events": 1
+    },
+    {
+     "endpoint": "ep_a",
+     "requests": 2,
+     "accepted": 2,
+     "deliveries": 2,
+     "events": 1
+    }
+   ]
+  }
+ ],
+ [
+  "regressions",
+  {
+   "name": "a resend of a delivered event to the same endpoint is a second delivery",
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 5,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 6,
+     "do": "drain"
+    },
+    {
+     "at": 30,
+     "do": "resend",
+     "event": "e1",
+     "endpoint": "ep_a"
+    },
+    {
+     "at": 31,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "endpoint": "ep_a",
+     "requests": 2,
+     "accepted": 2,
+     "deliveries": 2,
+     "events": 1
+    },
+    {
+     "delivery": {
+      "event": "e1",
+      "endpoint": "ep_a"
+     },
+     "state": "delivered",
+     "count": 2
+    }
+   ]
+  }
+ ],
+ [
+  "regressions",
+  {
+   "name": "a dead delivery can be resent once the endpoint answers again",
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 1,
+     "do": "receiver.script",
+     "path": "/hooks/ep_a",
+     "responses": [],
+     "default": 500
+    },
+    {
+     "at": 5,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 6,
+     "do": "drain"
+    },
+    {
+     "at": 36000,
+     "do": "receiver.script",
+     "path": "/hooks/ep_a",
+     "responses": [],
+     "default": 200
+    },
+    {
+     "at": 36005,
+     "do": "resend",
+     "event": "e1",
+     "endpoint": "ep_a"
+    },
+    {
+     "at": 36006,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "endpoint": "ep_a",
+     "requests": 7,
+     "accepted": 1,
+     "deliveries": 2,
+     "events": 1
+    },
+    {
+     "delivery": {
+      "event": "e1",
+      "endpoint": "ep_a"
+     },
+     "state": "dead"
+    }
+   ]
+  }
+ ],
+ [
+  "regressions",
+  {
+   "name": "two resends of a delivered event are two more deliveries",
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 5,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 6,
+     "do": "drain"
+    },
+    {
+     "at": 30,
+     "do": "resend",
+     "event": "e1",
+     "endpoint": "ep_a"
+    },
+    {
+     "at": 31,
+     "do": "drain"
+    },
+    {
+     "at": 40,
+     "do": "resend",
+     "event": "e1",
+     "endpoint": "ep_a"
+    },
+    {
+     "at": 41,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "endpoint": "ep_a",
+     "requests": 3,
+     "accepted": 3,
+     "deliveries": 3,
+     "events": 1
+    }
+   ]
+  }
+ ],
+ [
+  "regressions",
+  {
+   "name": "a resend that keeps failing ends dead and leaves the first delivery delivered",
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 5,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 6,
+     "do": "drain"
+    },
+    {
+     "at": 20,
+     "do": "receiver.script",
+     "path": "/hooks/ep_a",
+     "responses": [],
+     "default": 500
+    },
+    {
+     "at": 30,
+     "do": "resend",
+     "event": "e1",
+     "endpoint": "ep_a"
+    },
+    {
+     "at": 31,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "endpoint": "ep_a",
+     "requests": 7,
+     "accepted": 1,
+     "deliveries": 2,
+     "events": 1
+    },
+    {
+     "delivery": {
+      "event": "e1",
+      "endpoint": "ep_a"
+     },
+     "state": "delivered"
+    }
+   ]
+  }
+ ],
+ [
+  "regressions",
+  {
+   "name": "the same resend message arriving twice is one more delivery",
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 1,
+     "do": "drain"
+    },
+    {
+     "at": 5,
+     "do": "bus",
+     "ref": "b1",
+     "message": {
+      "v": 3,
+      "producer": "api",
+      "seq": 9000,
+      "type": "event.accepted",
+      "at": 1793577605,
+      "data": {
+       "event": {
+        "id": "evt_bus00000000001",
+        "merchant_id": "m_acme",
+        "type": "payment.captured",
+        "created": 1793577605,
+        "data": {
+         "object": "payment",
+         "payment_id": "pay_bus00000000001",
+         "amount_minor": 1250,
+         "currency": "USD"
+        }
+       }
+      }
+     }
+    },
+    {
+     "at": 6,
+     "do": "drain"
+    },
+    {
+     "at": 30,
+     "do": "bus",
+     "ref": "ask",
+     "message": {
+      "v": 3,
+      "producer": "api",
+      "seq": 9001,
+      "type": "resend.requested",
+      "at": 1793577630,
+      "data": {
+       "event_id": "evt_bus00000000001",
+       "endpoint_id": "ep_a"
+      }
+     }
+    },
+    {
+     "at": 31,
+     "do": "bus",
+     "ref": "again",
+     "message": {
+      "v": 3,
+      "producer": "api",
+      "seq": 9001,
+      "type": "resend.requested",
+      "at": 1793577631,
+      "data": {
+       "event_id": "evt_bus00000000001",
+       "endpoint_id": "ep_a"
+      }
+     }
+    },
+    {
+     "at": 32,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "status": "ask",
+     "is": 200
+    },
+    {
+     "status": "again",
+     "is": 200
+    },
+    {
+     "endpoint": "ep_a",
+     "requests": 2,
+     "accepted": 2,
+     "deliveries": 2,
+     "events": 1
+    }
+   ]
+  }
+ ],
+ [
+  "regressions",
+  {
+   "name": "a resend to a switched-off endpoint is not sent while it is off",
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 5,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 6,
+     "do": "drain"
+    },
+    {
+     "at": 20,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": false
+    },
+    {
+     "at": 21,
+     "do": "drain"
+    },
+    {
+     "at": 30,
+     "do": "resend",
+     "event": "e1",
+     "endpoint": "ep_a"
+    },
+    {
+     "at": 31,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "endpoint": "ep_a",
+     "requests": 1,
+     "accepted": 1,
+     "deliveries": 1,
+     "events": 1
+    }
+   ]
+  }
+ ],
+ [
+  "regressions",
+  {
+   "name": "a resend to a switched-off endpoint goes out when the endpoint is switched on again",
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 5,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 6,
+     "do": "drain"
+    },
+    {
+     "at": 20,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": false
+    },
+    {
+     "at": 21,
+     "do": "drain"
+    },
+    {
+     "at": 30,
+     "do": "resend",
+     "event": "e1",
+     "endpoint": "ep_a"
+    },
+    {
+     "at": 31,
+     "do": "drain"
+    },
+    {
+     "at": 200,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": true
+    },
+    {
+     "at": 201,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "endpoint": "ep_a",
+     "requests": 2,
+     "accepted": 2,
+     "deliveries": 2,
+     "events": 1
+    }
+   ]
+  }
+ ],
+ [
+  "regressions",
+  {
+   "name": "a switched-off endpoint that never had the event gets nothing from a resend while it is off",
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 5,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 6,
+     "do": "drain"
+    },
+    {
+     "at": 20,
+     "do": "endpoint.create",
+     "id": "ep_b",
+     "merchant": "m_acme",
+     "enabled": false
+    },
+    {
+     "at": 21,
+     "do": "drain"
+    },
+    {
+     "at": 30,
+     "do": "resend",
+     "event": "e1",
+     "endpoint": "ep_b"
+    },
+    {
+     "at": 31,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "endpoint": "ep_b",
+     "requests": 0
+    },
+    {
+     "endpoint": "ep_a",
+     "requests": 1,
+     "accepted": 1,
+     "deliveries": 1,
+     "events": 1
+    }
+   ]
+  }
+ ],
+ [
+  "regressions",
+  {
+   "name": "a resend message that names another merchant's endpoint is acknowledged and nothing is sent there",
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 1,
+     "do": "endpoint.create",
+     "id": "ep_x",
+     "merchant": "m_bolt"
+    },
+    {
+     "at": 2,
+     "do": "drain"
+    },
+    {
+     "at": 5,
+     "do": "bus",
+     "ref": "b1",
+     "message": {
+      "v": 3,
+      "producer": "api",
+      "seq": 9000,
+      "type": "event.accepted",
+      "at": 1793577605,
+      "data": {
+       "event": {
+        "id": "evt_bus00000000001",
+        "merchant_id": "m_acme",
+        "type": "payment.captured",
+        "created": 1793577605,
+        "data": {
+         "object": "payment",
+         "payment_id": "pay_bus00000000001",
+         "amount_minor": 1250,
+         "currency": "USD"
+        }
+       }
+      }
+     }
+    },
+    {
+     "at": 6,
+     "do": "drain"
+    },
+    {
+     "at": 30,
+     "do": "bus",
+     "ref": "ask",
+     "message": {
+      "v": 3,
+      "producer": "api",
+      "seq": 9001,
+      "type": "resend.requested",
+      "at": 1793577630,
+      "data": {
+       "event_id": "evt_bus00000000001",
+       "endpoint_id": "ep_x"
+      }
+     }
+    },
+    {
+     "at": 31,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "status": "ask",
+     "is": 200
+    },
+    {
+     "endpoint": "ep_x",
+     "requests": 0
+    },
+    {
+     "endpoint": "ep_a",
+     "requests": 1,
+     "accepted": 1,
+     "deliveries": 1,
+     "events": 1
+    }
+   ]
+  }
+ ],
+ [
+  "regressions",
+  {
+   "name": "a resend to another merchant's endpoint that the deployed release accepted and had not passed on is not delivered by the release that replaces it",
+   "start": "deployed",
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 1,
+     "do": "endpoint.create",
+     "id": "ep_x",
+     "merchant": "m_bolt"
+    },
+    {
+     "at": 5,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 6,
+     "do": "drain"
+    },
+    {
+     "at": 30,
+     "do": "resend",
+     "event": "e1",
+     "endpoint": "ep_x"
+    },
+    {
+     "at": 31,
+     "do": "upgrade"
+    },
+    {
+     "at": 32,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "endpoint": "ep_x",
+     "requests": 0
+    },
+    {
+     "endpoint": "ep_a",
+     "requests": 1,
+     "accepted": 1,
+     "deliveries": 1,
+     "events": 1
+    }
+   ]
+  }
+ ],
+ [
+  "regressions",
+  {
+   "name": "a resend to another merchant's endpoint that the deployed release dropped stays dropped when the release is replaced",
+   "start": "deployed",
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 1,
+     "do": "endpoint.create",
+     "id": "ep_x",
+     "merchant": "m_bolt"
+    },
+    {
+     "at": 5,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 6,
+     "do": "drain"
+    },
+    {
+     "at": 30,
+     "do": "resend",
+     "event": "e1",
+     "endpoint": "ep_x"
+    },
+    {
+     "at": 31,
+     "do": "drain"
+    },
+    {
+     "at": 60,
+     "do": "upgrade"
+    },
+    {
+     "at": 61,
+     "do": "drain"
+    },
+    {
+     "at": 70,
+     "do": "restart",
+     "service": "api"
+    },
+    {
+     "at": 71,
+     "do": "restart",
+     "service": "router"
+    },
+    {
+     "at": 72,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "endpoint": "ep_x",
+     "requests": 0
+    },
+    {
+     "endpoint": "ep_a",
+     "requests": 1,
+     "accepted": 1,
+     "deliveries": 1,
+     "events": 1
+    }
+   ]
+  }
+ ],
+ [
+  "regressions",
+  {
+   "name": "a resend the deployed release delivered is not sent again when the release is replaced or restarted",
+   "start": "deployed",
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 5,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 6,
+     "do": "drain"
+    },
+    {
+     "at": 30,
+     "do": "resend",
+     "event": "e1",
+     "endpoint": "ep_a"
+    },
+    {
+     "at": 31,
+     "do": "drain"
+    },
+    {
+     "at": 60,
+     "do": "upgrade"
+    },
+    {
+     "at": 61,
+     "do": "drain"
+    },
+    {
+     "at": 70,
+     "do": "restart",
+     "service": "api"
+    },
+    {
+     "at": 71,
+     "do": "restart",
+     "service": "router"
+    },
+    {
+     "at": 72,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "endpoint": "ep_a",
+     "requests": 2,
+     "accepted": 2,
+     "deliveries": 2,
+     "events": 1
+    }
+   ]
+  }
+ ],
+ [
+  "regressions",
+  {
+   "name": "a resend message that names an endpoint nobody registered is acknowledged and changes nothing",
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 1,
+     "do": "drain"
+    },
+    {
+     "at": 5,
+     "do": "bus",
+     "ref": "b1",
+     "message": {
+      "v": 3,
+      "producer": "api",
+      "seq": 9000,
+      "type": "event.accepted",
+      "at": 1793577605,
+      "data": {
+       "event": {
+        "id": "evt_bus00000000001",
+        "merchant_id": "m_acme",
+        "type": "payment.captured",
+        "created": 1793577605,
+        "data": {
+         "object": "payment",
+         "payment_id": "pay_bus00000000001",
+         "amount_minor": 1250,
+         "currency": "USD"
+        }
+       }
+      }
+     }
+    },
+    {
+     "at": 6,
+     "do": "drain"
+    },
+    {
+     "at": 30,
+     "do": "bus",
+     "ref": "ask",
+     "message": {
+      "v": 3,
+      "producer": "api",
+      "seq": 9001,
+      "type": "resend.requested",
+      "at": 1793577630,
+      "data": {
+       "event_id": "evt_bus00000000001",
+       "endpoint_id": "ep_ghost"
+      }
+     }
+    },
+    {
+     "at": 31,
+     "do": "drain"
+    },
+    {
+     "at": 40,
+     "do": "event",
+     "ref": "e2",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 41,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "status": "ask",
+     "is": 200
+    },
+    {
+     "endpoint": "ep_a",
+     "requests": 2,
+     "accepted": 2,
+     "deliveries": 2,
+     "events": 2
+    }
+   ]
+  }
+ ],
+ [
+  "regressions",
+  {
+   "name": "a resend message that names an event the router does not have is acknowledged and changes nothing",
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 1,
+     "do": "drain"
+    },
+    {
+     "at": 30,
+     "do": "bus",
+     "ref": "ask",
+     "message": {
+      "v": 3,
+      "producer": "api",
+      "seq": 9001,
+      "type": "resend.requested",
+      "at": 1793577630,
+      "data": {
+       "event_id": "evt_nobody00000001",
+       "endpoint_id": "ep_a"
+      }
+     }
+    },
+    {
+     "at": 31,
+     "do": "drain"
+    },
+    {
+     "at": 40,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 41,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "status": "ask",
+     "is": 200
+    },
+    {
+     "endpoint": "ep_a",
+     "requests": 1,
+     "accepted": 1,
+     "deliveries": 1,
+     "events": 1
+    }
+   ]
+  }
+ ],
+ [
+  "regressions",
+  {
+   "name": "an endpoint registered after an event does not get that event unless a resend asks for it",
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 5,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 6,
+     "do": "drain"
+    },
+    {
+     "at": 20,
+     "do": "endpoint.create",
+     "id": "ep_b",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 21,
+     "do": "drain"
+    },
+    {
+     "at": 30,
+     "do": "event",
+     "ref": "e2",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 31,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "endpoint": "ep_b",
+     "requests": 1,
+     "accepted": 1,
+     "deliveries": 1,
+     "events": 1
+    },
+    {
+     "delivery": {
+      "event": "e1",
+      "endpoint": "ep_b"
+     },
+     "count": 0
+    },
+    {
+     "endpoint": "ep_a",
+     "requests": 2,
+     "accepted": 2,
+     "deliveries": 2,
+     "events": 2
+    }
+   ]
+  }
+ ],
+ [
+  "regressions",
+  {
+   "name": "an endpoint gets only the event types it takes",
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme",
+     "event_types": [
+      "payment.captured"
+     ]
+    },
+    {
+     "at": 5,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "refund.created",
+     "amount_minor": 300,
+     "currency": "EUR"
+    },
+    {
+     "at": 6,
+     "do": "event",
+     "ref": "e2",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 7,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "endpoint": "ep_a",
+     "requests": 1,
+     "accepted": 1,
+     "deliveries": 1,
+     "events": 1
+    },
+    {
+     "delivery": {
+      "event": "e1",
+      "endpoint": "ep_a"
+     },
+     "count": 0
+    },
+    {
+     "delivery": {
+      "event": "e2",
+      "endpoint": "ep_a"
+     },
+     "state": "delivered",
+     "receipts": 1
+    }
+   ]
+  }
+ ],
+ [
+  "regressions",
+  {
+   "name": "an endpoint switched on again within a day gets what it missed, once",
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 1,
+     "do": "drain"
+    },
+    {
+     "at": 20,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": false
+    },
+    {
+     "at": 21,
+     "do": "drain"
+    },
+    {
+     "at": 100,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 101,
+     "do": "drain"
+    },
+    {
+     "at": 200,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": true
+    },
+    {
+     "at": 201,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "delivery": {
+      "event": "e1",
+      "endpoint": "ep_a"
+     },
+     "state": "delivered",
+     "receipts": 1
+    },
+    {
+     "endpoint": "ep_a",
+     "requests": 1,
+     "accepted": 1,
+     "deliveries": 1,
+     "events": 1
+    }
+   ]
+  }
+ ],
+ [
+  "regressions",
+  {
+   "name": "an event the endpoint caught up on can be resent: a second delivery",
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 1,
+     "do": "drain"
+    },
+    {
+     "at": 20,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": false
+    },
+    {
+     "at": 21,
+     "do": "drain"
+    },
+    {
+     "at": 100,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 101,
+     "do": "drain"
+    },
+    {
+     "at": 200,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": true
+    },
+    {
+     "at": 201,
+     "do": "drain"
+    },
+    {
+     "at": 300,
+     "do": "resend",
+     "event": "e1",
+     "endpoint": "ep_a"
+    },
+    {
+     "at": 301,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "endpoint": "ep_a",
+     "requests": 2,
+     "accepted": 2,
+     "deliveries": 2,
+     "events": 1
+    }
+   ]
+  }
+ ],
+ [
+  "compat",
+  {
+   "name": "a version 1 event is delivered once, in minor units",
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 1,
+     "do": "drain"
+    },
+    {
+     "at": 10,
+     "do": "bus",
+     "ref": "old1",
+     "message": {
+      "id": "evt_legacy0000001",
+      "merchant": "m_acme",
+      "event_type": "payment.captured",
+      "amount": "12.5",
+      "currency": "USD",
+      "payment": "pay_legacy0000001",
+      "ts": "2026-11-02T00:00:00Z"
+     }
+    },
+    {
+     "at": 11,
+     "do": "bus",
+     "ref": "old1again",
+     "message": {
+      "id": "evt_legacy0000001",
+      "merchant": "m_acme",
+      "event_type": "payment.captured",
+      "amount": "12.5",
+      "currency": "USD",
+      "payment": "pay_legacy0000001",
+      "ts": "2026-11-02T00:00:00Z"
+     }
+    },
+    {
+     "at": 12,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "status": "old1",
+     "is": 200
+    },
+    {
+     "status": "old1again",
+     "is": 200
+    },
+    {
+     "delivery": {
+      "event": "old1",
+      "endpoint": "ep_a"
+     },
+     "state": "delivered",
+     "receipts": 1,
+     "amount_minor": 1250,
+     "currency": "USD"
+    }
+   ]
+  }
+ ],
+ [
+  "compat",
+  {
+   "name": "an endpoint that exists only in the archive is created and gets its version 2 events",
+   "steps": [
+    {
+     "at": 0,
+     "do": "bus",
+     "message": {
+      "v": 2,
+      "seq": 10,
+      "kind": "endpoint",
+      "endpoint": {
+       "id": "ep_old",
+       "merchant": "m_old",
+       "url": "{receiver}/hooks/ep_old",
+       "secret": "whsec_t6dGZhrqQd262/2Fr0DQNtncVtZ3dU+I",
+       "types": [
+        "*"
+       ],
+       "active": true
+      }
+     },
+     "ref": "made"
+    },
+    {
+     "at": 5,
+     "do": "bus",
+     "ref": "a1",
+     "message": {
+      "v": 2,
+      "seq": 11,
+      "kind": "event",
+      "event": {
+       "id": "evt_archive0000011",
+       "merchant": "m_old",
+       "type": "payment.captured",
+       "created": 1790000011,
+       "payment_id": "pay_archive0000011",
+       "amount_minor": 990,
+       "currency": "EUR"
+      }
+     }
+    },
+    {
+     "at": 6,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "status": "made",
+     "is": 200
+    },
+    {
+     "status": "a1",
+     "is": 200
+    },
+    {
+     "delivery": {
+      "event": "a1",
+      "endpoint": "ep_old"
+     },
+     "state": "delivered",
+     "receipts": 1,
+     "amount_minor": 990,
+     "currency": "EUR"
+    }
+   ]
+  }
+ ],
+ [
+  "compat",
+  {
+   "name": "a version 2 event that was delivered can be resent, with the same amount",
+   "steps": [
+    {
+     "at": 0,
+     "do": "bus",
+     "message": {
+      "v": 2,
+      "seq": 10,
+      "kind": "endpoint",
+      "endpoint": {
+       "id": "ep_old",
+       "merchant": "m_old",
+       "url": "{receiver}/hooks/ep_old",
+       "secret": "whsec_t6dGZhrqQd262/2Fr0DQNtncVtZ3dU+I",
+       "types": [
+        "*"
+       ],
+       "active": true
+      }
+     }
+    },
+    {
+     "at": 5,
+     "do": "bus",
+     "ref": "a1",
+     "message": {
+      "v": 2,
+      "seq": 11,
+      "kind": "event",
+      "event": {
+       "id": "evt_archive0000011",
+       "merchant": "m_old",
+       "type": "payment.captured",
+       "created": 1790000011,
+       "payment_id": "pay_archive0000011",
+       "amount_minor": 990,
+       "currency": "EUR"
+      }
+     }
+    },
+    {
+     "at": 6,
+     "do": "drain"
+    },
+    {
+     "at": 30,
+     "do": "bus",
+     "ref": "ask",
+     "message": {
+      "v": 3,
+      "producer": "api",
+      "seq": 9001,
+      "type": "resend.requested",
+      "at": 1793577630,
+      "data": {
+       "event_id": "evt_archive0000011",
+       "endpoint_id": "ep_old"
+      }
+     }
+    },
+    {
+     "at": 31,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "status": "ask",
+     "is": 200
+    },
+    {
+     "endpoint": "ep_old",
+     "requests": 2,
+     "accepted": 2,
+     "deliveries": 2,
+     "events": 1
+    },
+    {
+     "delivery": {
+      "event": "a1",
+      "endpoint": "ep_old"
+     },
+     "amount_minor": 990,
+     "currency": "EUR"
+    }
+   ]
+  }
+ ],
+ [
+  "compat",
+  {
+   "name": "a version 1 event that was delivered can be resent, still in minor units",
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 1,
+     "do": "drain"
+    },
+    {
+     "at": 10,
+     "do": "bus",
+     "ref": "old1",
+     "message": {
+      "id": "evt_legacy0000001",
+      "merchant": "m_acme",
+      "event_type": "payment.captured",
+      "amount": "12.5",
+      "currency": "USD",
+      "payment": "pay_legacy0000001",
+      "ts": "2026-11-02T00:00:00Z"
+     }
+    },
+    {
+     "at": 11,
+     "do": "drain"
+    },
+    {
+     "at": 30,
+     "do": "bus",
+     "ref": "ask",
+     "message": {
+      "v": 3,
+      "producer": "api",
+      "seq": 9001,
+      "type": "resend.requested",
+      "at": 1793577630,
+      "data": {
+       "event_id": "evt_legacy0000001",
+       "endpoint_id": "ep_a"
+      }
+     }
+    },
+    {
+     "at": 31,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "status": "ask",
+     "is": 200
+    },
+    {
+     "endpoint": "ep_a",
+     "requests": 2,
+     "accepted": 2,
+     "deliveries": 2,
+     "events": 1
+    },
+    {
+     "delivery": {
+      "event": "old1",
+      "endpoint": "ep_a"
+     },
+     "amount_minor": 1250,
+     "currency": "USD"
+    }
+   ]
+  }
+ ],
+ [
+  "compat",
+  {
+   "name": "a version 2 message of a kind that version does not have is refused and changes nothing",
+   "steps": [
+    {
+     "at": 0,
+     "do": "bus",
+     "message": {
+      "v": 2,
+      "seq": 10,
+      "kind": "endpoint",
+      "endpoint": {
+       "id": "ep_old",
+       "merchant": "m_old",
+       "url": "{receiver}/hooks/ep_old",
+       "secret": "whsec_t6dGZhrqQd262/2Fr0DQNtncVtZ3dU+I",
+       "types": [
+        "*"
+       ],
+       "active": true
+      }
+     }
+    },
+    {
+     "at": 5,
+     "do": "bus",
+     "ref": "a1",
+     "message": {
+      "v": 2,
+      "seq": 11,
+      "kind": "event",
+      "event": {
+       "id": "evt_archive0000011",
+       "merchant": "m_old",
+       "type": "payment.captured",
+       "created": 1790000011,
+       "payment_id": "pay_archive0000011",
+       "amount_minor": 990,
+       "currency": "EUR"
+      }
+     }
+    },
+    {
+     "at": 6,
+     "do": "drain"
+    },
+    {
+     "at": 30,
+     "do": "bus",
+     "ref": "bad",
+     "message": {
+      "v": 2,
+      "seq": 50,
+      "kind": "resend",
+      "resend": {
+       "event_id": "evt_archive0000011",
+       "endpoint_id": "ep_old"
+      }
+     }
+    },
+    {
+     "at": 31,
+     "do": "drain"
+    },
+    {
+     "at": 40,
+     "do": "bus",
+     "ref": "a2",
+     "message": {
+      "v": 2,
+      "seq": 50,
+      "kind": "event",
+      "event": {
+       "id": "evt_archive0000050",
+       "merchant": "m_old",
+       "type": "payment.captured",
+       "created": 1790000050,
+       "payment_id": "pay_archive0000050",
+       "amount_minor": 1200,
+       "currency": "EUR"
+      }
+     }
+    },
+    {
+     "at": 41,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "status": "bad",
+     "is": 422
+    },
+    {
+     "status": "a2",
+     "is": 200
+    },
+    {
+     "delivery": {
+      "event": "a2",
+      "endpoint": "ep_old"
+     },
+     "state": "delivered",
+     "receipts": 1,
+     "amount_minor": 1200,
+     "currency": "EUR"
+    },
+    {
+     "endpoint": "ep_old",
+     "requests": 2,
+     "accepted": 2,
+     "deliveries": 2,
+     "events": 2
+    }
+   ]
+  }
+ ],
+ [
+  "compat",
+  {
+   "name": "an archive-only endpoint the deployed release created gets version 2 events after the release is replaced",
+   "start": "deployed",
+   "steps": [
+    {
+     "at": 0,
+     "do": "bus",
+     "message": {
+      "v": 2,
+      "seq": 10,
+      "kind": "endpoint",
+      "endpoint": {
+       "id": "ep_old",
+       "merchant": "m_old",
+       "url": "{receiver}/hooks/ep_old",
+       "secret": "whsec_t6dGZhrqQd262/2Fr0DQNtncVtZ3dU+I",
+       "types": [
+        "*"
+       ],
+       "active": true
+      }
+     }
+    },
+    {
+     "at": 1,
+     "do": "drain"
+    },
+    {
+     "at": 20,
+     "do": "upgrade"
+    },
+    {
+     "at": 21,
+     "do": "drain"
+    },
+    {
+     "at": 30,
+     "do": "bus",
+     "ref": "a1",
+     "message": {
+      "v": 2,
+      "seq": 11,
+      "kind": "event",
+      "event": {
+       "id": "evt_archive0000011",
+       "merchant": "m_old",
+       "type": "payment.captured",
+       "created": 1790000011,
+       "payment_id": "pay_archive0000011",
+       "amount_minor": 990,
+       "currency": "EUR"
+      }
+     }
+    },
+    {
+     "at": 31,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "delivery": {
+      "event": "a1",
+      "endpoint": "ep_old"
+     },
+     "state": "delivered",
+     "receipts": 1
+    }
+   ]
+  }
+ ]
+]

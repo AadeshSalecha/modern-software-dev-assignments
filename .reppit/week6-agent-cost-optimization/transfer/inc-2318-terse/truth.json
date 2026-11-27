@@ -1,0 +1,130 @@
+{
+  "missed": [
+    {
+      "endpoint_id": "ep_harbor_1",
+      "switched_off_at": "2026-10-26T09:14:07Z",
+      "switched_on_at": "2026-10-28T10:02:41Z",
+      "event_ids": [
+        "evt_185f86d8d13c92",
+        "evt_2d7b4cc39a9412",
+        "evt_3b1bbbceb4096a",
+        "evt_3ce5f92c47d50c",
+        "evt_3d867827a7d98f",
+        "evt_3f7cffe412f0a6",
+        "evt_45edea977b6ece",
+        "evt_5a3a58be7ba8ce",
+        "evt_77c17cd6428e99",
+        "evt_7b4952704c58f7",
+        "evt_8f6d219cc819ab",
+        "evt_c9db92106cf83b",
+        "evt_cd6cb5a55b2e80",
+        "evt_f381cf98dc544f"
+      ]
+    },
+    {
+      "endpoint_id": "ep_isle_1",
+      "switched_off_at": "2026-10-27T08:00:30Z",
+      "switched_on_at": "2026-10-29T09:00:12Z",
+      "event_ids": [
+        "evt_100fba3d9c5e70",
+        "evt_2a8beffe2098b3",
+        "evt_45ae0c28572409",
+        "evt_5a0af46390c30e",
+        "evt_5c4b67697a88be",
+        "evt_63785c3ac1c9fc",
+        "evt_6c3d1243c2f105",
+        "evt_76532d4f2b673d",
+        "evt_aabeaf13bca202",
+        "evt_d00fbfad335447",
+        "evt_de062bdf20bc81",
+        "evt_e2e563815a13d0",
+        "evt_e67911b90fc550",
+        "evt_eedc81359948c1"
+      ]
+    },
+    {
+      "endpoint_id": "ep_isle_2",
+      "switched_off_at": "2026-10-27T20:00:05Z",
+      "switched_on_at": "2026-10-29T02:00:44Z",
+      "event_ids": [
+        "evt_45ae0c28572409",
+        "evt_5c4b67697a88be",
+        "evt_aabeaf13bca202",
+        "evt_d00fbfad335447",
+        "evt_de062bdf20bc81"
+      ]
+    },
+    {
+      "endpoint_id": "ep_juniper_1",
+      "switched_off_at": "2026-10-26T06:00:19Z",
+      "switched_on_at": "2026-10-27T08:00:03Z",
+      "event_ids": [
+        "evt_0052c51064ead8",
+        "evt_30d2671bb4661c",
+        "evt_5709d9671becda"
+      ]
+    },
+    {
+      "endpoint_id": "ep_juniper_1",
+      "switched_off_at": "2026-10-28T12:00:50Z",
+      "switched_on_at": "2026-10-30T15:00:20Z",
+      "event_ids": [
+        "evt_095e284c6ba8f6",
+        "evt_189b334416a949",
+        "evt_2ac12cfe886943",
+        "evt_41a9afa9817cf0",
+        "evt_5680b09c1ab7f2",
+        "evt_5ac3d56326f18f",
+        "evt_5f6008dc7aaa8f",
+        "evt_78f016e201bc95",
+        "evt_8377bf5ed4d50b",
+        "evt_8df3b60907414a",
+        "evt_92cbcae6439f0c",
+        "evt_ae28a7e5732a89",
+        "evt_b6662caba4a64e",
+        "evt_ba9403b7af3e1d",
+        "evt_bc1c4f03c61155",
+        "evt_d732aaad5be9f5",
+        "evt_ed696ac0cf8b35",
+        "evt_f27736b9f0c836",
+        "evt_faa37bbd6f0774"
+      ]
+    },
+    {
+      "endpoint_id": "ep_moss_1",
+      "switched_off_at": "2026-10-26T12:00:21Z",
+      "switched_on_at": "2026-10-28T00:30:02Z",
+      "event_ids": [
+        "evt_08336c9d8288ab",
+        "evt_a3068c877916e5",
+        "evt_c4fa38984bded4",
+        "evt_c75b79225e7a3b"
+      ]
+    },
+    {
+      "endpoint_id": "ep_nettle_1",
+      "switched_off_at": "2026-10-26T07:30:00Z",
+      "switched_on_at": "2026-10-28T08:15:10Z",
+      "event_ids": [
+        "evt_0611757897716d",
+        "evt_67dfef4047b240",
+        "evt_83d8e5c58826e1",
+        "evt_93de6dbd2252dd",
+        "evt_94a075608935a9",
+        "evt_988ad50c966d63",
+        "evt_a483e5eb5b3cf5",
+        "evt_b2f9ae0b074cce",
+        "evt_c2efb50c48b561",
+        "evt_f32657f0fcdfd1",
+        "evt_f4a5fec47903c1",
+        "evt_fc9509a4b24d70"
+      ]
+    }
+  ],
+  "totals_minor": {
+    "EUR": 3025243,
+    "GBP": 2448992,
+    "USD": 1298058
+  },
+  "skipped_rows": 116
+}
