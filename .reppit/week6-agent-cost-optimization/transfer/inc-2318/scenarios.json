@@ -1,0 +1,4379 @@
+[
+ [
+  "incident",
+  {
+   "name": "an endpoint switched off for more than a day gets the event accepted meanwhile when it is switched on",
+   "class": "plain",
+   "basis": [
+    "ticket, fix: \"an endpoint that is switched back on gets every event it is owed, however long it was off\"; delivery.md: \"Accepted events get IDs and should not be lost.\"",
+    "ticket, fix: \"Each is delivered once.\"; delivery.md: \"Only manual resends can send an event under two delivery IDs to the same endpoint.\""
+   ],
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 1,
+     "do": "drain"
+    },
+    {
+     "at": 10,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": false
+    },
+    {
+     "at": 11,
+     "do": "drain"
+    },
+    {
+     "at": 20,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 21,
+     "do": "drain"
+    },
+    {
+     "at": 90000,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": true
+    },
+    {
+     "at": 90001,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "delivery": {
+      "event": "e1",
+      "endpoint": "ep_a"
+     },
+     "state": "delivered",
+     "count": 1,
+     "receipts": 1,
+     "first_receipt_at_least": 90000
+    },
+    {
+     "endpoint": "ep_a",
+     "requests": 1,
+     "accepted": 1,
+     "events": 1,
+     "deliveries": 1
+    }
+   ]
+  }
+ ],
+ [
+  "incident",
+  {
+   "name": "an endpoint switched off for three days gets the events of every one of those days, each once; the merchant's other endpoint got them as they came",
+   "class": "plain",
+   "basis": [
+    "ticket, fix: \"an endpoint that is switched back on gets every event it is owed, however long it was off\"; delivery.md: \"Accepted events get IDs and should not be lost.\"",
+    "ticket, fix: \"Each is delivered once.\"; delivery.md: \"Only manual resends can send an event under two delivery IDs to the same endpoint.\""
+   ],
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 1,
+     "do": "endpoint.create",
+     "id": "ep_b",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 2,
+     "do": "drain"
+    },
+    {
+     "at": 10,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": false
+    },
+    {
+     "at": 11,
+     "do": "drain"
+    },
+    {
+     "at": 100,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 101,
+     "do": "drain"
+    },
+    {
+     "at": 86500,
+     "do": "event",
+     "ref": "e2",
+     "merchant": "m_acme",
+     "type": "refund.created",
+     "amount_minor": 300,
+     "currency": "USD"
+    },
+    {
+     "at": 86501,
+     "do": "drain"
+    },
+    {
+     "at": 172900,
+     "do": "event",
+     "ref": "e3",
+     "merchant": "m_acme",
+     "type": "payout.paid",
+     "amount_minor": 88000,
+     "currency": "USD"
+    },
+    {
+     "at": 172901,
+     "do": "drain"
+    },
+    {
+     "at": 259100,
+     "do": "event",
+     "ref": "e4",
+     "merchant": "m_acme",
+     "type": "payment.failed",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 259101,
+     "do": "drain"
+    },
+    {
+     "at": 259210,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": true
+    },
+    {
+     "at": 259211,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "delivery": {
+      "event": "e1",
+      "endpoint": "ep_a"
+     },
+     "state": "delivered",
+     "count": 1,
+     "receipts": 1
+    },
+    {
+     "delivery": {
+      "event": "e2",
+      "endpoint": "ep_a"
+     },
+     "state": "delivered",
+     "count": 1,
+     "receipts": 1,
+     "amount_minor": 300
+    },
+    {
+     "delivery": {
+      "event": "e3",
+      "endpoint": "ep_a"
+     },
+     "state": "delivered",
+     "count": 1,
+     "receipts": 1
+    },
+    {
+     "delivery": {
+      "event": "e4",
+      "endpoint": "ep_a"
+     },
+     "state": "delivered",
+     "count": 1,
+     "receipts": 1
+    },
+    {
+     "endpoint": "ep_a",
+     "requests": 4,
+     "accepted": 4,
+     "events": 4,
+     "deliveries": 4
+    },
+    {
+     "endpoint": "ep_b",
+     "requests": 4,
+     "accepted": 4,
+     "events": 4,
+     "deliveries": 4
+    },
+    {
+     "delivery": {
+      "event": "e1",
+      "endpoint": "ep_b"
+     },
+     "state": "delivered",
+     "count": 1,
+     "receipts": 1,
+     "first_receipt_at_most": 200
+    }
+   ]
+  }
+ ],
+ [
+  "incident",
+  {
+   "name": "an endpoint created switched off gets the events accepted since its creation when it is first switched on more than a day later, and none from before it existed",
+   "class": "plain",
+   "basis": [
+    "ticket, fix: \"for an endpoint that was created switched off, from its creation\"",
+    "ticket, fix: \"an endpoint that is switched back on gets every event it is owed, however long it was off\"; delivery.md: \"Accepted events get IDs and should not be lost.\"",
+    "ticket, fix: \"Events from before the endpoint existed ... are not owed.\""
+   ],
+   "steps": [
+    {
+     "at": 0,
+     "do": "event",
+     "ref": "e0",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 1,
+     "do": "drain"
+    },
+    {
+     "at": 10,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme",
+     "enabled": false
+    },
+    {
+     "at": 11,
+     "do": "drain"
+    },
+    {
+     "at": 20,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 21,
+     "do": "drain"
+    },
+    {
+     "at": 40000,
+     "do": "event",
+     "ref": "e2",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 40001,
+     "do": "drain"
+    },
+    {
+     "at": 90000,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": true
+    },
+    {
+     "at": 90001,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "delivery": {
+      "event": "e1",
+      "endpoint": "ep_a"
+     },
+     "state": "delivered",
+     "count": 1,
+     "receipts": 1
+    },
+    {
+     "delivery": {
+      "event": "e2",
+      "endpoint": "ep_a"
+     },
+     "state": "delivered",
+     "count": 1,
+     "receipts": 1
+    },
+    {
+     "delivery": {
+      "event": "e0",
+      "endpoint": "ep_a"
+     },
+     "count": 0
+    },
+    {
+     "endpoint": "ep_a",
+     "requests": 2,
+     "accepted": 2,
+     "events": 2,
+     "deliveries": 2
+    }
+   ]
+  }
+ ],
+ [
+  "incident",
+  {
+   "name": "switched off for an hour, on, then off for more than a day and on: each event arrives once",
+   "class": "several times",
+   "basis": [
+    "ticket, fix: \"If an endpoint is switched off and on several times, each switch-on brings the events of the off period that just ended. Nothing is delivered a second time.\"",
+    "ticket, fix: \"an endpoint that is switched back on gets every event it is owed, however long it was off\"; delivery.md: \"Accepted events get IDs and should not be lost.\"",
+    "ticket, fix: \"Each is delivered once.\"; delivery.md: \"Only manual resends can send an event under two delivery IDs to the same endpoint.\""
+   ],
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 1,
+     "do": "drain"
+    },
+    {
+     "at": 10,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": false
+    },
+    {
+     "at": 11,
+     "do": "drain"
+    },
+    {
+     "at": 20,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 21,
+     "do": "drain"
+    },
+    {
+     "at": 3600,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": true
+    },
+    {
+     "at": 3601,
+     "do": "drain"
+    },
+    {
+     "at": 7200,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": false
+    },
+    {
+     "at": 7201,
+     "do": "drain"
+    },
+    {
+     "at": 7210,
+     "do": "event",
+     "ref": "e2",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 7211,
+     "do": "drain"
+    },
+    {
+     "at": 97200,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": true
+    },
+    {
+     "at": 97201,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "delivery": {
+      "event": "e1",
+      "endpoint": "ep_a"
+     },
+     "state": "delivered",
+     "count": 1,
+     "receipts": 1,
+     "first_receipt_at_most": 3700
+    },
+    {
+     "delivery": {
+      "event": "e2",
+      "endpoint": "ep_a"
+     },
+     "state": "delivered",
+     "count": 1,
+     "receipts": 1,
+     "first_receipt_at_least": 97200
+    },
+    {
+     "endpoint": "ep_a",
+     "requests": 2,
+     "accepted": 2,
+     "events": 2,
+     "deliveries": 2
+    }
+   ]
+  }
+ ],
+ [
+  "incident",
+  {
+   "name": "switched off for more than a day, on, then off for a minute and on: each event arrives once, at the switch-on that ended its off period",
+   "class": "several times",
+   "basis": [
+    "ticket, fix: \"If an endpoint is switched off and on several times, each switch-on brings the events of the off period that just ended. Nothing is delivered a second time.\"",
+    "ticket, fix: \"an endpoint that is switched back on gets every event it is owed, however long it was off\"; delivery.md: \"Accepted events get IDs and should not be lost.\"",
+    "ticket, fix: \"Each is delivered once.\"; delivery.md: \"Only manual resends can send an event under two delivery IDs to the same endpoint.\""
+   ],
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 1,
+     "do": "drain"
+    },
+    {
+     "at": 10,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": false
+    },
+    {
+     "at": 11,
+     "do": "drain"
+    },
+    {
+     "at": 20,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 21,
+     "do": "drain"
+    },
+    {
+     "at": 90000,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": true
+    },
+    {
+     "at": 90001,
+     "do": "drain"
+    },
+    {
+     "at": 90100,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": false
+    },
+    {
+     "at": 90101,
+     "do": "drain"
+    },
+    {
+     "at": 90110,
+     "do": "event",
+     "ref": "e2",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 90111,
+     "do": "drain"
+    },
+    {
+     "at": 90200,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": true
+    },
+    {
+     "at": 90201,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "delivery": {
+      "event": "e1",
+      "endpoint": "ep_a"
+     },
+     "state": "delivered",
+     "count": 1,
+     "receipts": 1,
+     "first_receipt_at_most": 90050
+    },
+    {
+     "delivery": {
+      "event": "e2",
+      "endpoint": "ep_a"
+     },
+     "state": "delivered",
+     "count": 1,
+     "receipts": 1,
+     "first_receipt_at_least": 90200
+    },
+    {
+     "endpoint": "ep_a",
+     "requests": 2,
+     "accepted": 2,
+     "events": 2,
+     "deliveries": 2
+    }
+   ]
+  }
+ ],
+ [
+  "incident",
+  {
+   "name": "a secret rotated and a second switch-off while the endpoint is off do not move the start of the off period; the event arrives signed with the new secret",
+   "class": "several times",
+   "basis": [
+    "ticket, fix: \"from the change that switched it off ... A change made while it is off (a new secret, a new address, switching it off again) does not move that start.\"",
+    "ticket, fix: \"an endpoint that is switched back on gets every event it is owed, however long it was off\"; delivery.md: \"Accepted events get IDs and should not be lost.\""
+   ],
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 1,
+     "do": "drain"
+    },
+    {
+     "at": 10,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": false
+    },
+    {
+     "at": 11,
+     "do": "drain"
+    },
+    {
+     "at": 20,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 21,
+     "do": "drain"
+    },
+    {
+     "at": 50000,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "secret": "whsec_YS1uZXctc2VjcmV0LWZvci1hY21lLTAx"
+    },
+    {
+     "at": 50001,
+     "do": "drain"
+    },
+    {
+     "at": 60000,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": false
+    },
+    {
+     "at": 60001,
+     "do": "drain"
+    },
+    {
+     "at": 90000,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": true
+    },
+    {
+     "at": 90001,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "delivery": {
+      "event": "e1",
+      "endpoint": "ep_a"
+     },
+     "state": "delivered",
+     "count": 1,
+     "receipts": 1,
+     "secrets": [
+      "whsec_YS1uZXctc2VjcmV0LWZvci1hY21lLTAx"
+     ]
+    },
+    {
+     "endpoint": "ep_a",
+     "requests": 1,
+     "accepted": 1,
+     "events": 1,
+     "deliveries": 1
+    }
+   ]
+  }
+ ],
+ [
+  "incident",
+  {
+   "name": "subscription narrowed while off for more than a day: only the types subscribed to at the switch-on are delivered",
+   "class": "types",
+   "basis": [
+    "ticket, fix: \"whose type it is subscribed to at the moment it is switched back on\"",
+    "ticket, fix: \"events accepted while it was on and not subscribed to their type, and events of types it is not subscribed to when it comes back on, are not owed\"",
+    "ticket, fix: \"an endpoint that is switched back on gets every event it is owed, however long it was off\"; delivery.md: \"Accepted events get IDs and should not be lost.\""
+   ],
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 1,
+     "do": "drain"
+    },
+    {
+     "at": 10,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": false
+    },
+    {
+     "at": 11,
+     "do": "drain"
+    },
+    {
+     "at": 20,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 30,
+     "do": "event",
+     "ref": "e2",
+     "merchant": "m_acme",
+     "type": "refund.created",
+     "amount_minor": 300,
+     "currency": "USD"
+    },
+    {
+     "at": 31,
+     "do": "drain"
+    },
+    {
+     "at": 40000,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "event_types": [
+      "refund.created"
+     ]
+    },
+    {
+     "at": 40001,
+     "do": "drain"
+    },
+    {
+     "at": 90000,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": true
+    },
+    {
+     "at": 90001,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "delivery": {
+      "event": "e2",
+      "endpoint": "ep_a"
+     },
+     "state": "delivered",
+     "count": 1,
+     "receipts": 1
+    },
+    {
+     "delivery": {
+      "event": "e1",
+      "endpoint": "ep_a"
+     },
+     "count": 0
+    },
+    {
+     "endpoint": "ep_a",
+     "requests": 1,
+     "accepted": 1,
+     "events": 1,
+     "deliveries": 1
+    }
+   ]
+  }
+ ],
+ [
+  "incident",
+  {
+   "name": "subscription widened while off for more than a day: every type subscribed to at the switch-on is delivered",
+   "class": "types",
+   "basis": [
+    "ticket, fix: \"whose type it is subscribed to at the moment it is switched back on\"",
+    "ticket, fix: \"an endpoint that is switched back on gets every event it is owed, however long it was off\"; delivery.md: \"Accepted events get IDs and should not be lost.\""
+   ],
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme",
+     "event_types": [
+      "payment.captured"
+     ]
+    },
+    {
+     "at": 1,
+     "do": "drain"
+    },
+    {
+     "at": 10,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": false
+    },
+    {
+     "at": 11,
+     "do": "drain"
+    },
+    {
+     "at": 20,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 30,
+     "do": "event",
+     "ref": "e2",
+     "merchant": "m_acme",
+     "type": "refund.created",
+     "amount_minor": 300,
+     "currency": "USD"
+    },
+    {
+     "at": 31,
+     "do": "drain"
+    },
+    {
+     "at": 40000,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "event_types": [
+      "*"
+     ]
+    },
+    {
+     "at": 40001,
+     "do": "drain"
+    },
+    {
+     "at": 90000,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": true
+    },
+    {
+     "at": 90001,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "delivery": {
+      "event": "e1",
+      "endpoint": "ep_a"
+     },
+     "state": "delivered",
+     "count": 1,
+     "receipts": 1
+    },
+    {
+     "delivery": {
+      "event": "e2",
+      "endpoint": "ep_a"
+     },
+     "state": "delivered",
+     "count": 1,
+     "receipts": 1
+    },
+    {
+     "endpoint": "ep_a",
+     "requests": 2,
+     "accepted": 2,
+     "events": 2,
+     "deliveries": 2
+    }
+   ]
+  }
+ ],
+ [
+  "incident",
+  {
+   "name": "api, router and worker are restarted while the endpoint is off for more than a day",
+   "class": "restart or crash",
+   "basis": [
+    "ticket, deployment: \"Services are restarted and can go down at any point, as they do today; what an endpoint is owed does not depend on that.\"",
+    "ticket, fix: \"an endpoint that is switched back on gets every event it is owed, however long it was off\"; delivery.md: \"Accepted events get IDs and should not be lost.\"",
+    "ticket, fix: \"Each is delivered once.\"; delivery.md: \"Only manual resends can send an event under two delivery IDs to the same endpoint.\""
+   ],
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 1,
+     "do": "drain"
+    },
+    {
+     "at": 10,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": false
+    },
+    {
+     "at": 11,
+     "do": "drain"
+    },
+    {
+     "at": 20,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 21,
+     "do": "drain"
+    },
+    {
+     "at": 30000,
+     "do": "restart",
+     "service": "router"
+    },
+    {
+     "at": 30001,
+     "do": "restart",
+     "service": "api"
+    },
+    {
+     "at": 30002,
+     "do": "restart",
+     "service": "worker"
+    },
+    {
+     "at": 30010,
+     "do": "drain"
+    },
+    {
+     "at": 30020,
+     "do": "event",
+     "ref": "e2",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 30021,
+     "do": "drain"
+    },
+    {
+     "at": 120000,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": true
+    },
+    {
+     "at": 120001,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "delivery": {
+      "event": "e1",
+      "endpoint": "ep_a"
+     },
+     "state": "delivered",
+     "count": 1,
+     "receipts": 1
+    },
+    {
+     "delivery": {
+      "event": "e2",
+      "endpoint": "ep_a"
+     },
+     "state": "delivered",
+     "count": 1,
+     "receipts": 1
+    },
+    {
+     "endpoint": "ep_a",
+     "requests": 2,
+     "accepted": 2,
+     "events": 2,
+     "deliveries": 2
+    }
+   ]
+  }
+ ],
+ [
+  "incident",
+  {
+   "name": "the router goes down right after it applies the switch-on and is started again",
+   "class": "restart or crash",
+   "basis": [
+    "ticket, deployment: \"Services are restarted and can go down at any point, as they do today; what an endpoint is owed does not depend on that.\"",
+    "ticket, fix: \"an endpoint that is switched back on gets every event it is owed, however long it was off\"; delivery.md: \"Accepted events get IDs and should not be lost.\"",
+    "ticket, fix: \"Each is delivered once.\"; delivery.md: \"Only manual resends can send an event under two delivery IDs to the same endpoint.\""
+   ],
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 1,
+     "do": "drain"
+    },
+    {
+     "at": 10,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": false
+    },
+    {
+     "at": 11,
+     "do": "drain"
+    },
+    {
+     "at": 20,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 30,
+     "do": "event",
+     "ref": "e2",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 31,
+     "do": "drain"
+    },
+    {
+     "at": 89999,
+     "do": "crash_at",
+     "service": "router",
+     "point": 1
+    },
+    {
+     "at": 90000,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": true
+    },
+    {
+     "at": 90001,
+     "do": "drain",
+     "restart": true
+    },
+    {
+     "at": 90002,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "delivery": {
+      "event": "e1",
+      "endpoint": "ep_a"
+     },
+     "state": "delivered",
+     "count": 1,
+     "receipts": 1
+    },
+    {
+     "delivery": {
+      "event": "e2",
+      "endpoint": "ep_a"
+     },
+     "state": "delivered",
+     "count": 1,
+     "receipts": 1
+    },
+    {
+     "endpoint": "ep_a",
+     "requests": 2,
+     "accepted": 2,
+     "events": 2,
+     "deliveries": 2
+    }
+   ]
+  }
+ ],
+ [
+  "incident",
+  {
+   "name": "an endpoint that exists only in the archive, switched off and on by version 2 messages more than a day apart, gets the version 2 event that arrived meanwhile",
+   "class": "older bus versions",
+   "basis": [
+    "ticket, deployment: \"Version 1 and version 2 bus messages keep working. An endpoint that exists only in the archive and is switched off and on by version 2 messages is owed its events in the same way, and events that arrive as version 1 or version 2 messages while an endpoint is off are owed like any other.\"",
+    "ticket, fix: \"an endpoint that is switched back on gets every event it is owed, however long it was off\"; delivery.md: \"Accepted events get IDs and should not be lost.\""
+   ],
+   "steps": [
+    {
+     "at": 0,
+     "do": "bus",
+     "message": {
+      "v": 2,
+      "seq": 10,
+      "kind": "endpoint",
+      "endpoint": {
+       "id": "ep_old",
+       "merchant": "m_old",
+       "url": "{receiver}/hooks/ep_old",
+       "secret": "whsec_t6dGZhrqQd262/2Fr0DQNtncVtZ3dU+I",
+       "types": [
+        "*"
+       ],
+       "active": true
+      }
+     }
+    },
+    {
+     "at": 1,
+     "do": "drain"
+    },
+    {
+     "at": 10,
+     "do": "bus",
+     "message": {
+      "v": 2,
+      "seq": 11,
+      "kind": "endpoint",
+      "endpoint": {
+       "id": "ep_old",
+       "merchant": "m_old",
+       "url": "{receiver}/hooks/ep_old",
+       "secret": "whsec_t6dGZhrqQd262/2Fr0DQNtncVtZ3dU+I",
+       "types": [
+        "*"
+       ],
+       "active": false
+      }
+     },
+     "ref": "off"
+    },
+    {
+     "at": 11,
+     "do": "drain"
+    },
+    {
+     "at": 20,
+     "do": "bus",
+     "ref": "a1",
+     "message": {
+      "v": 2,
+      "seq": 12,
+      "kind": "event",
+      "event": {
+       "id": "evt_archive0000012",
+       "merchant": "m_old",
+       "type": "payment.captured",
+       "created": 1790000012,
+       "payment_id": "pay_archive0000012",
+       "amount_minor": 990,
+       "currency": "EUR"
+      }
+     }
+    },
+    {
+     "at": 21,
+     "do": "drain"
+    },
+    {
+     "at": 90000,
+     "do": "bus",
+     "message": {
+      "v": 2,
+      "seq": 13,
+      "kind": "endpoint",
+      "endpoint": {
+       "id": "ep_old",
+       "merchant": "m_old",
+       "url": "{receiver}/hooks/ep_old",
+       "secret": "whsec_t6dGZhrqQd262/2Fr0DQNtncVtZ3dU+I",
+       "types": [
+        "*"
+       ],
+       "active": true
+      }
+     },
+     "ref": "on"
+    },
+    {
+     "at": 90001,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "status": "off",
+     "is": 200
+    },
+    {
+     "status": "on",
+     "is": 200
+    },
+    {
+     "delivery": {
+      "event": "a1",
+      "endpoint": "ep_old"
+     },
+     "state": "delivered",
+     "count": 1,
+     "receipts": 1,
+     "amount_minor": 990,
+     "currency": "EUR"
+    },
+    {
+     "endpoint": "ep_old",
+     "requests": 1,
+     "accepted": 1,
+     "events": 1,
+     "deliveries": 1
+    }
+   ]
+  }
+ ],
+ [
+  "incident",
+  {
+   "name": "version 1 and version 2 events that arrive while an endpoint is off for more than a day are delivered when it is switched on, with the api's own",
+   "class": "older bus versions",
+   "basis": [
+    "ticket, deployment: \"Version 1 and version 2 bus messages keep working. An endpoint that exists only in the archive and is switched off and on by version 2 messages is owed its events in the same way, and events that arrive as version 1 or version 2 messages while an endpoint is off are owed like any other.\"",
+    "ticket, fix: \"an endpoint that is switched back on gets every event it is owed, however long it was off\"; delivery.md: \"Accepted events get IDs and should not be lost.\"",
+    "ticket, fix: \"Each is delivered once.\"; delivery.md: \"Only manual resends can send an event under two delivery IDs to the same endpoint.\""
+   ],
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 1,
+     "do": "drain"
+    },
+    {
+     "at": 10,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": false
+    },
+    {
+     "at": 11,
+     "do": "drain"
+    },
+    {
+     "at": 20,
+     "do": "bus",
+     "ref": "old1",
+     "message": {
+      "id": "evt_legacy0000001",
+      "merchant": "m_acme",
+      "event_type": "payment.captured",
+      "amount": "12.5",
+      "currency": "USD",
+      "payment": "pay_legacy0000001",
+      "ts": "2026-11-02T00:00:00Z"
+     }
+    },
+    {
+     "at": 30,
+     "do": "bus",
+     "ref": "a1",
+     "message": {
+      "v": 2,
+      "seq": 4100,
+      "kind": "event",
+      "event": {
+       "id": "evt_archive0004100",
+       "merchant": "m_acme",
+       "type": "payment.captured",
+       "created": 1790004100,
+       "payment_id": "pay_archive0004100",
+       "amount_minor": 990,
+       "currency": "EUR"
+      }
+     }
+    },
+    {
+     "at": 40,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 41,
+     "do": "drain"
+    },
+    {
+     "at": 90000,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": true
+    },
+    {
+     "at": 90001,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "status": "old1",
+     "is": 200
+    },
+    {
+     "status": "a1",
+     "is": 200
+    },
+    {
+     "delivery": {
+      "event": "old1",
+      "endpoint": "ep_a"
+     },
+     "state": "delivered",
+     "count": 1,
+     "receipts": 1,
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "delivery": {
+      "event": "a1",
+      "endpoint": "ep_a"
+     },
+     "state": "delivered",
+     "count": 1,
+     "receipts": 1,
+     "amount_minor": 990
+    },
+    {
+     "delivery": {
+      "event": "e1",
+      "endpoint": "ep_a"
+     },
+     "state": "delivered",
+     "count": 1,
+     "receipts": 1
+    },
+    {
+     "endpoint": "ep_a",
+     "requests": 3,
+     "accepted": 3,
+     "events": 3,
+     "deliveries": 3
+    }
+   ]
+  }
+ ],
+ [
+  "incident",
+  {
+   "name": "an event the deployed release skipped at a switch-on is delivered once the release is replaced",
+   "class": "already skipped",
+   "basis": [
+    "ticket, fix: \"Events that were owed in this way and that the running release has already failed to deliver must be delivered, once, when the release is out. Nobody should have to ask for them.\"",
+    "ticket, fix: \"Each is delivered once.\"; delivery.md: \"Only manual resends can send an event under two delivery IDs to the same endpoint.\""
+   ],
+   "start": "deployed",
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 1,
+     "do": "drain"
+    },
+    {
+     "at": 10,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": false
+    },
+    {
+     "at": 11,
+     "do": "drain"
+    },
+    {
+     "at": 20,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 21,
+     "do": "drain"
+    },
+    {
+     "at": 90000,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": true
+    },
+    {
+     "at": 90001,
+     "do": "drain"
+    },
+    {
+     "at": 90100,
+     "do": "upgrade"
+    },
+    {
+     "at": 90101,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "delivery": {
+      "event": "e1",
+      "endpoint": "ep_a"
+     },
+     "state": "delivered",
+     "count": 1,
+     "receipts": 1,
+     "first_receipt_at_least": 90100
+    },
+    {
+     "endpoint": "ep_a",
+     "requests": 1,
+     "accepted": 1,
+     "events": 1,
+     "deliveries": 1
+    }
+   ]
+  }
+ ],
+ [
+  "incident",
+  {
+   "name": "of two events owed at a switch-on the deployed release delivered one; the other arrives once the release is replaced, the first is not sent again, the merchant's other endpoint gets nothing more",
+   "class": "already skipped",
+   "basis": [
+    "ticket, fix: \"Events that were owed in this way and that the running release has already failed to deliver must be delivered, once, when the release is out. Nobody should have to ask for them.\"",
+    "ticket, fix: \"Each is delivered once.\"; delivery.md: \"Only manual resends can send an event under two delivery IDs to the same endpoint.\""
+   ],
+   "start": "deployed",
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 1,
+     "do": "endpoint.create",
+     "id": "ep_b",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 2,
+     "do": "drain"
+    },
+    {
+     "at": 10,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": false
+    },
+    {
+     "at": 11,
+     "do": "drain"
+    },
+    {
+     "at": 20,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 21,
+     "do": "drain"
+    },
+    {
+     "at": 80000,
+     "do": "event",
+     "ref": "e2",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 80001,
+     "do": "drain"
+    },
+    {
+     "at": 90000,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": true
+    },
+    {
+     "at": 90001,
+     "do": "drain"
+    },
+    {
+     "at": 90100,
+     "do": "upgrade"
+    },
+    {
+     "at": 90101,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "delivery": {
+      "event": "e1",
+      "endpoint": "ep_a"
+     },
+     "state": "delivered",
+     "count": 1,
+     "receipts": 1,
+     "first_receipt_at_least": 90100
+    },
+    {
+     "delivery": {
+      "event": "e2",
+      "endpoint": "ep_a"
+     },
+     "state": "delivered",
+     "count": 1,
+     "receipts": 1,
+     "first_receipt_at_most": 90050
+    },
+    {
+     "endpoint": "ep_a",
+     "requests": 2,
+     "accepted": 2,
+     "events": 2,
+     "deliveries": 2
+    },
+    {
+     "endpoint": "ep_b",
+     "requests": 2,
+     "accepted": 2,
+     "events": 2,
+     "deliveries": 2
+    }
+   ]
+  }
+ ],
+ [
+  "incident",
+  {
+   "name": "only the skipped events of a type the endpoint was subscribed to at that switch-on are delivered once the release is replaced, whatever it subscribes to by then",
+   "class": "already skipped",
+   "basis": [
+    "ticket, fix: \"Events that were owed in this way and that the running release has already failed to deliver must be delivered, once, when the release is out. Nobody should have to ask for them.\"",
+    "ticket, fix: \"whose type it is subscribed to at the moment it is switched back on\"",
+    "ticket, fix: \"events accepted while it was on and not subscribed to their type, and events of types it is not subscribed to when it comes back on, are not owed\""
+   ],
+   "start": "deployed",
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 1,
+     "do": "drain"
+    },
+    {
+     "at": 10,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": false
+    },
+    {
+     "at": 11,
+     "do": "drain"
+    },
+    {
+     "at": 20,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 30,
+     "do": "event",
+     "ref": "e2",
+     "merchant": "m_acme",
+     "type": "refund.created",
+     "amount_minor": 300,
+     "currency": "USD"
+    },
+    {
+     "at": 31,
+     "do": "drain"
+    },
+    {
+     "at": 90000,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": true,
+     "event_types": [
+      "payment.captured"
+     ]
+    },
+    {
+     "at": 90001,
+     "do": "drain"
+    },
+    {
+     "at": 90050,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "event_types": [
+      "*"
+     ]
+    },
+    {
+     "at": 90051,
+     "do": "drain"
+    },
+    {
+     "at": 90100,
+     "do": "upgrade"
+    },
+    {
+     "at": 90101,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "delivery": {
+      "event": "e1",
+      "endpoint": "ep_a"
+     },
+     "state": "delivered",
+     "count": 1,
+     "receipts": 1
+    },
+    {
+     "delivery": {
+      "event": "e2",
+      "endpoint": "ep_a"
+     },
+     "count": 0
+    },
+    {
+     "endpoint": "ep_a",
+     "requests": 1,
+     "accepted": 1,
+     "events": 1,
+     "deliveries": 1
+    }
+   ]
+  }
+ ],
+ [
+  "incident",
+  {
+   "name": "starting the replaced release again delivers nothing more",
+   "class": "already skipped",
+   "basis": [
+    "ticket, fix: \"Events that were owed in this way and that the running release has already failed to deliver must be delivered, once, when the release is out. Nobody should have to ask for them.\"",
+    "ticket, fix: \"Each is delivered once.\"; delivery.md: \"Only manual resends can send an event under two delivery IDs to the same endpoint.\"",
+    "ticket, deployment: \"Services are restarted and can go down at any point, as they do today; what an endpoint is owed does not depend on that.\""
+   ],
+   "start": "deployed",
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 1,
+     "do": "drain"
+    },
+    {
+     "at": 10,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": false
+    },
+    {
+     "at": 11,
+     "do": "drain"
+    },
+    {
+     "at": 20,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 21,
+     "do": "drain"
+    },
+    {
+     "at": 90000,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": true
+    },
+    {
+     "at": 90001,
+     "do": "drain"
+    },
+    {
+     "at": 90100,
+     "do": "upgrade"
+    },
+    {
+     "at": 90101,
+     "do": "drain"
+    },
+    {
+     "at": 90200,
+     "do": "restart",
+     "service": "router"
+    },
+    {
+     "at": 90201,
+     "do": "restart",
+     "service": "api"
+    },
+    {
+     "at": 90202,
+     "do": "restart",
+     "service": "worker"
+    },
+    {
+     "at": 90210,
+     "do": "drain"
+    },
+    {
+     "at": 90300,
+     "do": "event",
+     "ref": "e2",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 90301,
+     "do": "drain"
+    },
+    {
+     "at": 90400,
+     "do": "restart",
+     "service": "router"
+    },
+    {
+     "at": 90401,
+     "do": "restart",
+     "service": "api"
+    },
+    {
+     "at": 90402,
+     "do": "restart",
+     "service": "worker"
+    },
+    {
+     "at": 90410,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "delivery": {
+      "event": "e1",
+      "endpoint": "ep_a"
+     },
+     "state": "delivered",
+     "count": 1,
+     "receipts": 1
+    },
+    {
+     "delivery": {
+      "event": "e2",
+      "endpoint": "ep_a"
+     },
+     "state": "delivered",
+     "count": 1,
+     "receipts": 1
+    },
+    {
+     "endpoint": "ep_a",
+     "requests": 2,
+     "accepted": 2,
+     "events": 2,
+     "deliveries": 2
+    }
+   ]
+  }
+ ],
+ [
+  "incident",
+  {
+   "name": "two off periods under the deployed release, a short one it caught up and a long one it skipped: once the release is replaced the skipped event arrives and the other is not sent again",
+   "class": "already skipped",
+   "basis": [
+    "ticket, fix: \"Events that were owed in this way and that the running release has already failed to deliver must be delivered, once, when the release is out. Nobody should have to ask for them.\"",
+    "ticket, fix: \"If an endpoint is switched off and on several times, each switch-on brings the events of the off period that just ended. Nothing is delivered a second time.\"",
+    "ticket, fix: \"Each is delivered once.\"; delivery.md: \"Only manual resends can send an event under two delivery IDs to the same endpoint.\""
+   ],
+   "start": "deployed",
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 1,
+     "do": "drain"
+    },
+    {
+     "at": 10,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": false
+    },
+    {
+     "at": 11,
+     "do": "drain"
+    },
+    {
+     "at": 20,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 21,
+     "do": "drain"
+    },
+    {
+     "at": 3600,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": true
+    },
+    {
+     "at": 3601,
+     "do": "drain"
+    },
+    {
+     "at": 7200,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": false
+    },
+    {
+     "at": 7201,
+     "do": "drain"
+    },
+    {
+     "at": 7210,
+     "do": "event",
+     "ref": "e2",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 7211,
+     "do": "drain"
+    },
+    {
+     "at": 97200,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": true
+    },
+    {
+     "at": 97201,
+     "do": "drain"
+    },
+    {
+     "at": 97300,
+     "do": "upgrade"
+    },
+    {
+     "at": 97301,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "delivery": {
+      "event": "e1",
+      "endpoint": "ep_a"
+     },
+     "state": "delivered",
+     "count": 1,
+     "receipts": 1,
+     "first_receipt_at_most": 3700
+    },
+    {
+     "delivery": {
+      "event": "e2",
+      "endpoint": "ep_a"
+     },
+     "state": "delivered",
+     "count": 1,
+     "receipts": 1,
+     "first_receipt_at_least": 97300
+    },
+    {
+     "endpoint": "ep_a",
+     "requests": 2,
+     "accepted": 2,
+     "events": 2,
+     "deliveries": 2
+    }
+   ]
+  }
+ ],
+ [
+  "incident",
+  {
+   "name": "an endpoint with a skipped event is switched off again when the release is replaced: the event waits and arrives once, with the newer one, when the endpoint is switched on",
+   "class": "already skipped",
+   "basis": [
+    "ticket, fix: \"If the endpoint is switched off at that moment, they wait and go out when it is switched on again.\"",
+    "ticket, fix: \"Events that were owed in this way and that the running release has already failed to deliver must be delivered, once, when the release is out. Nobody should have to ask for them.\"",
+    "ticket, fix: \"Each is delivered once.\"; delivery.md: \"Only manual resends can send an event under two delivery IDs to the same endpoint.\"",
+    "ticket, fix: \"An endpoint that is still off gets nothing.\""
+   ],
+   "start": "deployed",
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 1,
+     "do": "drain"
+    },
+    {
+     "at": 10,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": false
+    },
+    {
+     "at": 11,
+     "do": "drain"
+    },
+    {
+     "at": 20,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 21,
+     "do": "drain"
+    },
+    {
+     "at": 90000,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": true
+    },
+    {
+     "at": 90001,
+     "do": "drain"
+    },
+    {
+     "at": 90050,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": false
+    },
+    {
+     "at": 90051,
+     "do": "drain"
+    },
+    {
+     "at": 90060,
+     "do": "event",
+     "ref": "e2",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 90061,
+     "do": "drain"
+    },
+    {
+     "at": 90100,
+     "do": "upgrade"
+    },
+    {
+     "at": 90101,
+     "do": "drain"
+    },
+    {
+     "at": 90500,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": true
+    },
+    {
+     "at": 90501,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "delivery": {
+      "event": "e1",
+      "endpoint": "ep_a"
+     },
+     "state": "delivered",
+     "count": 1,
+     "receipts": 1,
+     "first_receipt_at_least": 90500
+    },
+    {
+     "delivery": {
+      "event": "e2",
+      "endpoint": "ep_a"
+     },
+     "state": "delivered",
+     "count": 1,
+     "receipts": 1,
+     "first_receipt_at_least": 90500
+    },
+    {
+     "endpoint": "ep_a",
+     "requests": 2,
+     "accepted": 2,
+     "events": 2,
+     "deliveries": 2
+    }
+   ]
+  }
+ ],
+ [
+  "incident",
+  {
+   "name": "an endpoint is off when the release is replaced and is switched on later, more than a day after it was switched off: it gets the events from before and after the replacement",
+   "class": "already skipped",
+   "basis": [
+    "ticket, deployment: \"The release goes to every region and replaces the running one in place, on its existing state\", including an endpoint that is off at that moment.",
+    "ticket, fix: \"an endpoint that is switched back on gets every event it is owed, however long it was off\"; delivery.md: \"Accepted events get IDs and should not be lost.\"",
+    "ticket, fix: \"Each is delivered once.\"; delivery.md: \"Only manual resends can send an event under two delivery IDs to the same endpoint.\""
+   ],
+   "start": "deployed",
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 1,
+     "do": "drain"
+    },
+    {
+     "at": 10,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": false
+    },
+    {
+     "at": 11,
+     "do": "drain"
+    },
+    {
+     "at": 20,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 21,
+     "do": "drain"
+    },
+    {
+     "at": 50000,
+     "do": "upgrade"
+    },
+    {
+     "at": 50001,
+     "do": "drain"
+    },
+    {
+     "at": 50010,
+     "do": "event",
+     "ref": "e2",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 50011,
+     "do": "drain"
+    },
+    {
+     "at": 90000,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": true
+    },
+    {
+     "at": 90001,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "delivery": {
+      "event": "e1",
+      "endpoint": "ep_a"
+     },
+     "state": "delivered",
+     "count": 1,
+     "receipts": 1,
+     "first_receipt_at_least": 90000
+    },
+    {
+     "delivery": {
+      "event": "e2",
+      "endpoint": "ep_a"
+     },
+     "state": "delivered",
+     "count": 1,
+     "receipts": 1,
+     "first_receipt_at_least": 90000
+    },
+    {
+     "endpoint": "ep_a",
+     "requests": 2,
+     "accepted": 2,
+     "events": 2,
+     "deliveries": 2
+    }
+   ]
+  }
+ ],
+ [
+  "regressions",
+  {
+   "name": "an endpoint switched off for less than a day gets what it missed when it is switched on, once",
+   "class": "less than a day",
+   "basis": [
+    "today's behaviour, which the ticket does not change"
+   ],
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 1,
+     "do": "drain"
+    },
+    {
+     "at": 10,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": false
+    },
+    {
+     "at": 11,
+     "do": "drain"
+    },
+    {
+     "at": 20,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 5000,
+     "do": "event",
+     "ref": "e2",
+     "merchant": "m_acme",
+     "type": "refund.created",
+     "amount_minor": 300,
+     "currency": "USD"
+    },
+    {
+     "at": 5001,
+     "do": "drain"
+    },
+    {
+     "at": 80000,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": true
+    },
+    {
+     "at": 80001,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "delivery": {
+      "event": "e1",
+      "endpoint": "ep_a"
+     },
+     "state": "delivered",
+     "count": 1,
+     "receipts": 1,
+     "first_receipt_at_least": 80000
+    },
+    {
+     "delivery": {
+      "event": "e2",
+      "endpoint": "ep_a"
+     },
+     "state": "delivered",
+     "count": 1,
+     "receipts": 1
+    },
+    {
+     "endpoint": "ep_a",
+     "requests": 2,
+     "accepted": 2,
+     "events": 2,
+     "deliveries": 2
+    }
+   ]
+  }
+ ],
+ [
+  "regressions",
+  {
+   "name": "switched off and on twice within a day: each event arrives once",
+   "class": "less than a day",
+   "basis": [
+    "today's behaviour, which the ticket does not change",
+    "ticket, fix: \"Each is delivered once.\"; delivery.md: \"Only manual resends can send an event under two delivery IDs to the same endpoint.\""
+   ],
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 1,
+     "do": "drain"
+    },
+    {
+     "at": 10,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": false
+    },
+    {
+     "at": 11,
+     "do": "drain"
+    },
+    {
+     "at": 20,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 21,
+     "do": "drain"
+    },
+    {
+     "at": 1000,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": true
+    },
+    {
+     "at": 1001,
+     "do": "drain"
+    },
+    {
+     "at": 1500,
+     "do": "event",
+     "ref": "e2",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 1501,
+     "do": "drain"
+    },
+    {
+     "at": 2000,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": false
+    },
+    {
+     "at": 2001,
+     "do": "drain"
+    },
+    {
+     "at": 2010,
+     "do": "event",
+     "ref": "e3",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 2011,
+     "do": "drain"
+    },
+    {
+     "at": 3000,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": true
+    },
+    {
+     "at": 3001,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "delivery": {
+      "event": "e1",
+      "endpoint": "ep_a"
+     },
+     "state": "delivered",
+     "count": 1,
+     "receipts": 1
+    },
+    {
+     "delivery": {
+      "event": "e2",
+      "endpoint": "ep_a"
+     },
+     "state": "delivered",
+     "count": 1,
+     "receipts": 1
+    },
+    {
+     "delivery": {
+      "event": "e3",
+      "endpoint": "ep_a"
+     },
+     "state": "delivered",
+     "count": 1,
+     "receipts": 1
+    },
+    {
+     "endpoint": "ep_a",
+     "requests": 3,
+     "accepted": 3,
+     "events": 3,
+     "deliveries": 3
+    }
+   ]
+  }
+ ],
+ [
+  "regressions",
+  {
+   "name": "a delivery that was waiting for a retry when the endpoint was switched off is sent after the switch-on, more than a day later, under the same delivery",
+   "class": "nothing twice",
+   "basis": [
+    "delivery.md: \"Unless an endpoint is disabled, a delivery ends as `delivered` or `dead`.\" A delivery queued before the switch-off waits and is sent after the switch-on (today's behaviour).",
+    "ticket, fix: \"Each is delivered once.\"; delivery.md: \"Only manual resends can send an event under two delivery IDs to the same endpoint.\""
+   ],
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 0,
+     "do": "receiver.script",
+     "path": "/hooks/ep_a",
+     "responses": [
+      500
+     ]
+    },
+    {
+     "at": 5,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 6,
+     "do": "drain",
+     "limit": 3
+    },
+    {
+     "at": 10,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": false
+    },
+    {
+     "at": 11,
+     "do": "drain"
+    },
+    {
+     "at": 90000,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": true
+    },
+    {
+     "at": 90001,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "delivery": {
+      "event": "e1",
+      "endpoint": "ep_a"
+     },
+     "state": "delivered",
+     "count": 1,
+     "receipts": 2,
+     "accepted": 1,
+     "counted": 1
+    },
+    {
+     "endpoint": "ep_a",
+     "requests": 2,
+     "deliveries": 1
+    }
+   ]
+  }
+ ],
+ [
+  "regressions",
+  {
+   "name": "events from before the endpoint existed are not delivered, also not after it has been off and on",
+   "class": "before the endpoint existed",
+   "basis": [
+    "ticket, fix: \"Events from before the endpoint existed ... are not owed.\"",
+    "today's behaviour, which the ticket does not change"
+   ],
+   "steps": [
+    {
+     "at": 0,
+     "do": "event",
+     "ref": "e0",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 1,
+     "do": "drain"
+    },
+    {
+     "at": 10,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 11,
+     "do": "drain"
+    },
+    {
+     "at": 20,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": false
+    },
+    {
+     "at": 21,
+     "do": "drain"
+    },
+    {
+     "at": 30,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 31,
+     "do": "drain"
+    },
+    {
+     "at": 1000,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": true
+    },
+    {
+     "at": 1001,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "delivery": {
+      "event": "e0",
+      "endpoint": "ep_a"
+     },
+     "count": 0
+    },
+    {
+     "delivery": {
+      "event": "e1",
+      "endpoint": "ep_a"
+     },
+     "state": "delivered",
+     "count": 1,
+     "receipts": 1
+    },
+    {
+     "endpoint": "ep_a",
+     "requests": 1,
+     "accepted": 1,
+     "events": 1,
+     "deliveries": 1
+    }
+   ]
+  }
+ ],
+ [
+  "regressions",
+  {
+   "name": "an endpoint that stays off gets nothing; the merchant's other endpoint gets everything",
+   "class": "stays off",
+   "basis": [
+    "ticket, fix: \"An endpoint that is still off gets nothing.\"",
+    "today's behaviour, which the ticket does not change"
+   ],
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 1,
+     "do": "endpoint.create",
+     "id": "ep_b",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 2,
+     "do": "drain"
+    },
+    {
+     "at": 10,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": false
+    },
+    {
+     "at": 11,
+     "do": "drain"
+    },
+    {
+     "at": 20,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 21,
+     "do": "drain"
+    },
+    {
+     "at": 172800,
+     "do": "event",
+     "ref": "e2",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 172801,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "endpoint": "ep_a",
+     "requests": 0
+    },
+    {
+     "delivery": {
+      "event": "e1",
+      "endpoint": "ep_b"
+     },
+     "state": "delivered",
+     "count": 1,
+     "receipts": 1
+    },
+    {
+     "delivery": {
+      "event": "e2",
+      "endpoint": "ep_b"
+     },
+     "state": "delivered",
+     "count": 1,
+     "receipts": 1
+    },
+    {
+     "endpoint": "ep_b",
+     "requests": 2,
+     "accepted": 2,
+     "events": 2,
+     "deliveries": 2
+    }
+   ]
+  }
+ ],
+ [
+  "regressions",
+  {
+   "name": "an endpoint created switched off and never switched on gets nothing",
+   "class": "stays off",
+   "basis": [
+    "ticket, fix: \"An endpoint that is still off gets nothing.\"",
+    "today's behaviour, which the ticket does not change"
+   ],
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme",
+     "enabled": false
+    },
+    {
+     "at": 1,
+     "do": "drain"
+    },
+    {
+     "at": 20,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 21,
+     "do": "drain"
+    },
+    {
+     "at": 172800,
+     "do": "event",
+     "ref": "e2",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 172801,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "endpoint": "ep_a",
+     "requests": 0
+    }
+   ]
+  }
+ ],
+ [
+  "regressions",
+  {
+   "name": "off for less than a day with the subscription narrowed meanwhile: only the types subscribed to at the switch-on are delivered",
+   "class": "types",
+   "basis": [
+    "ticket, fix: \"whose type it is subscribed to at the moment it is switched back on\"",
+    "today's behaviour, which the ticket does not change"
+   ],
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 1,
+     "do": "drain"
+    },
+    {
+     "at": 10,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": false
+    },
+    {
+     "at": 11,
+     "do": "drain"
+    },
+    {
+     "at": 20,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 30,
+     "do": "event",
+     "ref": "e2",
+     "merchant": "m_acme",
+     "type": "refund.created",
+     "amount_minor": 300,
+     "currency": "USD"
+    },
+    {
+     "at": 31,
+     "do": "drain"
+    },
+    {
+     "at": 500,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "event_types": [
+      "refund.created"
+     ]
+    },
+    {
+     "at": 501,
+     "do": "drain"
+    },
+    {
+     "at": 1000,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": true
+    },
+    {
+     "at": 1001,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "delivery": {
+      "event": "e2",
+      "endpoint": "ep_a"
+     },
+     "state": "delivered",
+     "count": 1,
+     "receipts": 1
+    },
+    {
+     "delivery": {
+      "event": "e1",
+      "endpoint": "ep_a"
+     },
+     "count": 0
+    },
+    {
+     "endpoint": "ep_a",
+     "requests": 1,
+     "accepted": 1,
+     "events": 1,
+     "deliveries": 1
+    }
+   ]
+  }
+ ],
+ [
+  "regressions",
+  {
+   "name": "an event that passed while the endpoint was on and not subscribed to its type is not delivered after an off period, even if the endpoint subscribes to everything by then",
+   "class": "types",
+   "basis": [
+    "ticket, fix: \"events accepted while it was on and not subscribed to their type, and events of types it is not subscribed to when it comes back on, are not owed\"",
+    "today's behaviour, which the ticket does not change"
+   ],
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme",
+     "event_types": [
+      "payment.captured"
+     ]
+    },
+    {
+     "at": 1,
+     "do": "drain"
+    },
+    {
+     "at": 10,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "refund.created",
+     "amount_minor": 300,
+     "currency": "USD"
+    },
+    {
+     "at": 11,
+     "do": "drain"
+    },
+    {
+     "at": 20,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": false
+    },
+    {
+     "at": 21,
+     "do": "drain"
+    },
+    {
+     "at": 30,
+     "do": "event",
+     "ref": "e2",
+     "merchant": "m_acme",
+     "type": "refund.created",
+     "amount_minor": 300,
+     "currency": "USD"
+    },
+    {
+     "at": 31,
+     "do": "drain"
+    },
+    {
+     "at": 40,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "event_types": [
+      "*"
+     ]
+    },
+    {
+     "at": 41,
+     "do": "drain"
+    },
+    {
+     "at": 1000,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": true
+    },
+    {
+     "at": 1001,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "delivery": {
+      "event": "e1",
+      "endpoint": "ep_a"
+     },
+     "count": 0
+    },
+    {
+     "delivery": {
+      "event": "e2",
+      "endpoint": "ep_a"
+     },
+     "state": "delivered",
+     "count": 1,
+     "receipts": 1
+    },
+    {
+     "endpoint": "ep_a",
+     "requests": 1,
+     "accepted": 1,
+     "events": 1,
+     "deliveries": 1
+    }
+   ]
+  }
+ ],
+ [
+  "regressions",
+  {
+   "name": "a secret rotated while the endpoint is off for less than a day signs what it gets at the switch-on",
+   "class": "less than a day",
+   "basis": [
+    "today's behaviour, which the ticket does not change"
+   ],
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 1,
+     "do": "drain"
+    },
+    {
+     "at": 10,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": false
+    },
+    {
+     "at": 11,
+     "do": "drain"
+    },
+    {
+     "at": 20,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 21,
+     "do": "drain"
+    },
+    {
+     "at": 500,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "secret": "whsec_YS1uZXctc2VjcmV0LWZvci1hY21lLTAx"
+    },
+    {
+     "at": 501,
+     "do": "drain"
+    },
+    {
+     "at": 1000,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": true
+    },
+    {
+     "at": 1001,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "delivery": {
+      "event": "e1",
+      "endpoint": "ep_a"
+     },
+     "state": "delivered",
+     "count": 1,
+     "receipts": 1,
+     "secrets": [
+      "whsec_YS1uZXctc2VjcmV0LWZvci1hY21lLTAx"
+     ]
+    },
+    {
+     "endpoint": "ep_a",
+     "requests": 1,
+     "accepted": 1,
+     "events": 1,
+     "deliveries": 1
+    }
+   ]
+  }
+ ],
+ [
+  "regressions",
+  {
+   "name": "what an endpoint gets at the switch-on is retried like any delivery",
+   "class": "less than a day",
+   "basis": [
+    "today's behaviour, which the ticket does not change"
+   ],
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 1,
+     "do": "drain"
+    },
+    {
+     "at": 10,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": false
+    },
+    {
+     "at": 11,
+     "do": "drain"
+    },
+    {
+     "at": 20,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 21,
+     "do": "drain"
+    },
+    {
+     "at": 900,
+     "do": "receiver.script",
+     "path": "/hooks/ep_a",
+     "responses": [
+      500,
+      503
+     ]
+    },
+    {
+     "at": 1000,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": true
+    },
+    {
+     "at": 1001,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "delivery": {
+      "event": "e1",
+      "endpoint": "ep_a"
+     },
+     "state": "delivered",
+     "count": 1,
+     "receipts": 3,
+     "accepted": 1,
+     "counted": 2
+    },
+    {
+     "endpoint": "ep_a",
+     "requests": 3,
+     "deliveries": 1
+    }
+   ]
+  }
+ ],
+ [
+  "regressions",
+  {
+   "name": "a manual resend of a delivered event still sends it again under a second delivery",
+   "class": "nothing twice",
+   "basis": [
+    "today's behaviour, which the ticket does not change"
+   ],
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 1,
+     "do": "drain"
+    },
+    {
+     "at": 10,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 11,
+     "do": "drain"
+    },
+    {
+     "at": 100,
+     "do": "resend",
+     "event": "e1",
+     "endpoint": "ep_a"
+    },
+    {
+     "at": 101,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "delivery": {
+      "event": "e1",
+      "endpoint": "ep_a"
+     },
+     "count": 2,
+     "receipts": 2,
+     "accepted": 2
+    },
+    {
+     "endpoint": "ep_a",
+     "requests": 2,
+     "deliveries": 2,
+     "events": 1
+    }
+   ]
+  }
+ ],
+ [
+  "regressions",
+  {
+   "name": "an off period the deployed release caught up is not delivered again when the release is replaced and started again",
+   "class": "nothing twice",
+   "basis": [
+    "ticket, fix: \"Each is delivered once.\"; delivery.md: \"Only manual resends can send an event under two delivery IDs to the same endpoint.\"",
+    "ticket, fix: \"Events that were owed in this way and that the running release has already failed to deliver must be delivered, once, when the release is out. Nobody should have to ask for them.\""
+   ],
+   "start": "deployed",
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 1,
+     "do": "drain"
+    },
+    {
+     "at": 10,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": false
+    },
+    {
+     "at": 11,
+     "do": "drain"
+    },
+    {
+     "at": 20,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 21,
+     "do": "drain"
+    },
+    {
+     "at": 1000,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": true
+    },
+    {
+     "at": 1001,
+     "do": "drain"
+    },
+    {
+     "at": 2000,
+     "do": "upgrade"
+    },
+    {
+     "at": 2001,
+     "do": "drain"
+    },
+    {
+     "at": 2100,
+     "do": "restart",
+     "service": "router"
+    },
+    {
+     "at": 2101,
+     "do": "restart",
+     "service": "api"
+    },
+    {
+     "at": 2102,
+     "do": "restart",
+     "service": "worker"
+    },
+    {
+     "at": 2110,
+     "do": "drain"
+    },
+    {
+     "at": 2200,
+     "do": "event",
+     "ref": "e2",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 2201,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "delivery": {
+      "event": "e1",
+      "endpoint": "ep_a"
+     },
+     "state": "delivered",
+     "count": 1,
+     "receipts": 1,
+     "first_receipt_at_most": 1100
+    },
+    {
+     "delivery": {
+      "event": "e2",
+      "endpoint": "ep_a"
+     },
+     "state": "delivered",
+     "count": 1,
+     "receipts": 1
+    },
+    {
+     "endpoint": "ep_a",
+     "requests": 2,
+     "accepted": 2,
+     "events": 2,
+     "deliveries": 2
+    }
+   ]
+  }
+ ],
+ [
+  "regressions",
+  {
+   "name": "an endpoint that is off when the release is replaced and stays off gets nothing; the merchant's other endpoint gets everything",
+   "class": "stays off",
+   "basis": [
+    "ticket, fix: \"An endpoint that is still off gets nothing.\"",
+    "ticket, deployment: \"The release goes to every region and replaces the running one in place, on its existing state\", including an endpoint that is off at that moment."
+   ],
+   "start": "deployed",
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 1,
+     "do": "endpoint.create",
+     "id": "ep_b",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 2,
+     "do": "drain"
+    },
+    {
+     "at": 10,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": false
+    },
+    {
+     "at": 11,
+     "do": "drain"
+    },
+    {
+     "at": 20,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 21,
+     "do": "drain"
+    },
+    {
+     "at": 90000,
+     "do": "upgrade"
+    },
+    {
+     "at": 90001,
+     "do": "drain"
+    },
+    {
+     "at": 90010,
+     "do": "event",
+     "ref": "e2",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 90011,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "endpoint": "ep_a",
+     "requests": 0
+    },
+    {
+     "endpoint": "ep_b",
+     "requests": 2,
+     "accepted": 2,
+     "events": 2,
+     "deliveries": 2
+    }
+   ]
+  }
+ ],
+ [
+  "regressions",
+  {
+   "name": "replacing the release delivers nothing from before an endpoint existed and nothing of a type it was not subscribed to",
+   "class": "before the endpoint existed",
+   "basis": [
+    "ticket, fix: \"Events from before the endpoint existed ... are not owed.\"",
+    "ticket, fix: \"events accepted while it was on and not subscribed to their type, and events of types it is not subscribed to when it comes back on, are not owed\""
+   ],
+   "start": "deployed",
+   "steps": [
+    {
+     "at": 0,
+     "do": "event",
+     "ref": "e0",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 1,
+     "do": "drain"
+    },
+    {
+     "at": 10,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme",
+     "event_types": [
+      "payment.captured"
+     ]
+    },
+    {
+     "at": 11,
+     "do": "drain"
+    },
+    {
+     "at": 20,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "refund.created",
+     "amount_minor": 300,
+     "currency": "USD"
+    },
+    {
+     "at": 30,
+     "do": "event",
+     "ref": "e2",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 31,
+     "do": "drain"
+    },
+    {
+     "at": 40,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "event_types": [
+      "*"
+     ]
+    },
+    {
+     "at": 41,
+     "do": "drain"
+    },
+    {
+     "at": 90000,
+     "do": "upgrade"
+    },
+    {
+     "at": 90001,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "delivery": {
+      "event": "e0",
+      "endpoint": "ep_a"
+     },
+     "count": 0
+    },
+    {
+     "delivery": {
+      "event": "e1",
+      "endpoint": "ep_a"
+     },
+     "count": 0
+    },
+    {
+     "delivery": {
+      "event": "e2",
+      "endpoint": "ep_a"
+     },
+     "state": "delivered",
+     "count": 1,
+     "receipts": 1
+    },
+    {
+     "endpoint": "ep_a",
+     "requests": 1,
+     "accepted": 1,
+     "events": 1,
+     "deliveries": 1
+    }
+   ]
+  }
+ ],
+ [
+  "regressions",
+  {
+   "name": "an event that was not owed at a switch-on under the deployed release (its type was not subscribed to then) is not delivered when the release is replaced",
+   "class": "types",
+   "basis": [
+    "ticket, fix: \"whose type it is subscribed to at the moment it is switched back on\"",
+    "ticket, fix: \"events accepted while it was on and not subscribed to their type, and events of types it is not subscribed to when it comes back on, are not owed\""
+   ],
+   "start": "deployed",
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 1,
+     "do": "drain"
+    },
+    {
+     "at": 10,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": false
+    },
+    {
+     "at": 11,
+     "do": "drain"
+    },
+    {
+     "at": 20,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "refund.created",
+     "amount_minor": 300,
+     "currency": "USD"
+    },
+    {
+     "at": 30,
+     "do": "event",
+     "ref": "e2",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 31,
+     "do": "drain"
+    },
+    {
+     "at": 1000,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": true,
+     "event_types": [
+      "payment.captured"
+     ]
+    },
+    {
+     "at": 1001,
+     "do": "drain"
+    },
+    {
+     "at": 2000,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "event_types": [
+      "*"
+     ]
+    },
+    {
+     "at": 2001,
+     "do": "drain"
+    },
+    {
+     "at": 3000,
+     "do": "upgrade"
+    },
+    {
+     "at": 3001,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "delivery": {
+      "event": "e1",
+      "endpoint": "ep_a"
+     },
+     "count": 0
+    },
+    {
+     "delivery": {
+      "event": "e2",
+      "endpoint": "ep_a"
+     },
+     "state": "delivered",
+     "count": 1,
+     "receipts": 1
+    },
+    {
+     "endpoint": "ep_a",
+     "requests": 1,
+     "accepted": 1,
+     "events": 1,
+     "deliveries": 1
+    }
+   ]
+  }
+ ],
+ [
+  "regressions",
+  {
+   "name": "a delivery that was waiting for a retry when the endpoint was switched off waits through the replacement of the release and is sent once after the switch-on",
+   "class": "nothing twice",
+   "basis": [
+    "delivery.md: \"Unless an endpoint is disabled, a delivery ends as `delivered` or `dead`.\" A delivery queued before the switch-off waits and is sent after the switch-on (today's behaviour).",
+    "ticket, fix: \"Each is delivered once.\"; delivery.md: \"Only manual resends can send an event under two delivery IDs to the same endpoint.\"",
+    "ticket, deployment: \"The release goes to every region and replaces the running one in place, on its existing state\", including an endpoint that is off at that moment."
+   ],
+   "start": "deployed",
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 0,
+     "do": "receiver.script",
+     "path": "/hooks/ep_a",
+     "responses": [
+      500
+     ]
+    },
+    {
+     "at": 5,
+     "do": "event",
+     "ref": "e1",
+     "merchant": "m_acme",
+     "type": "payment.captured",
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "at": 6,
+     "do": "drain",
+     "limit": 3
+    },
+    {
+     "at": 10,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": false
+    },
+    {
+     "at": 11,
+     "do": "drain"
+    },
+    {
+     "at": 90000,
+     "do": "upgrade"
+    },
+    {
+     "at": 90001,
+     "do": "drain"
+    },
+    {
+     "at": 90010,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": true
+    },
+    {
+     "at": 90011,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "delivery": {
+      "event": "e1",
+      "endpoint": "ep_a"
+     },
+     "state": "delivered",
+     "count": 1,
+     "receipts": 2,
+     "accepted": 1,
+     "counted": 1
+    },
+    {
+     "endpoint": "ep_a",
+     "requests": 2,
+     "deliveries": 1
+    }
+   ]
+  }
+ ],
+ [
+  "compat",
+  {
+   "name": "a version 1 event is delivered once, in minor units",
+   "class": "version 1",
+   "basis": [
+    "contracts/messages/README.md"
+   ],
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 1,
+     "do": "drain"
+    },
+    {
+     "at": 10,
+     "do": "bus",
+     "ref": "old1",
+     "message": {
+      "id": "evt_legacy0000001",
+      "merchant": "m_acme",
+      "event_type": "payment.captured",
+      "amount": "12.5",
+      "currency": "USD",
+      "payment": "pay_legacy0000001",
+      "ts": "2026-11-02T00:00:00Z"
+     }
+    },
+    {
+     "at": 11,
+     "do": "bus",
+     "ref": "old1again",
+     "message": {
+      "id": "evt_legacy0000001",
+      "merchant": "m_acme",
+      "event_type": "payment.captured",
+      "amount": "12.5",
+      "currency": "USD",
+      "payment": "pay_legacy0000001",
+      "ts": "2026-11-02T00:00:00Z"
+     }
+    },
+    {
+     "at": 12,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "status": "old1",
+     "is": 200
+    },
+    {
+     "status": "old1again",
+     "is": 200
+    },
+    {
+     "delivery": {
+      "event": "old1",
+      "endpoint": "ep_a"
+     },
+     "state": "delivered",
+     "count": 1,
+     "receipts": 1,
+     "amount_minor": 1250,
+     "currency": "USD"
+    }
+   ]
+  }
+ ],
+ [
+  "compat",
+  {
+   "name": "an endpoint that exists only in the archive is created and gets its version 2 events",
+   "class": "version 2",
+   "basis": [
+    "contracts/messages/README.md"
+   ],
+   "steps": [
+    {
+     "at": 0,
+     "do": "bus",
+     "message": {
+      "v": 2,
+      "seq": 10,
+      "kind": "endpoint",
+      "endpoint": {
+       "id": "ep_old",
+       "merchant": "m_old",
+       "url": "{receiver}/hooks/ep_old",
+       "secret": "whsec_t6dGZhrqQd262/2Fr0DQNtncVtZ3dU+I",
+       "types": [
+        "*"
+       ],
+       "active": true
+      }
+     },
+     "ref": "made"
+    },
+    {
+     "at": 5,
+     "do": "bus",
+     "ref": "a1",
+     "message": {
+      "v": 2,
+      "seq": 11,
+      "kind": "event",
+      "event": {
+       "id": "evt_archive0000011",
+       "merchant": "m_old",
+       "type": "payment.captured",
+       "created": 1790000011,
+       "payment_id": "pay_archive0000011",
+       "amount_minor": 990,
+       "currency": "EUR"
+      }
+     }
+    },
+    {
+     "at": 6,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "status": "made",
+     "is": 200
+    },
+    {
+     "status": "a1",
+     "is": 200
+    },
+    {
+     "delivery": {
+      "event": "a1",
+      "endpoint": "ep_old"
+     },
+     "state": "delivered",
+     "count": 1,
+     "receipts": 1,
+     "amount_minor": 990,
+     "currency": "EUR"
+    }
+   ]
+  }
+ ],
+ [
+  "compat",
+  {
+   "name": "an archive-only endpoint switched off by a version 2 message gets nothing",
+   "class": "version 2",
+   "basis": [
+    "contracts/messages/README.md",
+    "ticket, fix: \"An endpoint that is still off gets nothing.\""
+   ],
+   "steps": [
+    {
+     "at": 0,
+     "do": "bus",
+     "message": {
+      "v": 2,
+      "seq": 10,
+      "kind": "endpoint",
+      "endpoint": {
+       "id": "ep_old",
+       "merchant": "m_old",
+       "url": "{receiver}/hooks/ep_old",
+       "secret": "whsec_t6dGZhrqQd262/2Fr0DQNtncVtZ3dU+I",
+       "types": [
+        "*"
+       ],
+       "active": true
+      }
+     }
+    },
+    {
+     "at": 5,
+     "do": "bus",
+     "message": {
+      "v": 2,
+      "seq": 11,
+      "kind": "endpoint",
+      "endpoint": {
+       "id": "ep_old",
+       "merchant": "m_old",
+       "url": "{receiver}/hooks/ep_old",
+       "secret": "whsec_t6dGZhrqQd262/2Fr0DQNtncVtZ3dU+I",
+       "types": [
+        "*"
+       ],
+       "active": false
+      }
+     },
+     "ref": "off"
+    },
+    {
+     "at": 10,
+     "do": "bus",
+     "ref": "a1",
+     "message": {
+      "v": 2,
+      "seq": 12,
+      "kind": "event",
+      "event": {
+       "id": "evt_archive0000012",
+       "merchant": "m_old",
+       "type": "payment.captured",
+       "created": 1790000012,
+       "payment_id": "pay_archive0000012",
+       "amount_minor": 990,
+       "currency": "EUR"
+      }
+     }
+    },
+    {
+     "at": 11,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "status": "off",
+     "is": 200
+    },
+    {
+     "endpoint": "ep_old",
+     "requests": 0
+    }
+   ]
+  }
+ ],
+ [
+  "compat",
+  {
+   "name": "an archive-only endpoint switched off and on by version 2 messages within a day gets the version 2 event that arrived meanwhile, once; a repeated message changes nothing",
+   "class": "version 2",
+   "basis": [
+    "contracts/messages/README.md",
+    "today's behaviour, which the ticket does not change"
+   ],
+   "steps": [
+    {
+     "at": 0,
+     "do": "bus",
+     "message": {
+      "v": 2,
+      "seq": 10,
+      "kind": "endpoint",
+      "endpoint": {
+       "id": "ep_old",
+       "merchant": "m_old",
+       "url": "{receiver}/hooks/ep_old",
+       "secret": "whsec_t6dGZhrqQd262/2Fr0DQNtncVtZ3dU+I",
+       "types": [
+        "*"
+       ],
+       "active": true
+      }
+     }
+    },
+    {
+     "at": 1,
+     "do": "drain"
+    },
+    {
+     "at": 10,
+     "do": "bus",
+     "message": {
+      "v": 2,
+      "seq": 11,
+      "kind": "endpoint",
+      "endpoint": {
+       "id": "ep_old",
+       "merchant": "m_old",
+       "url": "{receiver}/hooks/ep_old",
+       "secret": "whsec_t6dGZhrqQd262/2Fr0DQNtncVtZ3dU+I",
+       "types": [
+        "*"
+       ],
+       "active": false
+      }
+     }
+    },
+    {
+     "at": 11,
+     "do": "drain"
+    },
+    {
+     "at": 20,
+     "do": "bus",
+     "ref": "a1",
+     "message": {
+      "v": 2,
+      "seq": 12,
+      "kind": "event",
+      "event": {
+       "id": "evt_archive0000012",
+       "merchant": "m_old",
+       "type": "payment.captured",
+       "created": 1790000012,
+       "payment_id": "pay_archive0000012",
+       "amount_minor": 990,
+       "currency": "EUR"
+      }
+     }
+    },
+    {
+     "at": 21,
+     "do": "drain"
+    },
+    {
+     "at": 1000,
+     "do": "bus",
+     "message": {
+      "v": 2,
+      "seq": 13,
+      "kind": "endpoint",
+      "endpoint": {
+       "id": "ep_old",
+       "merchant": "m_old",
+       "url": "{receiver}/hooks/ep_old",
+       "secret": "whsec_t6dGZhrqQd262/2Fr0DQNtncVtZ3dU+I",
+       "types": [
+        "*"
+       ],
+       "active": true
+      }
+     },
+     "ref": "on"
+    },
+    {
+     "at": 1001,
+     "do": "drain"
+    },
+    {
+     "at": 1100,
+     "do": "bus",
+     "message": {
+      "v": 2,
+      "seq": 13,
+      "kind": "endpoint",
+      "endpoint": {
+       "id": "ep_old",
+       "merchant": "m_old",
+       "url": "{receiver}/hooks/ep_old",
+       "secret": "whsec_t6dGZhrqQd262/2Fr0DQNtncVtZ3dU+I",
+       "types": [
+        "*"
+       ],
+       "active": true
+      }
+     },
+     "ref": "again"
+    },
+    {
+     "at": 1101,
+     "do": "bus",
+     "ref": "a1again",
+     "message": {
+      "v": 2,
+      "seq": 12,
+      "kind": "event",
+      "event": {
+       "id": "evt_archive0000012",
+       "merchant": "m_old",
+       "type": "payment.captured",
+       "created": 1790000012,
+       "payment_id": "pay_archive0000012",
+       "amount_minor": 990,
+       "currency": "EUR"
+      }
+     }
+    },
+    {
+     "at": 1102,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "status": "on",
+     "is": 200
+    },
+    {
+     "status": "again",
+     "is": 200
+    },
+    {
+     "status": "a1again",
+     "is": 200
+    },
+    {
+     "delivery": {
+      "event": "a1",
+      "endpoint": "ep_old"
+     },
+     "state": "delivered",
+     "count": 1,
+     "receipts": 1
+    },
+    {
+     "endpoint": "ep_old",
+     "requests": 1,
+     "accepted": 1,
+     "events": 1,
+     "deliveries": 1
+    }
+   ]
+  }
+ ],
+ [
+  "compat",
+  {
+   "name": "version 1 and version 2 events that arrive while an endpoint is off for less than a day are delivered once when it is switched on",
+   "class": "version 1 and 2",
+   "basis": [
+    "contracts/messages/README.md",
+    "today's behaviour, which the ticket does not change"
+   ],
+   "steps": [
+    {
+     "at": 0,
+     "do": "endpoint.create",
+     "id": "ep_a",
+     "merchant": "m_acme"
+    },
+    {
+     "at": 1,
+     "do": "drain"
+    },
+    {
+     "at": 10,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": false
+    },
+    {
+     "at": 11,
+     "do": "drain"
+    },
+    {
+     "at": 20,
+     "do": "bus",
+     "ref": "old1",
+     "message": {
+      "id": "evt_legacy0000001",
+      "merchant": "m_acme",
+      "event_type": "payment.captured",
+      "amount": "12.5",
+      "currency": "USD",
+      "payment": "pay_legacy0000001",
+      "ts": "2026-11-02T00:00:00Z"
+     }
+    },
+    {
+     "at": 30,
+     "do": "bus",
+     "ref": "a1",
+     "message": {
+      "v": 2,
+      "seq": 4100,
+      "kind": "event",
+      "event": {
+       "id": "evt_archive0004100",
+       "merchant": "m_acme",
+       "type": "payment.captured",
+       "created": 1790004100,
+       "payment_id": "pay_archive0004100",
+       "amount_minor": 990,
+       "currency": "EUR"
+      }
+     }
+    },
+    {
+     "at": 31,
+     "do": "drain"
+    },
+    {
+     "at": 1000,
+     "do": "endpoint.update",
+     "id": "ep_a",
+     "enabled": true
+    },
+    {
+     "at": 1001,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "delivery": {
+      "event": "old1",
+      "endpoint": "ep_a"
+     },
+     "state": "delivered",
+     "count": 1,
+     "receipts": 1,
+     "amount_minor": 1250,
+     "currency": "USD"
+    },
+    {
+     "delivery": {
+      "event": "a1",
+      "endpoint": "ep_a"
+     },
+     "state": "delivered",
+     "count": 1,
+     "receipts": 1,
+     "amount_minor": 990
+    },
+    {
+     "endpoint": "ep_a",
+     "requests": 2,
+     "accepted": 2,
+     "events": 2,
+     "deliveries": 2
+    }
+   ]
+  }
+ ],
+ [
+  "compat",
+  {
+   "name": "an archive-only endpoint the deployed release created gets version 2 events after the release is replaced, and nothing it already got",
+   "class": "version 2",
+   "basis": [
+    "contracts/messages/README.md",
+    "ticket, deployment: \"The release goes to every region and replaces the running one in place, on its existing state\", including an endpoint that is off at that moment."
+   ],
+   "start": "deployed",
+   "steps": [
+    {
+     "at": 0,
+     "do": "bus",
+     "message": {
+      "v": 2,
+      "seq": 10,
+      "kind": "endpoint",
+      "endpoint": {
+       "id": "ep_old",
+       "merchant": "m_old",
+       "url": "{receiver}/hooks/ep_old",
+       "secret": "whsec_t6dGZhrqQd262/2Fr0DQNtncVtZ3dU+I",
+       "types": [
+        "*"
+       ],
+       "active": true
+      }
+     }
+    },
+    {
+     "at": 5,
+     "do": "bus",
+     "ref": "a0",
+     "message": {
+      "v": 2,
+      "seq": 11,
+      "kind": "event",
+      "event": {
+       "id": "evt_archive0000011",
+       "merchant": "m_old",
+       "type": "payment.captured",
+       "created": 1790000011,
+       "payment_id": "pay_archive0000011",
+       "amount_minor": 990,
+       "currency": "EUR"
+      }
+     }
+    },
+    {
+     "at": 6,
+     "do": "drain"
+    },
+    {
+     "at": 90000,
+     "do": "upgrade"
+    },
+    {
+     "at": 90001,
+     "do": "drain"
+    },
+    {
+     "at": 90010,
+     "do": "bus",
+     "ref": "a1",
+     "message": {
+      "v": 2,
+      "seq": 12,
+      "kind": "event",
+      "event": {
+       "id": "evt_archive0000012",
+       "merchant": "m_old",
+       "type": "payment.captured",
+       "created": 1790000012,
+       "payment_id": "pay_archive0000012",
+       "amount_minor": 990,
+       "currency": "EUR"
+      }
+     }
+    },
+    {
+     "at": 90011,
+     "do": "drain"
+    }
+   ],
+   "expect": [
+    {
+     "delivery": {
+      "event": "a0",
+      "endpoint": "ep_old"
+     },
+     "state": "delivered",
+     "count": 1,
+     "receipts": 1,
+     "first_receipt_at_most": 100
+    },
+    {
+     "delivery": {
+      "event": "a1",
+      "endpoint": "ep_old"
+     },
+     "state": "delivered",
+     "count": 1,
+     "receipts": 1
+    },
+    {
+     "endpoint": "ep_old",
+     "requests": 2,
+     "accepted": 2,
+     "events": 2,
+     "deliveries": 2
+    }
+   ]
+  }
+ ]
+]

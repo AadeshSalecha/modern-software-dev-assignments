@@ -3,7 +3,7 @@
 starter: a copy of week6/ in a temporary workspace, this folder's ticket and packet in place of
 the starter's, `./run.sh task.md` through the metering gateway, then the judge.
 
-    python3 run_transfer.py [--runs N] [--label NAME] [--port 8797] [--timeout 600]
+    python3 run_transfer.py [--runs N] [--label NAME] [--port 8797] [--timeout 600] [--incident inc-2231]
 
 KIT_* variables in the environment reach run.sh, as with practice.py. Logs for each run go to
 transfer/runs/<label>-<stamp>-<n>/: agent.log, usage.jsonl, summary.json, judge.json,
@@ -67,7 +67,7 @@ def one_run(index, args, stamp):
 
         gateway = runner.start_gateway(args.port, TOOLS_WEEK / "rate_card.json", usage_log, max_cost=2.0,
                                        allow_login=codex_login is not None)  # fmt: skip
-        print(f"run {index}: running ./run.sh task.md on INC-2231 ...", flush=True)
+        print(f"run {index}: running ./run.sh task.md on {INCIDENT.name} ...", flush=True)
         try:
             result = runner.run_entry(workspace, "task.md", env, args.timeout, agent_log)
         finally:
@@ -109,10 +109,15 @@ def main():
     parser.add_argument("--port", type=int, default=8797)
     parser.add_argument("--timeout", type=float, default=600)
     parser.add_argument("--week", help="another week6 folder to run (for example a checkout of the baseline)")
+    parser.add_argument("--incident", default="inc-2231",
+                        help="folder under transfer/ with task.md, incident/ and judge.py (default inc-2231)")
     args = parser.parse_args()
+    global WEEK, INCIDENT
     if args.week:
-        global WEEK
         WEEK = Path(args.week).resolve()
+    INCIDENT = HERE / args.incident
+    if not (INCIDENT / "task.md").is_file() or not (INCIDENT / "judge.py").is_file():
+        parser.error(f"{INCIDENT} has no task.md or judge.py")
     stamp = time.strftime("%Y%m%d-%H%M%S")
     records = [one_run(index, args, stamp) for index in range(1, args.runs + 1)]
     print(f"{sum(r['passed'] for r in records)} of {len(records)} passed; "
