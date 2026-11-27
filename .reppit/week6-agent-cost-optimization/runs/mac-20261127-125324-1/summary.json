@@ -1,0 +1,43 @@
+{
+  "passed": true,
+  "score": {
+    "categories": {
+      "incident": {
+        "passed": 9,
+        "total": 9,
+        "failed": []
+      },
+      "regressions": {
+        "passed": 10,
+        "total": 10,
+        "failed": []
+      },
+      "compat": {
+        "passed": 2,
+        "total": 2,
+        "failed": []
+      }
+    },
+    "repair": 1.0,
+    "impact": 1.0
+  },
+  "seconds": 399.4,
+  "cost_usd": 0.5803,
+  "requests": 53,
+  "by_model": {
+    "claude-sonnet-5-5+gpt-6.1-terra": {
+      "requests": 53,
+      "cost_usd": 0.5803,
+      "input": 83593,
+      "output": 26675,
+      "cache_read": 2152187,
+      "cache_write": 59158,
+      "cache_write_1h": 0
+    }
+  },
+  "cost_by_model": {
+    "claude-sonnet-5-5": 0.3636,
+    "gpt-6.1-terra": 0.2167
+  },
+  "machine": "mac"
+}

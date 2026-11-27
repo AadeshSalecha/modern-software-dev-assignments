@@ -52,6 +52,8 @@ Rebuilt by `make_results.py`.
 | v4b-haiku-sonnetlow | 1/1 | 1.00 | 1.00 | $0.467 | $0.47 to $0.47 | 43 | 203 s | 203 s |
 | raw-sonnetlow-starter | 0/1 | 0.00 | 0.93 | $0.254 | $0.25 to $0.25 | 13 | 82 s | 82 s |
 | v2d-from-zip | 1/1 | 1.00 | 1.00 | $0.243 | $0.24 to $0.24 | 13 | 113 s | 113 s |
+| v4c-starter-terra | 1/1 | 1.00 | 1.00 | $0.580 | $0.58 to $0.58 | 53 | 399 s | 399 s |
+| v4c-nocodex | 1/1 | 1.00 | 1.00 | $0.440 | $0.44 to $0.44 | 43 | 246 s | 246 s |
 | v4-sonnet-terra-terra | 1/1 | 1.00 | 1.00 | $0.655 | $0.66 to $0.66 | 60 | 388 s | 388 s |
 
 ## baseline
@@ -542,6 +544,22 @@ The zip for submission 2, unpacked, nothing set (commit b407568). No Codex in th
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 20261126-210148-1 | PASS | 1.00 | 1.00 | $0.243 | 13 | 113 s | 9/9 | 10/10 | 2/2 | 8,859 | 381,754 | 46,394 |
 
+## v4c-starter-terra
+
+Final validation of the zip for submission 3 (commit 9ec5cb1, nothing set) on the Mac: Sonnet main, `gpt-6.1-terra` through Codex as second solver and for the raw-file report.
+
+| Run | Result | Repair | Impact | Cost | Requests | Time | Incident | Regr. | Compat | Output | Cache read | Cache write |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| mac-20261127-125324-1 | PASS | 1.00 | 1.00 | $0.580 | 53 | 399 s | 9/9 | 10/10 | 2/2 | 26,675 | 2,152,187 | 59,158 |
+
+## v4c-nocodex
+
+The same commit, nothing set, in the container, where Codex is not installed: both Codex sessions fail to start and the fallbacks take their place (Haiku as second solver, Sonnet at effort low for the raw-file report).
+
+| Run | Result | Repair | Impact | Cost | Requests | Time | Incident | Regr. | Compat | Output | Cache read | Cache write |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 20261127-115006-1 | PASS | 1.00 | 1.00 | $0.440 | 43 | 246 s | 9/9 | 10/10 | 2/2 | 36,095 | 1,483,260 | 124,863 |
+
 ## v4-sonnet-terra-terra
 
 
@@ -558,7 +576,11 @@ assignment's formulas. Labels without an incident number are INC-2231. `rep-` la
 report-only runs with the kit and `raw-` report-only runs from the raw files (repair 0 by
 construction in both); `terse-` are tickets with the recovery requirement cut to half a
 sentence, run with one Sonnet session; `sub1-` is the first submission's version;
-`v2zip-` the two-solver version of 2026-11-26; `v3c-`/`v3d-` the budget-aware versions.
+`v2zip-` the two-solver version of 2026-11-26; `v3c-`/`v3d-` the budget-aware versions;
+`v4`/`v4b-` the three-session version while it was built; `v4c-` its final validation at
+commit 9ec5cb1 with nothing set: `-terra` on the Mac (Sonnet, and `gpt-6.1-terra` twice
+through Codex), `-nocodex` in the container, where Codex cannot start and the fallback
+sessions take over.
 
 | Setup | Run | Result | Repair | Impact | Cost | Requests | Time | Incident | Regr. | Compat |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -627,9 +649,16 @@ sentence, run with one Sonnet session; `sub1-` is the first submission's version
 | v3d-2307-sonnet-terra | 20261127-103927-1 | PASS | 1.0 | 1.0 | $0.538 | 38 | 364 s | 19/19 | 21/21 | 6/6 |
 | v3d-2318-sonnet-terra | 20261127-104554-1 | PASS | 1.0 | 1.0 | $0.689 | 44 | 314 s | 19/19 | 19/19 | 6/6 |
 | v4-2231-haiku | 20261127-110945-1 | PASS | 1.0 | 1.0 | $0.562 | 74 | 378 s | 9/9 | 9/9 | 4/4 |
+| v4-2307-terra | 20261127-121620-1 | PASS | 1.0 | 1.0 | $0.630 | 50 | 269 s | 19/19 | 21/21 | 6/6 |
 | v4-2318-haiku | 20261127-110945-1 | PASS | 1.0 | 1.0 | $0.588 | 61 | 412 s | 19/19 | 19/19 | 6/6 |
 | v4b-2231 | 20261127-113307-1 | PASS | 1.0 | 1.0 | $0.559 | 45 | 282 s | 9/9 | 9/9 | 4/4 |
 | v4b-2307 | 20261127-113307-1 | PASS | 1.0 | 1.0 | $0.713 | 46 | 267 s | 19/19 | 21/21 | 6/6 |
+| v4c-2231-terra | 20261127-130056-1 | PASS | 1.0 | 1.0 | $0.700 | 60 | 311 s | 9/9 | 9/9 | 4/4 |
+| v4c-2307-terra | 20261127-125340-1 | PASS | 1.0 | 1.0 | $0.730 | 59 | 320 s | 19/19 | 21/21 | 6/6 |
+| v4c-2318-terra | 20261127-130041-1 | PASS | 1.0 | 1.0 | $0.808 | 55 | 332 s | 19/19 | 19/19 | 6/6 |
+| v4c-nocodex-2231 | 20261127-120235-1 | PASS | 1.0 | 1.0 | $0.488 | 37 | 130 s | 9/9 | 9/9 | 4/4 |
+| v4c-nocodex-2307 | 20261127-115006-1 | PASS | 1.0 | 1.0 | $0.773 | 53 | 314 s | 19/19 | 21/21 | 6/6 |
+| v4c-nocodex-2318 | 20261127-120235-1 | PASS | 1.0 | 1.0 | $0.774 | 45 | 318 s | 19/19 | 19/19 | 6/6 |
 
 ## Notes from reading the logs
 

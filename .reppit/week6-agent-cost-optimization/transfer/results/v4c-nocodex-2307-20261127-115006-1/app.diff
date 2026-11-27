@@ -1,0 +1,151 @@
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/api/src/main.ts week6/app/services/api/src/main.ts
+--- clean-app/services/api/src/main.ts	2026-11-26 20:29:50.669980898 +0000
++++ week6/app/services/api/src/main.ts	2026-11-27 11:51:50.810416789 +0000
+@@ -31,6 +31,7 @@
+   ? Number(process.env.SWITCHYARD_CLOCK)
+   : null;
+ const now = (): number => clockNow ?? Math.floor(Date.now() / 1000);
++store.reconcileResends(now());
+ 
+ let crashPoint: number | null = null;
+ let crashHits = 0;
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/api/src/store.ts week6/app/services/api/src/store.ts
+--- clean-app/services/api/src/store.ts	2026-11-26 20:29:50.669980898 +0000
++++ week6/app/services/api/src/store.ts	2026-11-27 11:51:42.122040866 +0000
+@@ -196,6 +196,42 @@
+     this.enqueue("event.accepted", now, { event });
+   }
+ 
++  // One-time step for resends the shipped release accepted: it dropped some of them in the
++  // router without a trace. Tell the router, per event and endpoint, which requests exist so
++  // it can create the deliveries that are missing. Runs once per store (marker in meta).
++  reconcileResends(now: number): void {
++    this.transaction(() => {
++      const done = this.db
++        .prepare("select 1 from meta where key = 'resend_reconcile'")
++        .get();
++      if (done) return;
++      this.db
++        .prepare("insert into meta (key, value) values ('resend_reconcile', 1)")
++        .run();
++      const rows = this.db
++        .prepare(
++          "select seq, data from outbox where type = 'resend.requested' and status != 'rejected' order by seq",
++        )
++        .all() as unknown as { seq: number; data: string }[];
++      const pairs = new Map<string, { event_id: string; endpoint_id: string; covers: number[] }>();
++      for (const row of rows) {
++        const body = JSON.parse(row.data);
++        const event = this.event(body.event_id);
++        const endpoint = this.endpoint(body.endpoint_id);
++        if (!event || !endpoint || event.merchant_id !== endpoint.merchant_id) continue;
++        const key = `${body.event_id}\u0000${body.endpoint_id}`;
++        const pair = pairs.get(key) ?? {
++          event_id: body.event_id,
++          endpoint_id: body.endpoint_id,
++          covers: [],
++        };
++        pair.covers.push(row.seq);
++        pairs.set(key, pair);
++      }
++      for (const pair of pairs.values()) this.enqueue("resend.reconcile", now, pair);
++    });
++  }
++
+   enqueue(type: string, now: number, data: unknown): void {
+     this.db
+       .prepare("insert into outbox (type, at, data) values (?, ?, ?)")
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/bus.py week6/app/services/router/bus.py
+--- clean-app/services/router/bus.py	2026-11-26 20:29:50.672764394 +0000
++++ week6/app/services/router/bus.py	2026-11-27 11:51:50.963266102 +0000
+@@ -110,8 +110,12 @@
+             need(ep, "version", int),
+         )
+         return producer, str(seq), "endpoint", body
+-    if type_ == "resend.requested":
++    if type_ in ("resend.requested", "resend.reconcile"):
+         body = {"event_id": need(data, "event_id", str), "endpoint_id": need(data, "endpoint_id", str)}
++        if type_ == "resend.reconcile":
++            body["covers"] = need(data, "covers", list)
++            if not all(isinstance(c, int) for c in body["covers"]):
++                raise Malformed("covers must be integers")
+         return producer, str(seq), "resend", body
+     raise Malformed("unknown message type")
+ 
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/routing.py week6/app/services/router/routing.py
+--- clean-app/services/router/routing.py	2026-11-26 20:29:50.672764394 +0000
++++ week6/app/services/router/routing.py	2026-11-27 11:53:14.191972388 +0000
+@@ -17,14 +17,14 @@
+     return "*" in event_types or type_ in event_types
+ 
+ 
+-def create_delivery(db, log, now, event_id, endpoint_id, resend_of=None):
++def create_delivery(db, log, now, event_id, endpoint_id, resend_of=None, by_request=False):
+     version = db.execute("select version from endpoints where id = ?", (endpoint_id,)).fetchone()[0]
+     delivery_id = next_id(db, "dlv")
+     ord_ = db.execute("select value from meta where key = 'dlv'").fetchone()[0]
+     db.execute(
+         "insert into deliveries (id, ord, event_id, endpoint_id, endpoint_version, resend_of, state, "
+-        "available_at, created_at) values (?, ?, ?, ?, ?, ?, 'queued', ?, ?)",
+-        (delivery_id, ord_, event_id, endpoint_id, version, resend_of, now, now),
++        "available_at, created_at, by_request) values (?, ?, ?, ?, ?, ?, 'queued', ?, ?, ?)",
++        (delivery_id, ord_, event_id, endpoint_id, version, resend_of, now, now, int(by_request)),
+     )
+     log.write(
+         "delivery.created", delivery=delivery_id, event=event_id, endpoint=endpoint_id, version=version,
+@@ -140,12 +140,38 @@
+         catch_up(db, log, now, endpoint, disabled_at)
+ 
+ 
++def create_resends(db, log, now, event_id, endpoint_id, count):
++    """Create `count` resend deliveries of the event to the endpoint, if the pair is allowed."""
++    event = db.execute("select merchant_id from events where id = ?", (event_id,)).fetchone()
++    endpoint = db.execute("select merchant_id from endpoints where id = ?", (endpoint_id,)).fetchone()
++    if event is None or endpoint is None or event["merchant_id"] != endpoint["merchant_id"]:
++        log.write("resend.skipped", level="warn", event=event_id, endpoint=endpoint_id)
++        return
++    for _ in range(count):
++        original = db.execute(
++            "select id from deliveries where event_id = ? and endpoint_id = ? order by ord limit 1",
++            (event_id, endpoint_id),
++        ).fetchone()
++        create_delivery(db, log, now, event_id, endpoint_id, resend_of=original["id"] if original else None,
++                        by_request=True)
++
++
+ def apply_resend(db, log, now, body):
+-    original = first_delivery(db, body["event_id"], body["endpoint_id"])
+-    if original is None:
+-        log.write("resend.skipped", level="warn", event=body["event_id"], endpoint=body["endpoint_id"])
++    covers = body.get("covers")
++    if covers is None:
++        create_resends(db, log, now, body["event_id"], body["endpoint_id"], 1)
+         return
+-    create_delivery(db, log, now, body["event_id"], body["endpoint_id"], resend_of=original["id"])
++    # Reconciliation of requests accepted by an earlier release: each covered request is owed
++    # one delivery; the ones already created are counted, the rest are created now.
++    event_id, endpoint_id = body["event_id"], body["endpoint_id"]
++    for seq in covers:
++        db.execute("insert or ignore into bus_seen (producer, ident) values ('api', ?)", (str(seq),))
++    have = db.execute(
++        "select count(*) from deliveries where event_id = ? and endpoint_id = ? and (resend_of is not null or by_request = 1)",
++        (event_id, endpoint_id),
++    ).fetchone()[0]
++    if len(covers) > have:
++        create_resends(db, log, now, event_id, endpoint_id, len(covers) - have)
+ 
+ 
+ def apply(db, log, now, kind, body):
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/store.py week6/app/services/router/store.py
+--- clean-app/services/router/store.py	2026-11-26 20:29:50.672764394 +0000
++++ week6/app/services/router/store.py	2026-11-27 11:53:14.191389181 +0000
+@@ -77,6 +77,9 @@
+     db.execute("pragma journal_mode = wal")
+     db.execute("pragma synchronous = normal")
+     db.executescript(SCHEMA)
++    if not any(r["name"] == "by_request" for r in db.execute("pragma table_info(deliveries)")):
++        # 1 for a delivery created because a resend was requested (also when it is the first).
++        db.execute("alter table deliveries add column by_request integer not null default 0")
+     db.commit()
+     return db
+ 

@@ -154,8 +154,24 @@ submission 1, and no request to `gpt-6.1-terra`: the run was one Sonnet session.
   four incidents and `skipped_rows` wrong in 3; Haiku rarely finishes it; `gpt-6-luna` is near
   but not exact. Full runs with Claude stand-ins: 7 of 7 pass, $0.37 to $0.71. Real pairing on
   the Mac at 92c089b: starter $0.66, INC-2307 $0.63, both pass.
-- **Waiting on the Mac:** the real pairing at the final commit on all four incidents.
-  One Gradescope submission is left.
+- **Final validation (commit 9ec5cb1, the files of the zip for submission 3, nothing set),**
+  each incident once in both places:
+
+  | Incident | Mac: Sonnet, `gpt-6.1-terra` twice | Container: no Codex, fallbacks |
+  | --- | --- | --- |
+  | starter | pass, $0.58, 399 s | pass, $0.44, 246 s |
+  | INC-2231 | pass, $0.70, 311 s | pass, $0.49, 130 s |
+  | INC-2307 | pass, $0.73, 320 s | pass, $0.77, 314 s |
+  | INC-2318 | pass, $0.81, 332 s | pass, $0.77, 318 s |
+
+  8 of 8 pass. The fallback path ran with real models for the first time (`codex` exits 127,
+  `run.sh` says so and starts Haiku and Sonnet low). Three runs are over $0.75 by 2 to 6
+  cents (1 to 3 cost points). The main solver is the cost: 47 to 64 cents on the two larger
+  incidents, so the comparison ($0.60 line) and a report decision ($0.70 line) do not start
+  there, and the extra sessions count through selection alone. Left as it is: a money stop
+  for the main solver would cut it while it is still working, and on the held-out incident
+  the Sonnet session cost $0.24 and $0.39 in the two graded runs.
+- **One Gradescope submission is left.** The zip is built and unchanged since e0b42c6.
 
 ## Out of scope
 
