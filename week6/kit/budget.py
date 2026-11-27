@@ -156,7 +156,7 @@ def state():
     sessions = {}
     session = os.environ.get("KIT_SESSION") or ""
     total = mine = 0.0
-    for path in sorted(glob.glob(os.path.join(logs, "*.jsonl"))):
+    for path in spend.in_order(glob.glob(os.path.join(logs, "*.jsonl"))):
         try:
             cost = spend.cost_of(path, card, sessions)
         except Exception:  # noqa: BLE001 - a log that cannot be read costs nothing here

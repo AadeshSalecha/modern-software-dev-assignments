@@ -95,6 +95,20 @@ if [ -z "${HOME:-}" ]; then
   fi
   export HOME
 fi
+# Go builds and runs its tests from TMPDIR. If that folder cannot hold or run a program, every
+# build fails for a reason no repair can change, so one inside the workspace is used instead.
+scratch_ok() {
+  local dir=$1 probe status
+  probe="$dir/.week6-probe.$$"
+  mkdir -p "$dir" 2>/dev/null && printf '#!/bin/sh\nexit 0\n' >"$probe" 2>/dev/null && chmod +x "$probe" 2>/dev/null && "$probe" 2>/dev/null
+  status=$?
+  rm -f "$probe" 2>/dev/null
+  return $status
+}
+if ! scratch_ok "${TMPDIR:-/tmp}"; then
+  mkdir -p "$ROOT/work/tmp" && export TMPDIR="$ROOT/work/tmp" GOTMPDIR="$ROOT/work/tmp"
+  echo "run.sh: the scratch folder cannot hold or run programs; using work/tmp"
+fi
 PATH="${PATH:-/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin}"
 for extra in /usr/local/go/bin "$HOME/go/bin" "$HOME/.local/bin"; do
   case ":$PATH:" in
@@ -310,7 +324,7 @@ make_copy() { # a second workspace for the second solver: outside this one, or e
     cp -R AGENTS.md CLAUDE.md .claude kit app .pristine "$place/" 2>/dev/null
     [ -f rate_card.json ] && cp rate_card.json "$place/" 2>/dev/null
     cp "$TASK_FILE" "$place/task.md" 2>/dev/null
-    cp work/start.txt work/evidence.txt work/evidence.db "$place/work/" 2>/dev/null
+    cp work/start.txt work/evidence.txt work/evidence.db work/.no_harness "$place/work/" 2>/dev/null
     ln -s "$ROOT/incident" "$place/incident" 2>/dev/null || cp -R incident "$place/incident" 2>/dev/null
     if usable_copy "$place" AGENTS.md task.md kit/check.py kit/rollout.py app/services/api app/services/router \
       app/services/worker app/bin/replaylib.py app/contracts .pristine/app/services incident; then
@@ -563,10 +577,18 @@ if [ -n "$SECOND" ]; then
     while [ "$waited" -lt "$b_left" ]; do
       sleep 5
       waited=$((waited + 5))
-      # It is also stopped when the run has less than ten cents left: what remains is for the
-      # report decision and the comparison, which do more for the answer than its last steps.
+      # It is also stopped for money, but only when the run has less than ten cents left and
+      # this session is past its own share: in two of four runs it was stopped fifteen seconds
+      # after the main solver, unfinished, because the main solver had been expensive.
       if [ $((waited % 15)) -eq 0 ] && ! python3 kit/budget.py --room 0.10 2>/dev/null; then
-        break
+        b_logs=()
+        for b_log in work/logs/b.*.jsonl work/logs/b2.*.jsonl; do
+          [ -e "$b_log" ] && b_logs+=("$b_log")
+        done
+        if [ "${#b_logs[@]}" -gt 0 ] &&
+          ! python3 kit/spend.py --under "$(python3 -c "print($SECOND_SHARE + 0.04)")" "${b_logs[@]}" 2>/dev/null; then
+          break
+        fi
       fi
     done
     kill_tree "$B_PID"
@@ -663,15 +685,28 @@ if [ "${KIT_NO_CROSS:-}" != "1" ]; then
     if [ $(($(elapsed) - A_ENDED)) -gt 230 ]; then
       fix_line=$(python3 -c "print($fix_line - 0.15)")
     fi
+    # The gate is run on the main repair as it stands, whatever follows. The main solver may
+    # have been stopped in the middle of a change: a repair that fails its own gate is the one
+    # thing a session is paid for even when the run is past its other lines.
     gate_now=""
-    if [ "$want_fix" -eq 1 ] && affordable "$fix_line" $((FIX_END - 80)); then
+    gate_blocks=0
+    followed=0
+    if [ "$A_CHANGED" = "1" ] && [ "$(elapsed)" -lt $((FIX_END - 60)) ]; then
       limited 60 bash kit/check.sh --only repair >work/cross/gate.txt 2>&1
       gate_now=$?
       stop_services
+      if [ "$gate_now" -ne 0 ] && grep -q '^BLOCKING' work/cross/gate.txt 2>/dev/null; then
+        gate_blocks=1
+        want_fix=1
+        fix_line=$(python3 -c "print(max($fix_line, $KIT_MONEY + 0.05))")
+        echo "run.sh: the main repair fails its own gate after $(elapsed) s: $(sed -n 2p work/cross/gate.txt | cut -c1-140)"
+      fi
+    fi
+    if [ "$want_fix" -eq 1 ] && [ -n "$gate_now" ] && affordable "$fix_line" $((FIX_END - 80)); then
       fix_prompt="$(cat "kit/prompt-$([ "$fix_kind" = "review" ] && echo review || echo reconcile).md" work/cross/fix.txt 2>/dev/null)"
       [ -s work/cross/fix.txt ] || fix_prompt="$fix_prompt
 (none: your repair passes every run)"
-      if [ "$gate_now" -ne 0 ] && grep -q '^BLOCKING' work/cross/gate.txt; then
+      if [ "$gate_blocks" -eq 1 ]; then
         fix_prompt="$fix_prompt
 
 Before any of that: kit/check.sh --only repair fails on your repair as it is now. Deal with this first.
@@ -679,6 +714,7 @@ Before any of that: kit/check.sh --only repair fails on your repair as it is now
 $(head -30 work/cross/gate.txt)"
       fi
       improve "$fix_kind" "$fix_prompt"
+      followed=1
     fi
     # 4c. Still failing its own gate, with money and time left: one more session on exactly
     #     that. Handing in a repair whose own checks fail is what the budget is there to prevent.
@@ -690,9 +726,10 @@ $(python3 kit/budget.py 2>/dev/null)
 
 $(head -40 work/cross/gate.txt)"
       improve finish "$finish_prompt"
+      followed=1
     fi
     # The better of the two repairs, now that the main one may have changed.
-    if [ -n "$gate_now" ] && [ "$(elapsed)" -lt $((HARD_STOP - 45)) ]; then
+    if [ "$followed" -eq 1 ] && [ "$(elapsed)" -lt $((HARD_STOP - 45)) ]; then
       mkdir -p work/cross/after
       limited $((HARD_STOP - 20 - $(elapsed))) python3 kit/cross.py --b "$B_ROOT" --repairs-only \
         --out work/cross/after >work/cross/log-after.txt 2>&1

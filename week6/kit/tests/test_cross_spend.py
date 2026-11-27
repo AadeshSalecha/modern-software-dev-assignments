@@ -243,6 +243,24 @@ class Spend(unittest.TestCase):
             self.assertAlmostEqual(spend.cost_of(first, self.CARD, sessions), 1.0)
             self.assertAlmostEqual(spend.cost_of(later, self.CARD, sessions), 0.5)
 
+    def test_a_session_that_was_cut_off_and_then_resumed_is_counted_once(self):
+        # The main solver is stopped at its time limit (no result line), then resumed: the
+        # resumed session reports the totals of both parts.
+        with tempfile.TemporaryDirectory() as top:
+            message = {"type": "assistant", "session_id": "s1", "message": {
+                "id": "m1", "model": "m", "content": [{"type": "text", "text": "x" * 36000}],
+                "usage": {"input_tokens": 0, "cache_read_input_tokens": 0, "cache_creation_input_tokens": 0}}}
+            first = os.path.join(top, "a.claude.m.jsonl")
+            write(first, json.dumps(message) + "\n")
+            os.utime(first, (1000, 1000))
+            second = os.path.join(top, "compare.claude.m.jsonl")
+            write(second, self.result("s1", 15000))
+            os.utime(second, (2000, 2000))
+            sessions = {}
+            costs = [spend.cost_of(path, self.CARD, sessions) for path in spend.in_order([second, first])]
+        self.assertAlmostEqual(costs[0], 0.10, places=2)       # about 10,000 tokens estimated for the part cut off
+        self.assertAlmostEqual(sum(costs), 0.15, places=6)     # the resumed session's exact total, once
+
     def test_a_session_that_was_cut_off_is_estimated_from_its_messages(self):
         with tempfile.TemporaryDirectory() as top:
             log = os.path.join(top, "a.claude.m.jsonl")

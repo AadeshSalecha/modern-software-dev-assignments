@@ -58,13 +58,17 @@ def price(card, model, usage):
 def cost_of(path, card, sessions=None):
     """Dollars for one log file. `sessions` carries what has been counted per Claude session
     across files: a resumed session reports the totals of the whole session again, so only
-    the increase belongs to the later file."""
+    the increase belongs to the later file. That holds for a session that was stopped and
+    then resumed as well: what was estimated for the part that was cut off is remembered, and
+    the exact total that the resumed session reports replaces it. Files of one session have
+    to come in the order they were written (see in_order)."""
     sessions = {} if sessions is None else sessions
     name = os.path.basename(path).split(".")
     file_model = ".".join(name[2:-1]) if len(name) > 3 else ""
     total = 0.0
     codex_items, codex_done = 0, False
     pending = {}  # claude messages since the last session result: id -> (model, usage, characters written)
+    session = None
     try:
         handle = open(path, encoding="utf-8", errors="replace")
     except OSError:
@@ -78,6 +82,8 @@ def cost_of(path, card, sessions=None):
             except ValueError:
                 continue
             kind = event.get("type")
+            if isinstance(event.get("session_id"), str):
+                session = event["session_id"]
             if kind == "assistant" and isinstance(event.get("message"), dict):
                 # The usage on a message is taken when the request starts: input and cache counts
                 # are right, the output count is not. Output is estimated from what was written.
@@ -121,14 +127,29 @@ def cost_of(path, card, sessions=None):
                     "output": usage.get("output_tokens", 0),
                     "cache_read": cached,
                 })
+    estimated = 0.0
     for model, usage, written in pending.values():  # a session that was cut off
-        total += price(card, model, dict(usage, output=int(written / CHARS_PER_OUTPUT_TOKEN)))
+        estimated += price(card, model, dict(usage, output=int(written / CHARS_PER_OUTPUT_TOKEN)))
+    total += estimated
+    if estimated and session:
+        sessions[session] = sessions.get(session, 0.0) + estimated
     if codex_items and not codex_done:
         # A Codex session reports its tokens only when its turn ends. One that is still running
         # or was cut off is priced by what it has done: about 0.35 cents per finished step on
         # gpt-6.1-terra in five sessions, scaled by the model's output price.
         total += codex_items * CODEX_DOLLARS_PER_ITEM * rate_for(card, file_model).get("output", 5.0) / 5.0
     return total
+
+
+def in_order(files):
+    """The logs oldest first, by when each was last written: a session that is resumed writes
+    a later file, and its totals include the earlier one."""
+    def written(path):
+        try:
+            return os.path.getmtime(path)
+        except OSError:
+            return 0.0
+    return sorted(files, key=lambda path: (written(path), path))
 
 
 def main(argv):
@@ -145,7 +166,7 @@ def main(argv):
         files += sorted(glob.glob(os.path.join(path, "*.jsonl"))) if os.path.isdir(path) else [path]
     card = rates()
     sessions = {}
-    costs = [(path, cost_of(path, card, sessions)) for path in files]
+    costs = [(path, cost_of(path, card, sessions)) for path in in_order(files)]
     total = sum(cost for _, cost in costs)
     if limit is not None:
         return 0 if total < limit else 1
