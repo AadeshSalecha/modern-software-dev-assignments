@@ -15,13 +15,16 @@ another agent did the whole job on its own. What happens:
             scenarios are run on both, alone and across a release replacement. Every
             failure is listed for the first workspace's author. Which repair is handed in
             is decided on less: "a" unless "b" is better on objective grounds (better()).
-  reports   The files under out/ are compared value by value, ignoring the order of lists.
+  reports   The files under out/ are compared value by value, ignoring the order of lists:
+            those of the two workspaces and, with --c, one made from the raw files without
+            the kit's database. See compare_reports for what settles a difference.
 
 Written to <out>/:
   decision.env   BEST=a|b  A_FAILS=<n>  B_FAILS=<n>  A_USABLE=0|1  B_USABLE=0|1
-                 A_CHANGED=0|1  B_CHANGED=0|1  REPORTS=same|differ|only_a|only_b|none
+                 A_CHANGED=0|1  B_CHANGED=0|1  REPORTS=same|settled|decide|none
   fix.txt        for the first workspace's author: the runs its repair fails
-  reports.txt    how the two reports differ
+  reports.txt    how the reports differ
+  decided/       with REPORTS=settled: the report files to hand in
   summary.txt    everything above, for the log
 Copied to <first workspace>/work/cross/, for its author to compare with: the other repair as a
 diff against the shipped release (other.diff), the other ledger, the other scenarios, and each
@@ -255,21 +258,37 @@ def judge_repairs(roots, deadline):
 
 
 def better(scores):
-    """The name of the repair to hand in. "a", the main solver's, unless "b" is better on grounds
-    that do not depend on whose reading of the ticket is right: "a" does not build or changed
-    nothing, breaks more of the scenarios shipped with the release, or fails more scenarios that
-    its own author wrote (and the other repair passes) than "b" fails of its own.
+    """The name of the repair to hand in: "a", the main solver's, unless "b" is better.
 
-    Scenarios of one author that the other repair fails are not counted here. They are an
-    opinion about the ticket; the other author is shown them and can take them up or not. Nor
-    are the hand-over and restart variants: they ask for more than a judge does about one run
-    in three."""
+    "b" is better on objective grounds when "a" does not build or changed nothing, breaks more
+    of the scenarios shipped with the release, or fails more scenarios that its own author
+    wrote (and the other repair passes) than "b" fails of its own.
+
+    Failing the other author's scenarios is weaker evidence: such a scenario is an opinion
+    about the ticket, and counting them let whoever wrote more of them win. It decides only
+    when it is one-sided: "b" passes every scenario "a" wrote and "a" fails some that "b"
+    wrote. Then "b" does everything either author thought to test and "a" does not. The main
+    author has been shown those runs first and has left them failing.
+
+    The hand-over and restart variants never decide: they ask for more than a judge does
+    about one run in three.
+    """
+    def count(name, author):
+        return sum(1 for f in scores[name]["fails"] if f["how"] == "as written" and author(f["author"]))
+
     def rank(name):
         score = scores[name]
         shipped = sum(1 for f in score["fails"] if f["author"] == "shipped")
-        own = sum(1 for f in score["fails"] if f["author"] == name and f["how"] == "as written")
+        own = count(name, lambda author: author == name)
         return (not score["usable"], not score["changed"], shipped, own, name)
-    return min(scores, key=rank)
+
+    best = min(scores, key=rank)
+    if best == "a" and "b" in scores and rank("a")[:4] == rank("b")[:4]:
+        a_fails_theirs = count("a", lambda author: author == "b")
+        b_fails_theirs = count("b", lambda author: author == "a")
+        if a_fails_theirs > 0 and b_fails_theirs == 0:
+            return "b"
+    return best
 
 
 # --- reports --------------------------------------------------------------------------
@@ -316,42 +335,83 @@ def differences(a, b, where="", limit=6):
     return out
 
 
-def compare_reports(roots):
-    """Returns (state, lines). state: same, differ, only_a, only_b or none."""
-    files = {}
+def load_reports(roots):
+    """{file name: {workspace name: (path, content)}} for the files under each workspace's out/.
+    JSON is read into a canonical form; a file that cannot be read is left out."""
+    found = {}
     for name, root in roots.items():
         for path in sorted(glob.glob(os.path.join(root, "out", "*"))):
-            if os.path.isfile(path):
-                files.setdefault(os.path.basename(path), {})[name] = path
-    if not files:
-        return "none", ["neither workspace has a file under out/"]
-    lines, states = [], set()
-    for base, owners in sorted(files.items()):
-        loaded = {}
-        for name, path in owners.items():
+            if not os.path.isfile(path):
+                continue
+            base = os.path.basename(path)
             try:
                 with open(path, encoding="utf-8") as handle:
-                    loaded[name] = canonical(json.load(handle)) if base.endswith(".json") else handle.read()
+                    content = canonical(json.load(handle)) if base.endswith(".json") else handle.read()
             except (OSError, ValueError):
-                lines.append(f"out/{base} in {name} cannot be read")
-        if set(loaded) == {"a", "b"}:
-            if loaded["a"] == loaded["b"]:
-                states.add("same")
-                lines.append(f"out/{base}: the two reports are identical")
+                continue
+            found.setdefault(base, {})[name] = (path, content)
+    return found
+
+
+def compare_reports(roots, decided_dir=None):
+    """Compare the reports of up to three workspaces: "a" and "b" (both made with the kit's
+    evidence database) and "c" (made from the raw files, without it).
+
+    Returns (state, lines):
+      none     nobody wrote a report
+      same     every report there is says the same, and "a" has one
+      settled  the reports say which one to hand in without anyone having to judge; it is
+               written to decided_dir. That is the case when "a" has none; when the report
+               from the raw files agrees with one of the two others (two independent ways to
+               the same answer); and never on a count of votes alone
+      decide   they differ and nothing settles it: someone has to work it out
+    """
+    files = load_reports(roots)
+    if not files:
+        return "none", ["no workspace has a file under out/"]
+    order = {"none": 0, "same": 1, "settled": 2, "decide": 3}
+    worst, lines = "none", []
+    for base, owners in sorted(files.items()):
+        names = sorted(owners)
+        groups = []  # workspaces that agree with each other
+        for name in names:
+            for group in groups:
+                if owners[group[0]][1] == owners[name][1]:
+                    group.append(name)
+                    break
             else:
-                states.add("differ")
-                found = differences(loaded["a"], loaded["b"]) if base.endswith(".json") else ["the text differs"]
-                lines += [f"out/{base}: the two reports differ"] + ["  " + line for line in found[:40]]
-        elif "a" in loaded:
-            states.add("only_a")
-            lines.append(f"out/{base}: only a has it")
-        elif "b" in loaded:
-            states.add("only_b")
-            lines.append(f"out/{base}: only b has it")
-    for state in ("differ", "only_b", "only_a", "same"):
-        if state in states:
-            return state, lines
-    return "none", lines
+                groups.append([name])
+        told = ", ".join("=".join(group) for group in groups)
+        take, state, why = None, "decide", ""
+        if len(groups) == 1:
+            if "a" in names:
+                state, why = "same", f"{len(names)} report(s), all the same"
+            else:
+                take, state, why = names[0], "settled", f"a has none; taking {names[0]}'s"
+        elif "a" not in names:
+            # b and c differ and a has nothing: the one made from the raw files stands alone
+            take, state, why = ("c" if "c" in names else names[0]), "settled", "a has none and the others differ"
+        else:
+            with_c = next((group for group in groups if "c" in group), None)
+            if with_c and len(with_c) > 1:
+                take = "a" if "a" in with_c else with_c[0]
+                state = "settled"
+                why = f"the report made from the raw files agrees with {'a' if take == 'a' else take}"
+        lines.append(f"out/{base}: {told} ({why or 'they differ and nothing settles it'})")
+        if state == "settled" and decided_dir and take != "a":
+            os.makedirs(decided_dir, exist_ok=True)
+            shutil.copy(owners[take][0], os.path.join(decided_dir, base))
+        if state == "settled" and take == "a":
+            state = "same"  # a stays as it is
+        if len(groups) > 1 and base.endswith(".json"):
+            for i, first in enumerate(groups):
+                for second in groups[i + 1:]:
+                    x, y = first[0], second[0]
+                    lines.append(f"  {x} against {y} (in the lines below, \"a\" stands for {x} and \"b\" for {y}):")
+                    lines += ["    " + line for line in differences(owners[x][1], owners[y][1])[:26]]
+        if order[state] > order[worst]:
+            worst = state
+    return worst, lines
 
 
 # --- main -----------------------------------------------------------------------------
@@ -359,7 +419,7 @@ def compare_reports(roots):
 
 def describe(scores, best, notes):
     lines = [f"repairs: better is {best}"]
-    for name in ("a", "b"):
+    for name in sorted(scores):
         score = scores[name]
         lines.append(f"  {name}: {'usable' if score['usable'] else 'does not build'}, "
                      f"{'changed' if score['changed'] else 'unchanged from the shipped release'}, "
@@ -372,6 +432,7 @@ def describe(scores, best, notes):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--b", required=True)
+    parser.add_argument("--c", help="a third folder that holds only a report (out/) and its script (report.py), made from the raw files")
     parser.add_argument("--out", default=os.path.join(A_ROOT, "work", "cross"))
     parser.add_argument("--repairs-only", action="store_true",
                         help="score the repairs again and write decision.env and summary.txt; copy nothing")
@@ -395,7 +456,12 @@ def main(argv=None):
             handle.write("\n".join(summary) + "\n")
         print("\n".join(summary))
         return 0
-    state, report_lines = compare_reports(roots)
+    report_roots = dict(roots)
+    if args.c and os.path.isdir(args.c):
+        report_roots["c"] = os.path.abspath(args.c)
+    decided = os.path.join(args.out, "decided")
+    shutil.rmtree(decided, ignore_errors=True)
+    state, report_lines = compare_reports(report_roots, decided)
 
     # For the main solver, whose session is resumed to compare the two repairs: the runs its
     # own repair fails, each as the scenario that was played.
@@ -426,13 +492,17 @@ def main(argv=None):
     # The other report and its script, next to ours, for whoever has to decide between them.
     mine = os.path.join(roots["a"], "work", "cross")
     os.makedirs(mine, exist_ok=True)
-    for path in glob.glob(os.path.join(roots["b"], "out", "*")):
-        if os.path.isfile(path):
-            base, ext = os.path.splitext(os.path.basename(path))
-            shutil.copy(path, os.path.join(mine, f"{base}-b{ext}"))
-    script = os.path.join(roots["b"], "work", "report.py")
-    if os.path.isfile(script):
-        shutil.copy(script, os.path.join(mine, "report-b.py"))
+    for name, root in report_roots.items():
+        if name == "a":
+            continue
+        for path in glob.glob(os.path.join(root, "out", "*")):
+            if os.path.isfile(path):
+                base, ext = os.path.splitext(os.path.basename(path))
+                shutil.copy(path, os.path.join(mine, f"{base}-{name}{ext}"))
+        for script in (os.path.join(root, "work", "report.py"), os.path.join(root, "report.py")):
+            if os.path.isfile(script):
+                shutil.copy(script, os.path.join(mine, f"report-{name}.py"))
+                break
     with open(os.path.join(args.out, "reports.txt"), "w", encoding="utf-8") as handle:
         handle.write("\n".join(report_lines) + "\n")
 

@@ -27,9 +27,13 @@ class Better(unittest.TestCase):
     def test_a_tie_goes_to_a(self):
         self.assertEqual(cross.better({"a": self.score(), "b": self.score()}), "a")
 
-    def test_the_other_author_s_scenarios_do_not_decide(self):
+    def test_the_other_author_s_scenarios_decide_only_when_one_sided(self):
         a = self.score(fails=[("b", "as written")] * 5)
-        self.assertEqual(cross.better({"a": a, "b": self.score()}), "a")
+        self.assertEqual(cross.better({"a": a, "b": self.score()}), "b")
+        both = self.score(fails=[("a", "as written")])
+        self.assertEqual(cross.better({"a": a, "b": self.score(fails=[("a", "as written")])}), "a")
+        variants = self.score(fails=[("b", "handed over before the last drain")] * 3)
+        self.assertEqual(cross.better({"a": variants, "b": self.score()}), "a")
 
     def test_nor_do_the_variants(self):
         a = self.score(fails=[("a", "handed over before the last drain"), ("a", "every service restarted before the last drain")])
@@ -83,6 +87,56 @@ class PrivateFormat(unittest.TestCase):
         self.assertEqual(cross.private_bus_step(self.SCENARIO, self.outcome(200), [self.outcome(200)]), "")
         self.assertEqual(cross.private_bus_step(self.SCENARIO, self.outcome(422), [self.outcome(422)]), "")
         self.assertEqual(cross.private_bus_step(self.SCENARIO, {"problems": ["x"], "result": None}, [self.outcome(200)]), "")
+
+
+class ThreeReports(unittest.TestCase):
+    """compare_reports: a and b use the kit's database, c is made from the raw files."""
+
+    def roots(self, top, **reports):
+        roots = {}
+        for name, content in reports.items():
+            root = os.path.join(top, name)
+            os.makedirs(os.path.join(root, "out"))
+            roots[name] = root
+            if content is not None:
+                write(os.path.join(root, "out", "impact.json"), json.dumps(content))
+        return roots
+
+    def state(self, **reports):
+        with tempfile.TemporaryDirectory() as top:
+            decided = os.path.join(top, "decided")
+            state, lines = cross.compare_reports(self.roots(top, **reports), decided)
+            taken = None
+            if os.path.isfile(os.path.join(decided, "impact.json")):
+                with open(os.path.join(decided, "impact.json"), encoding="utf-8") as handle:
+                    taken = json.load(handle)
+            return state, taken, "\n".join(lines)
+
+    X, Y, Z = {"affected": [1]}, {"affected": [2]}, {"affected": [3]}
+
+    def test_all_the_same(self):
+        self.assertEqual(self.state(a=self.X, b=self.X, c=self.X)[:2], ("same", None))
+        self.assertEqual(self.state(a=self.X, b=self.X)[:2], ("same", None))
+
+    def test_the_raw_file_report_agreeing_with_a_keeps_a(self):
+        self.assertEqual(self.state(a=self.X, b=self.Y, c=self.X)[:2], ("same", None))
+
+    def test_the_raw_file_report_agreeing_with_b_takes_b(self):
+        self.assertEqual(self.state(a=self.X, b=self.Y, c=self.Y)[:2], ("settled", self.Y))
+
+    def test_the_two_database_reports_against_the_raw_file_one_needs_deciding(self):
+        state, taken, lines = self.state(a=self.X, b=self.X, c=self.Y)
+        self.assertEqual((state, taken), ("decide", None))
+        self.assertIn("a against c", lines)
+
+    def test_three_different_or_two_without_the_third_need_deciding(self):
+        self.assertEqual(self.state(a=self.X, b=self.Y, c=self.Z)[0], "decide")
+        self.assertEqual(self.state(a=self.X, b=self.Y)[0], "decide")
+
+    def test_without_a_report_from_a_another_is_taken(self):
+        self.assertEqual(self.state(a=None, b=self.Y)[:2], ("settled", self.Y))
+        self.assertEqual(self.state(a=None, b=self.Y, c=self.Z)[:2], ("settled", self.Z))
+        self.assertEqual(self.state(a=None, b=None)[0], "none")
 
 
 class OtherWork(unittest.TestCase):

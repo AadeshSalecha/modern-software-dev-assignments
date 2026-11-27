@@ -8,7 +8,9 @@
 #                       instruction files, load the evidence into work/evidence.db
 #   2. two solvers      each does the whole job on its own, at the same time: the main agent
 #                       here, the second agent in a copy of this workspace. They are different
-#                       harnesses and model families on purpose
+#                       harnesses and model families on purpose. A third session answers
+#                       only the report request, from the raw files, without the kit's
+#                       database or skills
 #   3. kit/cross.py     no model: every scenario either solver wrote is run on both repairs,
 #                       and the two reports are compared
 #   4. follow-up        the main solver's session is resumed with the other solver's change,
@@ -28,7 +30,9 @@
 # what is submitted; the grader passes no environment, so it gets them.
 #   KIT_MAIN     the main solver
 #   KIT_SECOND   the second solver; empty for one solver only
-#   KIT_JUDGE    the session that decides between two different reports
+#   KIT_THIRD    the session that derives the report from the raw files; empty for none
+#   KIT_JUDGE    the session that decides between different reports
+#   KIT_SECOND_FALLBACK, KIT_THIRD_FALLBACK   what runs if those two do not get going
 # Other switches for experiments: KIT_TOOLS, KIT_MAX_TURNS, KIT_NO_HOOK=1, KIT_NO_FOLLOWUP=1,
 # KIT_VARIANT=flags (the bare ticket with only the harness flags changed) or report (only the
 # report, by one session), KIT_SOLVE_END,
@@ -54,7 +58,14 @@ RECONCILE=${KIT_RECONCILE:-always}     # always: compare the two repairs every t
 
 MAIN="${KIT_MAIN:-claude:claude-sonnet-5-5:medium}"
 SECOND="${KIT_SECOND-codex:gpt-6.1-terra:medium}"
+THIRD="${KIT_THIRD-codex:gpt-6.1-terra:medium}"
 JUDGE="${KIT_JUDGE:-claude:claude-sonnet-5-5:medium}"
+# If the harness of the second or third agent does not get going here (the first graded run of
+# this design made no request to it at all), a Claude Code session takes its place: that
+# harness is known to work wherever the main solver does.
+SECOND_FALLBACK="${KIT_SECOND_FALLBACK-claude:claude-haiku-5-5:medium}"
+THIRD_FALLBACK="${KIT_THIRD_FALLBACK-claude:claude-haiku-5-5:medium}"
+REPORT_END=${KIT_REPORT_END:-220}      # the report-only session is stopped this many seconds after the start
 
 # One limit for money and one clock for the whole run, which kit/budget.py reports to this
 # script, to the stop hook and to the agents. Sessions that have room are given more of it:
@@ -93,6 +104,7 @@ export DISABLE_AUTOUPDATER=1
 CHILD=""
 BACKGROUND=""
 B_ROOT=""
+C_ROOT=""
 limited() { # limited <seconds> <command...>: stop the command when the time is up
   local seconds=$1
   shift
@@ -148,6 +160,9 @@ finish() {
   # The second workspace is a copy of everything: what was worth keeping is in work/cross/.
   if [ -n "$B_ROOT" ] && [ "$B_ROOT" != "$ROOT" ] && [ -d "$B_ROOT/kit" ] && [ "${KIT_KEEP_B:-}" != "1" ]; then
     rm -rf "$B_ROOT"
+  fi
+  if [ -n "$C_ROOT" ] && [ "$C_ROOT" != "$ROOT" ] && [ -d "$C_ROOT/contracts" ] && [ "${KIT_KEEP_B:-}" != "1" ]; then
+    rm -rf "$C_ROOT"
   fi
 }
 trap finish EXIT
@@ -244,19 +259,88 @@ compose() { # compose <prompt file> [extra file]: the fixed prompt, the notes fr
   printf '\n</ticket>\n'
 }
 
-make_copy() { # a second workspace for the second solver, outside this one where possible
-  B_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/week6-b.XXXXXX" 2>/dev/null) || B_ROOT=""
-  if [ -z "$B_ROOT" ] || [ ! -w "$B_ROOT" ]; then
-    B_ROOT="$ROOT/.b"
-    mkdir -p "$B_ROOT" || return 1
-  fi
-  cp -R AGENTS.md CLAUDE.md .claude kit app .pristine "$B_ROOT/" || return 1
-  [ -f rate_card.json ] && cp rate_card.json "$B_ROOT/"
-  cp "$TASK_FILE" "$B_ROOT/task.md" || return 1
-  mkdir -p "$B_ROOT/work/scenarios" "$B_ROOT/out"
-  cp work/start.txt work/evidence.txt work/evidence.db "$B_ROOT/work/" 2>/dev/null
-  ln -s "$ROOT/incident" "$B_ROOT/incident" 2>/dev/null
+COPY_PROBLEM=""
+usable_copy() { # usable_copy <dir> <needed path>...: all of it is there and programs can be run from there
+  local place=$1 need
+  shift
+  for need in "$@"; do
+    [ -e "$place/$need" ] || {
+      COPY_PROBLEM="$need is missing"
+      return 1
+    }
+  done
+  mkdir -p "$place/work" 2>/dev/null
+  printf '#!/bin/sh\nexit 0\n' >"$place/work/.probe" 2>/dev/null && chmod +x "$place/work/.probe" 2>/dev/null &&
+    "$place/work/.probe" 2>/dev/null || {
+    COPY_PROBLEM="programs cannot be run from there"
+    return 1
+  }
+  rm -f "$place/work/.probe"
   return 0
+}
+
+# A graded run is another account than the one that put the files here, so some path under app/
+# may not be readable. Copies therefore take what can be taken and are then checked for what a
+# session needs; one failed file must not cost the run its second opinion.
+make_copy() { # a second workspace for the second solver: outside this one, or else inside it
+  local place
+  for place in "$(mktemp -d "${TMPDIR:-/tmp}/week6-b.XXXXXX" 2>/dev/null)" "$ROOT/.second"; do
+    [ -n "$place" ] || continue
+    rm -rf "$ROOT/.second" 2>/dev/null
+    mkdir -p "$place/work/scenarios" "$place/out" 2>/dev/null || continue
+    cp -R AGENTS.md CLAUDE.md .claude kit app .pristine "$place/" 2>/dev/null
+    [ -f rate_card.json ] && cp rate_card.json "$place/" 2>/dev/null
+    cp "$TASK_FILE" "$place/task.md" 2>/dev/null
+    cp work/start.txt work/evidence.txt work/evidence.db "$place/work/" 2>/dev/null
+    ln -s "$ROOT/incident" "$place/incident" 2>/dev/null || cp -R incident "$place/incident" 2>/dev/null
+    if usable_copy "$place" AGENTS.md task.md kit/check.py kit/rollout.py app/services/api app/services/router \
+      app/services/worker app/bin/replaylib.py app/contracts .pristine/app/services incident; then
+      B_ROOT=$place
+      return 0
+    fi
+    echo "run.sh: no second workspace at $place: $COPY_PROBLEM"
+    rm -rf "$place" 2>/dev/null
+  done
+  B_ROOT=""
+  return 1
+}
+
+make_room() { # a bare folder for the report-only session: the ticket, the raw evidence, the contracts
+  local place
+  for place in "$(mktemp -d "${TMPDIR:-/tmp}/week6-c.XXXXXX" 2>/dev/null)" "$ROOT/.third"; do
+    [ -n "$place" ] || continue
+    rm -rf "$ROOT/.third" 2>/dev/null
+    mkdir -p "$place/work" "$place/out" 2>/dev/null || continue
+    cp "$TASK_FILE" "$place/task.md" 2>/dev/null
+    cp -R app/contracts "$place/contracts" 2>/dev/null
+    ln -s "$ROOT/incident" "$place/incident" 2>/dev/null || cp -R incident "$place/incident" 2>/dev/null
+    if usable_copy "$place" task.md contracts/evidence.md incident; then
+      C_ROOT=$place
+      return 0
+    fi
+    echo "run.sh: no folder for the report-only session at $place: $COPY_PROBLEM"
+    rm -rf "$place" 2>/dev/null
+  done
+  C_ROOT=""
+  return 1
+}
+
+got_going() { # got_going <log>: the harness reached its model and did something
+  grep -q -e '"type":"item.completed"' -e '"type":"assistant"' -e '"type":"turn.completed"' "$1" 2>/dev/null
+}
+
+# with_fallback <first spec> <fallback spec> <log name> <seconds from the start> <stage> <prompt>
+# Runs the first agent in the current directory. If its harness comes back within a minute
+# without having done anything, the fallback runs in its place.
+with_fallback() {
+  local first=$1 fallback=$2 name=$3 until=$4 stage=$5 prompt=$6 began log
+  began=$(date +%s)
+  log=$(log_for "$name" "$first")
+  KIT_SESSION=$name agent "$first" start $((until - $(elapsed))) "$stage" "$prompt" >"$log" 2>&1
+  if ! got_going "$log" && [ -n "$fallback" ] && [ $(($(date +%s) - began)) -lt 60 ]; then
+    echo "run.sh: $first did not get going as $name (see its output below); $fallback takes its place" >>"$log"
+    KIT_SESSION=${name}2 agent "$fallback" start $((until - $(elapsed))) "$stage" "$prompt" >"$(log_for "${name}2" "$fallback")" 2>&1
+  fi
 }
 
 if [ "${KIT_VARIANT:-}" = "flags" ]; then
@@ -370,13 +454,33 @@ improve() {
 }
 
 # --- 2. the solvers ------------------------------------------------------------------------
+B_PID=""
+C_PID=""
 if [ -n "$SECOND" ] && make_copy; then
   B_LOG=$(log_for b "$SECOND")
-  (cd "$B_ROOT" && KIT_SESSION=b KIT_SHARE=$SECOND_SHARE agent "$SECOND" start $((SOLVE_END - $(elapsed))) all "$PROMPT") >"$B_LOG" 2>&1 &
+  (cd "$B_ROOT" && KIT_SHARE=$SECOND_SHARE with_fallback "$SECOND" "$SECOND_FALLBACK" b "$SOLVE_END" all "$PROMPT") &
   B_PID=$!
   BACKGROUND="$B_PID"
+  echo "run.sh: second solver ($SECOND) started in $B_ROOT"
 else
+  [ -n "$SECOND" ] && echo "run.sh: no second workspace could be made; going on without a second solver"
   SECOND=""
+fi
+# A third session answers only the report request, from the raw files, in a folder that has
+# neither the kit's database nor its skills: a way to the report that shares nothing with the
+# other two but the ticket.
+if [ -n "$THIRD" ] && make_room; then
+  RAW_PROMPT="$(cat kit/prompt-report-raw.md)
+$(printf '\n<ticket file="%s">\n' "$TASK_FILE")
+$(cat "$TASK_FILE")
+</ticket>"
+  (cd "$C_ROOT" && KIT_NO_HOOK=1 with_fallback "$THIRD" "$THIRD_FALLBACK" c "$REPORT_END" report "$RAW_PROMPT") &
+  C_PID=$!
+  BACKGROUND="$BACKGROUND $C_PID"
+  echo "run.sh: report-only session ($THIRD) started in $C_ROOT"
+else
+  [ -n "$THIRD" ] && echo "run.sh: no folder for the report-only session could be made; going on without it"
+  THIRD=""
 fi
 A_LOG=$(log_for a "$MAIN")
 KIT_SESSION=a KIT_SHARE=$MAIN_SHARE KIT_PHASE=solve agent "$MAIN" start $((SOLVE_END - $(elapsed))) all "$PROMPT" >"$A_LOG" 2>&1
@@ -404,13 +508,19 @@ if [ -n "$SECOND" ]; then
   ) >/dev/null 2>&1 &
   B_TIMER=$!
   wait "$B_PID"
-  echo "run.sh: second solver ($SECOND) ended with status $? after $(elapsed) s; its output follows"
+  echo "run.sh: second solver ended with status $? after $(elapsed) s; its output follows"
   pkill -P "$B_TIMER" 2>/dev/null
   kill "$B_TIMER" 2>/dev/null
   wait "$B_TIMER" 2>/dev/null
-  BACKGROUND=""
-  cat "$B_LOG"
+  cat work/logs/b.*.jsonl work/logs/b2.*.jsonl 2>/dev/null
 fi
+if [ -n "$C_PID" ]; then
+  wait "$C_PID"
+  echo "run.sh: report-only session ended with status $? after $(elapsed) s; its output follows"
+  cat work/logs/c.*.jsonl work/logs/c2.*.jsonl 2>/dev/null
+  ls "$C_ROOT/out" 2>/dev/null | sed 's/^/run.sh: it wrote out\//'
+fi
+BACKGROUND=""
 stop_services
 
 # --- 3. cross-check, 4. follow-up, 5. install ---------------------------------------------
@@ -419,8 +529,12 @@ A_FAILS=0
 A_CHANGED=0
 B_CHANGED=0
 REPORTS=same
-if [ -n "$SECOND" ]; then
-  limited 140 python3 kit/cross.py --b "$B_ROOT" >work/cross/log.txt 2>&1
+if [ -n "$SECOND" ] || [ -n "$THIRD" ]; then
+  if [ -z "$SECOND" ]; then
+    B_ROOT="$ROOT/work/cross/no-second" # nothing there: the reports are still compared
+    mkdir -p "$B_ROOT"
+  fi
+  limited 140 python3 kit/cross.py --b "$B_ROOT" ${C_ROOT:+--c "$C_ROOT"} >work/cross/log.txt 2>&1
   echo "run.sh: cross-check after $(elapsed) s:"
   head -40 work/cross/log.txt
   stop_services
@@ -436,9 +550,15 @@ if [ -n "$SECOND" ]; then
 
   JUDGE_PID=""
   if [ "${KIT_NO_FOLLOWUP:-}" != "1" ]; then
-    # 4a. Two different reports: a fresh session decides. The first report is kept in case it fails.
-    if [ "$REPORTS" = "differ" ] && affordable "$JUDGE_BUDGET" $((HARD_STOP - 140)); then
-      mkdir -p work/cross/out-a && cp out/* work/cross/out-a/ 2>/dev/null
+    # 4a. The reports. Settled without a judge: the one made from the raw files agrees with
+    #     one of the others, or the main solver has none. Otherwise a fresh session works out
+    #     each difference. The main solver's report is kept aside either way.
+    mkdir -p work/cross/out-a && cp out/* work/cross/out-a/ 2>/dev/null
+    if [ "$REPORTS" = "settled" ] && ls work/cross/decided/* >/dev/null 2>&1; then
+      mkdir -p out && cp work/cross/decided/* out/
+      echo "run.sh: the reports settle it without a judge; out/ now holds: $(ls work/cross/decided | tr '\n' ' ')"
+    fi
+    if [ "$REPORTS" = "decide" ] && affordable "$JUDGE_BUDGET" $((HARD_STOP - 140)); then
       judge_spec=$(with_room "$JUDGE" 0.24) # about 15 cents at effort high, and a comparison may follow
       JUDGE_LOG=$(log_for judge "$judge_spec")
       judge_prompt="$(compose kit/prompt-adjudicate.md work/cross/reports.txt)"
@@ -450,7 +570,7 @@ if [ -n "$SECOND" ]; then
     # 4b. The main solver's session is resumed with the other solver's change, ledger and
     #     scenarios, the runs its own repair fails, and what the gate still reports.
     want_fix=0
-    if [ "$A_CHANGED" = "1" ]; then
+    if [ "$A_CHANGED" = "1" ] && [ -n "$SECOND" ]; then
       [ "$A_FAILS" -gt 0 ] && want_fix=1
       [ "$RECONCILE" = "always" ] && [ "$B_CHANGED" = "1" ] && want_fix=1
     fi
@@ -515,11 +635,7 @@ $(head -40 work/cross/gate.txt)"
     BACKGROUND=""
   fi
 
-  if [ "$REPORTS" = "only_b" ]; then
-    mkdir -p out && cp "$B_ROOT"/out/* out/ 2>/dev/null
-    echo "run.sh: only the second solver wrote a report; using it"
-  fi
-  if [ "$BEST" = "b" ]; then
+  if [ "$BEST" = "b" ] && [ -n "$SECOND" ]; then
     for service in api router worker; do
       if [ -d "$B_ROOT/app/services/$service" ]; then
         mv "app/services/$service" "work/cross/a-$service" 2>/dev/null
