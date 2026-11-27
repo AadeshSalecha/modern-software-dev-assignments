@@ -26,6 +26,12 @@ FALLBACK = {  # dollars per million tokens, if rate_card.json is not there
 }
 
 
+# For a session still running, output is estimated from what it has written so far. In 25
+# finished sessions the logged content came to 3.7 to 4.6 characters per output token (thinking
+# included); the low end is used, so the estimate errs high.
+CHARS_PER_OUTPUT_TOKEN = 3.6
+
+
 def rates():
     try:
         with open(os.path.join(os.path.dirname(KIT), "rate_card.json"), encoding="utf-8") as handle:
@@ -111,7 +117,7 @@ def cost_of(path, card, sessions=None):
                     "cache_read": cached,
                 })
     for model, usage, written in pending.values():  # a session that was cut off
-        total += price(card, model, dict(usage, output=int(written / 2.5)))
+        total += price(card, model, dict(usage, output=int(written / CHARS_PER_OUTPUT_TOKEN)))
     return total
 
 

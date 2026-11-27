@@ -26,6 +26,11 @@ Work in this order, in as few steps as you can. Send independent commands togeth
 5. **Check.** Run `kit/check.sh`. Fix what it reports, tick each ledger line you have
    actually verified, and stop. It runs again when you stop and sends you back if it fails.
 
+Budget: being right is worth far more here than being quick or cheap. `python3 kit/budget.py`
+shows what this session has used of the money and time set aside for it. Do not stop early
+with ledger lines unproven while there is room; do not start something large when it shows
+under a minute left.
+
 Finish with at most eight lines: the cause, what changed in which service, and anything you
 could not verify.
 

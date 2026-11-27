@@ -13,8 +13,10 @@
 #                       and the two reports are compared
 #   4. follow-up        the main solver's session is resumed with the other solver's change,
 #                       ledger and scenarios, and the runs its own repair fails, and settles
-#                       each difference by the ticket; its result is kept only if it is no
-#                       worse, and the better of the two repairs is then chosen again.
+#                       each difference by the ticket. If its own gate still fails after
+#                       that and money and time are left, it gets one more session on that.
+#                       A result is kept only if it is no worse than what it started from;
+#                       then the better of the two repairs is chosen again.
 #                       If the reports differ, a fresh session decides between them
 #   5. install          the better repair and the decided report end up here;
 #                       kit/prepare.sh --restore puts app/ back in its shipped layout
@@ -29,7 +31,8 @@
 #   KIT_JUDGE    the session that decides between two different reports
 # Other switches for experiments: KIT_TOOLS, KIT_MAX_TURNS, KIT_NO_HOOK=1, KIT_NO_FOLLOWUP=1,
 # KIT_VARIANT=flags (the bare ticket with only the harness flags changed), KIT_SOLVE_END,
-# KIT_HARD_STOP, KIT_FIX_BUDGET, KIT_JUDGE_BUDGET, KIT_RECONCILE=fails, KIT_KEEP_B=1.
+# KIT_HARD_STOP, KIT_FIX_BUDGET, KIT_JUDGE_BUDGET, KIT_RECONCILE=fails, KIT_KEEP_B=1, KIT_MONEY,
+# KIT_MAIN_SHARE, KIT_ADAPT=0 (follow-ups keep their effort), KIT_NO_NUDGE=1 (no word about unused budget).
 set -u
 
 TASK_FILE="${1:?usage: ./run.sh <task-file>}"
@@ -50,7 +53,16 @@ RECONCILE=${KIT_RECONCILE:-always}     # always: compare the two repairs every t
 
 MAIN="${KIT_MAIN:-claude:claude-sonnet-5-5:medium}"
 SECOND="${KIT_SECOND-codex:gpt-6.1-terra:medium}"
-JUDGE="${KIT_JUDGE:-claude:claude-sonnet-5-5:high}"
+JUDGE="${KIT_JUDGE:-claude:claude-sonnet-5-5:medium}"
+
+# One limit for money and one clock for the whole run, which kit/budget.py reports to this
+# script, to the stop hook and to the agents. Sessions that have room are given more of it:
+# the main solver is told once if it stops with a good part of its share unused, and the
+# follow-up sessions run at effort high when the run can afford that (KIT_ADAPT=0: never).
+export KIT_MONEY="${KIT_MONEY:-0.72}"  # dollars the run means to stay under; full cost credit ends at 0.75
+MAIN_SHARE=${KIT_MAIN_SHARE:-0.36}     # of which the main solver's first session may use this much
+export KIT_STARTED=$STARTED
+export KIT_LOGS="$ROOT/work/logs"
 
 elapsed() { echo $(($(date +%s) - STARTED)); }
 
@@ -146,6 +158,7 @@ agent() { # agent <harness:model:effort> <start|resume> <seconds> <name> <prompt
   IFS=: read -r harness model effort <<<"$spec"
   effort="${effort:-medium}"
   began=$(date +%s)
+  export KIT_DEADLINE=$(($(elapsed) + seconds)) # for kit/budget.py: when this session is stopped
   case "$harness" in
     claude)
       local flags=(
@@ -206,6 +219,15 @@ affordable() { # affordable <dollars> <seconds>: spend so far is below the first
   [ "$(elapsed)" -lt "$2" ] && python3 kit/spend.py --under "$1" work/logs
 }
 
+with_room() { # with_room <harness:model:effort> <dollars>: the same at effort high if the run can spend that much more
+  local rest=${1#*:}
+  if [ "${KIT_ADAPT:-1}" = "1" ] && python3 kit/budget.py --room "$2" 2>/dev/null; then
+    echo "${1%%:*}:${rest%%:*}:high"
+  else
+    echo "$1"
+  fi
+}
+
 compose() { # compose <prompt file> [extra file]: the fixed prompt, the notes from prep, then the ticket
   cat "$1"
   if [ -n "${2:-}" ]; then
@@ -257,17 +279,87 @@ PREPARED=1
 mkdir -p work/logs work/cross
 PROMPT="$(compose kit/prompt.md)"
 
+# One more session for the main solver, and a check of what it hands back.
+# improve <name> <prompt>: resumes the main session with <prompt>. Its result is kept only if
+# the repair is no worse than before: it builds, the gate has not started failing, and on the
+# same scenarios it fails no more runs than the repair it started from. Anything else, or no
+# time to check, and the services go back to how they were. Sets gate_now for the caller.
+improve() {
+  local name=$1 prompt=$2 spec log keep verdict now was usable gate_before=$gate_now gate_after service
+  rm -rf work/cross/before work/cross/before-root
+  mkdir -p work/cross/before
+  for service in api router worker; do
+    cp -R "app/services/$service" work/cross/before/ 2>/dev/null
+  done
+  spec=$(with_room "$MAIN" 0.30) # effort high if the run can afford it; a judge may be running too
+  log=$(log_for "$name" "$spec")
+  KIT_SESSION=$name KIT_PHASE=$name agent "$spec" resume $((FIX_END - $(elapsed))) all "$prompt" >"$log" 2>&1
+  echo "run.sh: $name session ($spec) ended with status $? after $(elapsed) s"
+  cat "$log"
+  stop_services
+  keep=0
+  verdict="there was no time left to check it"
+  if [ "$(elapsed)" -lt $((HARD_STOP - 80)) ]; then
+    limited 45 kit/check.sh --only repair >work/cross/gate-after.txt 2>&1
+    gate_after=$?
+    stop_services
+    # The repair as it was, as a workspace of its own, so that both are run on the same scenarios.
+    mkdir -p work/cross/before-root/work/scenarios work/cross/vs-before
+    cp -R app work/cross/before-root/app 2>/dev/null
+    for service in api router worker; do
+      rm -rf "work/cross/before-root/app/services/$service"
+      cp -R "work/cross/before/$service" "work/cross/before-root/app/services/$service" 2>/dev/null
+    done
+    rm -f work/cross/vs-before/decision.env
+    limited $((HARD_STOP - 25 - $(elapsed))) python3 kit/cross.py --b "$ROOT/work/cross/before-root" --repairs-only \
+      --out work/cross/vs-before >work/cross/log-vs-before.txt 2>&1
+    stop_services
+    now=$(grep "^A_FAILS=" work/cross/vs-before/decision.env 2>/dev/null | cut -d= -f2)
+    was=$(grep "^B_FAILS=" work/cross/vs-before/decision.env 2>/dev/null | cut -d= -f2)
+    usable=$(grep "^A_USABLE=" work/cross/vs-before/decision.env 2>/dev/null | cut -d= -f2)
+    case "$now" in '' | *[!0-9]*) now="" ;; esac
+    case "$was" in '' | *[!0-9]*) was="" ;; esac
+    if [ -z "$now" ] || [ -z "$was" ]; then
+      verdict="the check of the result did not finish"
+    elif [ "$usable" != "1" ]; then
+      verdict="it does not build"
+    elif [ "$gate_before" -eq 0 ] && [ "$gate_after" -ne 0 ]; then
+      verdict="kit/check.sh passed before and fails now"
+    elif [ "$now" -gt "$was" ]; then
+      verdict="on the same scenarios it fails $now runs and the repair before it failed $was"
+    else
+      keep=1
+      verdict="it builds, the gate is no worse, and on the same scenarios it fails $now runs (before: $was)"
+    fi
+  fi
+  if [ "$keep" -eq 1 ]; then
+    echo "run.sh: keeping the main repair after the $name session: $verdict"
+    gate_now=$gate_after
+    cp work/cross/gate-after.txt work/cross/gate.txt 2>/dev/null
+  else
+    echo "run.sh: going back to the main repair as it was before the $name session: $verdict"
+    for service in api router worker; do
+      if [ -d "work/cross/before/$service" ]; then
+        rm -rf "work/cross/dropped-$service"
+        mv "app/services/$service" "work/cross/dropped-$service" 2>/dev/null
+        cp -R "work/cross/before/$service" "app/services/$service"
+      fi
+    done
+  fi
+  rm -rf work/cross/before-root
+}
+
 # --- 2. the solvers ------------------------------------------------------------------------
 if [ -n "$SECOND" ] && make_copy; then
   B_LOG=$(log_for b "$SECOND")
-  (cd "$B_ROOT" && agent "$SECOND" start $((SOLVE_END - $(elapsed))) all "$PROMPT") >"$B_LOG" 2>&1 &
+  (cd "$B_ROOT" && KIT_SESSION=b agent "$SECOND" start $((SOLVE_END - $(elapsed))) all "$PROMPT") >"$B_LOG" 2>&1 &
   B_PID=$!
   BACKGROUND="$B_PID"
 else
   SECOND=""
 fi
 A_LOG=$(log_for a "$MAIN")
-agent "$MAIN" start $((SOLVE_END - $(elapsed))) all "$PROMPT" >"$A_LOG" 2>&1
+KIT_SESSION=a KIT_SHARE=$MAIN_SHARE KIT_PHASE=solve agent "$MAIN" start $((SOLVE_END - $(elapsed))) all "$PROMPT" >"$A_LOG" 2>&1
 echo "run.sh: main solver ($MAIN) ended with status $? after $(elapsed) s"
 A_ENDED=$(elapsed)
 cat "$A_LOG"
@@ -313,22 +405,21 @@ if [ -n "$SECOND" ]; then
   case "$BEST" in a | b) ;; *) BEST=a ;; esac
   case "$A_FAILS" in '' | *[!0-9]*) A_FAILS=0 ;; esac
 
-  FIX_PID=""
   JUDGE_PID=""
   if [ "${KIT_NO_FOLLOWUP:-}" != "1" ]; then
     # 4a. Two different reports: a fresh session decides. The first report is kept in case it fails.
     if [ "$REPORTS" = "differ" ] && affordable "$JUDGE_BUDGET" $((HARD_STOP - 140)); then
       mkdir -p work/cross/out-a && cp out/* work/cross/out-a/ 2>/dev/null
-      JUDGE_LOG=$(log_for judge "$JUDGE")
+      judge_spec=$(with_room "$JUDGE" 0.24) # about 15 cents at effort high, and a comparison may follow
+      JUDGE_LOG=$(log_for judge "$judge_spec")
       judge_prompt="$(compose kit/prompt-adjudicate.md work/cross/reports.txt)"
-      (KIT_NO_HOOK=1 agent "$JUDGE" start $((HARD_STOP - 40 - $(elapsed))) judge "$judge_prompt") >"$JUDGE_LOG" 2>&1 &
+      (KIT_NO_HOOK=1 KIT_SESSION=judge agent "$judge_spec" start $((HARD_STOP - 40 - $(elapsed))) judge "$judge_prompt") >"$JUDGE_LOG" 2>&1 &
       JUDGE_PID=$!
       BACKGROUND="$JUDGE_PID"
     fi
 
     # 4b. The main solver's session is resumed with the other solver's change, ledger and
-    #     scenarios, and the runs its own repair fails. What it hands back is kept only if it
-    #     checks out; then the better of the two repairs is chosen again.
+    #     scenarios, the runs its own repair fails, and what the gate still reports.
     want_fix=0
     if [ "$A_CHANGED" = "1" ]; then
       [ "$A_FAILS" -gt 0 ] && want_fix=1
@@ -341,79 +432,48 @@ if [ -n "$SECOND" ]; then
     if [ $(($(elapsed) - A_ENDED)) -gt 230 ]; then
       fix_line=$(python3 -c "print($fix_line - 0.15)")
     fi
+    gate_now=""
     if [ "$want_fix" -eq 1 ] && affordable "$fix_line" $((FIX_END - 80)); then
-      rm -rf work/cross/before
-      mkdir -p work/cross/before
-      for service in api router worker; do
-        cp -R "app/services/$service" work/cross/before/ 2>/dev/null
-      done
-      limited 60 kit/check.sh --only repair >work/cross/gate-before.txt 2>&1
-      gate_before=$?
+      limited 60 kit/check.sh --only repair >work/cross/gate.txt 2>&1
+      gate_now=$?
       stop_services
       fix_prompt="$(cat kit/prompt-reconcile.md work/cross/fix.txt 2>/dev/null)"
       [ -s work/cross/fix.txt ] || fix_prompt="$fix_prompt
 (none: your repair passes every run)"
-      FIX_LOG=$(log_for fix "$MAIN")
-      agent "$MAIN" resume $((FIX_END - $(elapsed))) all "$fix_prompt" >"$FIX_LOG" 2>&1 &
-      FIX_PID=$!
-      BACKGROUND="$BACKGROUND $FIX_PID"
+      if [ "$gate_now" -ne 0 ] && grep -q '^BLOCKING' work/cross/gate.txt; then
+        fix_prompt="$fix_prompt
+
+Before any of that: kit/check.sh --only repair fails on your repair as it is now. Deal with this first.
+
+$(head -30 work/cross/gate.txt)"
+      fi
+      improve compare "$fix_prompt"
     fi
-    if [ -n "$FIX_PID" ]; then
-      wait "$FIX_PID"
-      echo "run.sh: comparison session ($MAIN) ended with status $? after $(elapsed) s"
-      cat "$FIX_LOG"
-      # Keep its result only if the repair is no worse than before: it still builds, the gate
-      # has not started failing, and it fails no more runs than it did. Unchecked is not kept.
-      keep=0
-      best_after=""
-      verdict="there was no time left to check it"
-      if [ "$(elapsed)" -lt $((HARD_STOP - 100)) ]; then
-        limited 50 kit/check.sh --only repair >work/cross/gate-after.txt 2>&1
-        gate_after=$?
-        mkdir -p work/cross/after
-        limited $((HARD_STOP - 15 - $(elapsed))) python3 kit/cross.py --b "$B_ROOT" --repairs-only \
-          --out work/cross/after >work/cross/log-after.txt 2>&1
-        head -8 work/cross/log-after.txt
-        fails_after=""
-        usable_after=""
-        if [ -s work/cross/after/decision.env ]; then
-          fails_after=$(grep "^A_FAILS=" work/cross/after/decision.env | cut -d= -f2)
-          usable_after=$(grep "^A_USABLE=" work/cross/after/decision.env | cut -d= -f2)
-          best_after=$(grep "^BEST=" work/cross/after/decision.env | cut -d= -f2)
-        fi
-        case "$fails_after" in '' | *[!0-9]*) fails_after="" ;; esac
-        if [ -z "$fails_after" ]; then
-          verdict="the check of the result did not finish"
-        elif [ "$usable_after" != "1" ]; then
-          verdict="it does not build"
-        elif [ "$gate_before" -eq 0 ] && [ "$gate_after" -ne 0 ]; then
-          verdict="kit/check.sh passed before and fails now"
-        elif [ "$fails_after" -gt "$A_FAILS" ]; then
-          verdict="it fails $fails_after runs, up from $A_FAILS"
-        else
-          keep=1
-          verdict="it builds, the gate is no worse, and it fails $fails_after runs (before: $A_FAILS)"
-        fi
-      fi
+    # 4c. Still failing its own gate, with money and time left: one more session on exactly
+    #     that. Handing in a repair whose own checks fail is what the budget is there to prevent.
+    if [ -n "$gate_now" ] && [ "$gate_now" -ne 0 ] && grep -q '^BLOCKING' work/cross/gate.txt 2>/dev/null &&
+      [ "$(elapsed)" -lt $((FIX_END - 90)) ] && python3 kit/budget.py --room 0.12 2>/dev/null; then
+      finish_prompt="$(cat kit/prompt-finish.md)
+
+$(python3 kit/budget.py 2>/dev/null)
+
+$(head -40 work/cross/gate.txt)"
+      improve finish "$finish_prompt"
+    fi
+    # The better of the two repairs, now that the main one may have changed.
+    if [ -n "$gate_now" ] && [ "$(elapsed)" -lt $((HARD_STOP - 45)) ]; then
+      mkdir -p work/cross/after
+      limited $((HARD_STOP - 20 - $(elapsed))) python3 kit/cross.py --b "$B_ROOT" --repairs-only \
+        --out work/cross/after >work/cross/log-after.txt 2>&1
+      head -8 work/cross/log-after.txt
+      best_after=$(grep "^BEST=" work/cross/after/decision.env 2>/dev/null | cut -d= -f2)
+      case "$best_after" in a | b) BEST=$best_after ;; esac
       stop_services
-      if [ "$keep" -eq 1 ]; then
-        echo "run.sh: keeping the main repair as compared: $verdict"
-        case "$best_after" in a | b) BEST=$best_after ;; esac
-      else
-        echo "run.sh: going back to the main repair as it was before the comparison: $verdict"
-        for service in api router worker; do
-          if [ -d "work/cross/before/$service" ]; then
-            rm -rf "work/cross/dropped-$service"
-            mv "app/services/$service" "work/cross/dropped-$service" 2>/dev/null
-            cp -R "work/cross/before/$service" "app/services/$service"
-          fi
-        done
-      fi
       echo "run.sh: the better repair is now $BEST"
     fi
     if [ -n "$JUDGE_PID" ]; then
       wait "$JUDGE_PID"
-      echo "run.sh: report decision ($JUDGE) ended with status $? after $(elapsed) s"
+      echo "run.sh: report decision ($judge_spec) ended with status $? after $(elapsed) s"
       cat "$JUDGE_LOG"
       for report in work/cross/out-a/*.json; do
         [ -e "$report" ] || continue

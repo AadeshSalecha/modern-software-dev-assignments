@@ -7,8 +7,9 @@ The first workspace is the one this file lives in ("a"); the second ("b") is a c
 another agent did the whole job on its own. What happens:
 
   repairs   Every scenario either agent wrote that fails on the shipped release and passes on
-            its author's repair counts as evidence. Each is run on both repairs, plainly and
-            with the shipped release taking every step up to the last drain. The shipped
+            at least one of the two repairs counts as evidence. Each is run on both repairs,
+            plainly, with the shipped release taking every step up to the last drain, and
+            with every service restarted before the last drain. The shipped
             scenarios are run on both, alone and across a release replacement. The repair
             with fewer failures is the better one; a tie goes to "a".
   reports   The files under out/ are compared value by value, ignoring the order of lists.
@@ -144,36 +145,47 @@ def judge_repairs(roots, deadline):
             scores[name]["fails"].append({"scenario": "(build)", "author": "-", "how": "build", "problem": str(problem).splitlines()[0][:200]})
     usable = [name for name in roots if scores[name]["usable"]]
 
-    # 1. Which scenarios count: fail on the shipped release, pass on their author's repair.
+    # 1. Every scenario either agent wrote, on the shipped release and on each repair. One counts
+    #    if it fails on the shipped release and passes on at least one repair: then it shows
+    #    something a repair of this ticket can do. That includes a scenario whose own author
+    #    could not make it pass when the other repair does.
     authored = [(author, file_name, path, scenario) for author in roots for file_name, path, scenario in scenarios_of(roots[author])]
     specs = []
     for author, file_name, _, scenario in authored:
-        specs.append((f"{author}:{file_name}:old", scenario, "old"))
-        if scores[author]["usable"]:
-            specs.append((f"{author}:{file_name}:own", scenario, "new", apps[author]))
-    outcomes = {o["label"]: o for o in rollout.run_all(specs, bins, deadline=deadline)}
+        specs.append(((author, file_name, "old"), scenario, "old", None))
+        for name in usable:
+            specs.append(((author, file_name, name), scenario, "new", apps[name]))
+    results = rollout.run_all([(str(i), s[1], s[2], s[3]) for i, s in enumerate(specs)], bins, deadline=deadline)
+    outcomes = {spec[0]: outcome for spec, outcome in zip(specs, results)}
     valid = []
     for author, file_name, path, scenario in authored:
-        old = outcomes.get(f"{author}:{file_name}:old")
-        own = outcomes.get(f"{author}:{file_name}:own")
-        if old is None or own is None or rollout.not_run(old) or rollout.not_run(own):
+        old = outcomes.get((author, file_name, "old"))
+        runs = {name: outcomes.get((author, file_name, name)) for name in usable}
+        if old is None or rollout.not_run(old) or not runs or any(r is None or rollout.not_run(r) for r in runs.values()):
             continue
         if not old["problems"]:
             notes.append(f"{author}'s {file_name} passes on the shipped release too: not used")
-        elif own["problems"]:
-            notes.append(f"{author}'s {file_name} fails on its author's own repair: not used")
-        else:
-            valid.append((author, file_name, path, scenario))
+            continue
+        if all(r["problems"] for r in runs.values()):
+            first = next(iter(runs.values()))["problems"][0][:120]
+            notes.append(f"{author}'s {file_name} fails on every repair, so it decides nothing here ({first})")
+            scores[author].setdefault("open", []).append({"scenario": file_name, "path": path, "problem": first})
+            continue
+        valid.append((author, file_name, path, scenario))
+        for name, outcome in runs.items():
+            if outcome["problems"]:
+                scores[name]["fails"].append({"scenario": file_name, "author": author, "how": "as written", "path": path,
+                                              "played": scenario, "problem": outcome["problems"][0][:200]})
+            else:
+                scores[name]["passed"] += 1
 
-    # 2. Every valid scenario, and its hand-over variant, on every usable repair; and the
-    #    shipped scenarios, alone and across a replacement.
+    # 2. The variants of every scenario that counts, on every usable repair; and the shipped
+    #    scenarios, alone and across a replacement.
     specs = []
     for author, file_name, path, scenario in valid:
         late = rollout.handed_over(scenario)
         again = rollout.restarted(scenario)
         for name in usable:
-            if name != author:
-                specs.append(((name, author, file_name, "as written", path), scenario, "new", apps[name]))
             if late is not None:
                 specs.append(((name, author, file_name, "handed over before the last drain", path), late, "new", apps[name]))
             if again is not None:
@@ -352,6 +364,9 @@ def main(argv=None):
                 json.dump(fail["played"], handle, indent=1)
             line += f"\n   the scenario as it was played is work/cross/{name}; repeat the run with: python3 kit/rollout.py work/cross/{name}"
         fix.append(line)
+    for item in scores["a"].get("open", [])[:4]:
+        fix.append(f"- your own scenario work/scenarios/{item['scenario']} fails on your repair and on theirs: {item['problem']}\n"
+                   "   either a requirement neither repair meets yet, or the scenario expects more than the ticket asks")
     with open(os.path.join(args.out, "fix.txt"), "w", encoding="utf-8") as handle:
         handle.write("\n".join(fix) + ("\n" if fix else ""))
 

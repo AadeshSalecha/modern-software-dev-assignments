@@ -4,6 +4,7 @@ import json
 import os
 import sys
 import tempfile
+import time
 import unittest
 
 KIT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -112,6 +113,66 @@ class Spend(unittest.TestCase):
                                                                        "output_tokens": 0}}) + "\n")
             self.assertAlmostEqual(spend.cost_of(log, self.CARD), 0.1 + 0.09)
 
+
+
+class Budget(unittest.TestCase):
+    """kit/budget.py: what is left, and when a session is told to use it."""
+
+    def setUp(self):
+        import budget
+        self.budget = budget
+        self.top = tempfile.TemporaryDirectory()
+        self.addCleanup(self.top.cleanup)
+        self.saved = dict(os.environ)
+        self.addCleanup(lambda: (os.environ.clear(), os.environ.update(self.saved)))
+        os.environ.update({"KIT_LOGS": self.top.name, "KIT_STARTED": str(time.time() - 100), "KIT_MONEY": "0.72",
+                           "KIT_SESSION": "a", "KIT_SHARE": "0.36", "KIT_DEADLINE": "300"})
+        self.rates = self.budget.spend.rates
+        self.budget.spend.rates = lambda: {"m": {"input": 1.0, "output": 10.0, "cache_read": 0.1, "cache_write": 2.0}}
+        self.addCleanup(lambda: setattr(self.budget.spend, "rates", self.rates))
+
+    def log(self, name, session, output):
+        write(os.path.join(self.top.name, name), json.dumps(
+            {"type": "result", "session_id": session, "modelUsage": {"m": {"inputTokens": 0, "outputTokens": output}}}) + "\n")
+
+    def test_it_separates_this_session_from_the_run(self):
+        self.log("a.claude.m.jsonl", "s1", 20000)   # 0.20
+        self.log("b.codex.m.jsonl", "s2", 10000)    # 0.10
+        now = self.budget.state()
+        self.assertAlmostEqual(now["spent"], 0.30)
+        self.assertAlmostEqual(now["session_spent"], 0.20)
+        self.assertAlmostEqual(now["money_left"], 0.42)
+        self.assertTrue(195 <= now["seconds_left"] <= 201)
+        self.assertIn("this session $0.20 of the $0.36", self.budget.line(now))
+
+    def test_a_session_with_room_is_told_once_what_to_spend_it_on(self):
+        self.log("a.claude.m.jsonl", "s1", 20000)
+        text = self.budget.nudge(self.budget.state())
+        self.assertIn("about $0.20 of the $0.36", text)
+        self.assertIn("--handed-over", text)
+
+    def test_no_word_when_the_share_is_used_or_time_is_short_or_the_run_is_near_its_limit(self):
+        self.log("a.claude.m.jsonl", "s1", 32000)   # 0.32 of 0.36
+        self.assertEqual(self.budget.nudge(self.budget.state()), "")
+        self.log("a.claude.m.jsonl", "s1", 20000)
+        os.environ["KIT_DEADLINE"] = "150"          # 50 s left
+        self.assertEqual(self.budget.nudge(self.budget.state()), "")
+        os.environ["KIT_DEADLINE"] = "300"
+        self.log("b.codex.m.jsonl", "s2", 48000)    # the run is at 0.68 of 0.72
+        self.assertEqual(self.budget.nudge(self.budget.state()), "")
+
+    def test_room(self):
+        self.log("a.claude.m.jsonl", "s1", 50000)   # 0.50 of 0.72
+        self.assertEqual(self.budget.main(["--room", "0.20"]), 0)
+        self.assertEqual(self.budget.main(["--room", "0.30"]), 1)
+
+    def test_without_run_sh_it_knows_nothing_and_fails_nothing(self):
+        for name in ("KIT_LOGS", "KIT_STARTED"):
+            os.environ.pop(name, None)
+        self.assertIsNone(self.budget.state())
+        self.assertEqual(self.budget.nudge(None), "")
+        self.assertEqual(self.budget.main([]), 0)
+        self.assertEqual(self.budget.main(["--room", "0.01"]), 1)
 
 if __name__ == "__main__":
     unittest.main()
