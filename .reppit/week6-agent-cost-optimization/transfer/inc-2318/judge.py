@@ -2,7 +2,9 @@
 """Judge a run of the setup on INC-2318.
 
     python3 judge.py <workspace week6 dir> [--out judge.json] [--port-base 26000] [--port-span 4000]
-    python3 judge.py --shipped            the shipped release as the candidate (self-check)
+    python3 judge.py --shipped            the shipped release as the candidate (self-check: exits 0 when
+                                          it fails every incident scenario and passes every other one)
+    python3 judge.py <workspace> --repair-only   the scenarios only, no report
 
 The workspace is a copy of week6/ in which `./run.sh task.md` has run with this folder's
 task.md and incident/ in place. Scored the way the assignment scores a run:
@@ -199,7 +201,11 @@ def main():
         json.dump(summary, handle, indent=1)
         handle.write("\n")
 
-    print("PASS" if passed else "FAIL")
+    if args.shipped:
+        print("SELF-CHECK OK: the shipped release fails every incident scenario and passes every other one"
+              if passed else "SELF-CHECK FAILED: the shipped release should fail every incident scenario and pass the rest")
+    else:
+        print("PASS" if passed else "FAIL")
     line = f"  repair {repair:.2f}"
     if scored:
         line += (f"   impact {impact['impact']:.2f}  (precision {impact['precision']:.2f}, recall {impact['recall']:.2f}, "

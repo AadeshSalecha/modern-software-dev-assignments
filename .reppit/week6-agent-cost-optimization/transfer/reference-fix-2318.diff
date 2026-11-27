@@ -1,0 +1,167 @@
+diff -ruN -x .build -x __pycache__ app/services/api/src/main.ts ref/app/services/api/src/main.ts
+--- app/services/api/src/main.ts	2026-11-27 08:59:52.015439817 +0000
++++ app/services/api/src/main.ts	2026-11-27 09:00:30.166419716 +0000
+@@ -339,6 +339,8 @@
+   });
+ });
+ 
++store.transaction(() => store.recoverSkipped(now()));
++
+ server.listen(portBase + 1, "127.0.0.1", () =>
+   log("api.started", { release: RELEASE }),
+ );
+diff -ruN -x .build -x __pycache__ app/services/api/src/store.ts ref/app/services/api/src/store.ts
+--- app/services/api/src/store.ts	2026-11-27 08:59:52.015505796 +0000
++++ app/services/api/src/store.ts	2026-11-27 09:00:30.166087611 +0000
+@@ -202,6 +202,70 @@
+       .run(type, now, JSON.stringify(data));
+   }
+ 
++  // INC-2318. Releases up to 2.3.1 did not give an endpoint that was switched back on
++  // the events accepted more than 24 hours before the switch-on. The outbox holds every
++  // message in the order the router applied them, so it says which events each endpoint
++  // was owed at each switch-on. The router is told once; it makes a delivery only for
++  // an event that has none to that endpoint.
++  recoverSkipped(now: number): void {
++    const done = this.db
++      .prepare("select 1 from meta where key = 'inc2318_recovered'")
++      .get();
++    if (done) return;
++    const rows = this.db
++      .prepare(
++        "select type, data from outbox where status != 'rejected' and type in ('endpoint.changed', 'event.accepted') order by seq",
++      )
++      .all() as { type: string; data: string }[];
++    const seen = new Map<
++      string,
++      { merchant: string; enabled: boolean; waiting: { id: string; type: string }[] }
++    >();
++    const owed = new Map<string, string[]>();
++    for (const row of rows) {
++      const data = JSON.parse(row.data);
++      if (row.type === "endpoint.changed") {
++        const next = data.endpoint as Endpoint;
++        const before = seen.get(next.id);
++        if (!before) {
++          seen.set(next.id, {
++            merchant: next.merchant_id,
++            enabled: next.enabled,
++            waiting: [],
++          });
++          continue;
++        }
++        if (!before.enabled && next.enabled) {
++          const list = owed.get(next.id) ?? [];
++          for (const event of before.waiting) {
++            if (
++              next.event_types.includes("*") ||
++              next.event_types.includes(event.type)
++            )
++              list.push(event.id);
++          }
++          owed.set(next.id, list);
++          before.waiting = [];
++        }
++        before.enabled = next.enabled;
++      } else {
++        const event = data.event as EventRecord;
++        for (const endpoint of seen.values()) {
++          if (!endpoint.enabled && endpoint.merchant === event.merchant_id)
++            endpoint.waiting.push({ id: event.id, type: event.type });
++        }
++      }
++    }
++    for (const [id, events] of owed) {
++      const endpoint = this.endpoint(id);
++      if (endpoint && events.length > 0)
++        this.enqueue("endpoint.changed", now, { endpoint, owed: events });
++    }
++    this.db
++      .prepare("insert into meta (key, value) values ('inc2318_recovered', 1)")
++      .run();
++  }
++
+   pending(): OutboxRow[] {
+     return this.db
+       .prepare(
+diff -ruN -x .build -x __pycache__ app/services/router/bus.py ref/app/services/router/bus.py
+--- app/services/router/bus.py	2026-11-27 08:59:52.017461931 +0000
++++ app/services/router/bus.py	2026-11-27 09:00:30.165858474 +0000
+@@ -109,6 +109,11 @@
+             need(ep, "enabled", bool),
+             need(ep, "version", int),
+         )
++        owed = data.get("owed")
++        if owed is not None:
++            if not isinstance(owed, list) or not all(isinstance(e, str) for e in owed):
++                raise Malformed("owed must be a list of event ids")
++            body["owed"] = owed
+         return producer, str(seq), "endpoint", body
+     if type_ == "resend.requested":
+         body = {"event_id": need(data, "event_id", str), "endpoint_id": need(data, "endpoint_id", str)}
+diff -ruN -x .build -x __pycache__ app/services/router/routing.py ref/app/services/router/routing.py
+--- app/services/router/routing.py	2026-11-27 08:59:52.017624782 +0000
++++ app/services/router/routing.py	2026-11-27 09:00:30.165285022 +0000
+@@ -5,8 +5,6 @@
+ 
+ from store import next_id
+ 
+-CATCH_UP_SECONDS = 24 * 3600
+-
+ # INC-2188 workaround (2.3.1). With it on, an endpoint change does not create deliveries
+ # at the endpoint's new version, so a delivery that was queued keeps going under the
+ # version it was created for. Leave it on until deliveries stop being keyed by version.
+@@ -87,11 +85,10 @@
+ 
+ 
+ def catch_up(db, log, now, endpoint, since):
+-    """Deliver what the endpoint missed while it was disabled."""
+-    floor = max(since, now - CATCH_UP_SECONDS)
++    """Deliver what the endpoint missed while it was disabled, however long that was."""
+     missed = db.execute(
+         "select id, type from events where merchant_id = ? and routed_at >= ? order by routed_at, rowid",
+-        (endpoint["merchant_id"], floor),
++        (endpoint["merchant_id"], since),
+     ).fetchall()
+     for event in missed:
+         if not subscribed(endpoint["event_types"], event["type"]):
+@@ -101,10 +98,31 @@
+         create_delivery(db, log, now, event["id"], endpoint["id"])
+ 
+ 
++def deliver_owed(db, log, now, endpoint_id, event_ids):
++    """Events the endpoint was owed at an earlier switch-on and never got a delivery for (INC-2318).
++
++    The api works the list out from its own history. An event that has a delivery to the
++    endpoint is left alone. A delivery made for an endpoint that is switched off waits, as
++    any queued delivery does.
++    """
++    endpoint = db.execute("select merchant_id from endpoints where id = ?", (endpoint_id,)).fetchone()
++    if endpoint is None:
++        return
++    for event_id in event_ids:
++        event = db.execute("select merchant_id from events where id = ?", (event_id,)).fetchone()
++        if event is None or event["merchant_id"] != endpoint["merchant_id"]:
++            continue
++        if first_delivery(db, event_id, endpoint_id):
++            continue
++        create_delivery(db, log, now, event_id, endpoint_id)
++
++
+ def apply_endpoint(db, log, now, endpoint):
++    owed = endpoint.get("owed") or []
+     old = db.execute("select * from endpoints where id = ?", (endpoint["id"],)).fetchone()
+     if old is not None and endpoint["version"] <= old["version"]:
+         log.write("endpoint.stale", endpoint=endpoint["id"], version=endpoint["version"])
++        deliver_owed(db, log, now, endpoint["id"], owed)
+         return
+     was_enabled = bool(old["enabled"]) if old is not None else None
+     disabled_at = old["disabled_at"] if old is not None else None
+@@ -138,6 +156,7 @@
+         follow_version(db, log, now, endpoint["id"], endpoint["version"])
+     if endpoint["enabled"] and was_enabled is False and disabled_at is not None:
+         catch_up(db, log, now, endpoint, disabled_at)
++    deliver_owed(db, log, now, endpoint["id"], owed)
+ 
+ 
+ def apply_resend(db, log, now, body):

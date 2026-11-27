@@ -1,0 +1,63 @@
+{
+  "period": [
+    "2026-11-09T00:00:00Z",
+    "2026-11-11T23:59:30Z"
+  ],
+  "events_accepted_by_api": 313,
+  "deliveries": 341,
+  "requests_to_merchants": 448,
+  "resend_requests_accepted": 60,
+  "resend_requests_lost": 38,
+  "lost_by_merchant": {
+    "m_juniper": {
+      "lost_requests": 15,
+      "events_and_endpoints": 12
+    },
+    "m_kestrel": {
+      "lost_requests": 6,
+      "events_and_endpoints": 6
+    },
+    "m_larch": {
+      "lost_requests": 9,
+      "events_and_endpoints": 9
+    },
+    "m_oak": {
+      "lost_requests": 5,
+      "events_and_endpoints": 5
+    },
+    "m_pine": {
+      "lost_requests": 3,
+      "events_and_endpoints": 3
+    }
+  },
+  "totals_minor": {
+    "EUR": 778017,
+    "GBP": 787367,
+    "USD": 2382041
+  },
+  "skipped_rows_by_file": {
+    "api.ndjson": 22,
+    "router.log": 32,
+    "egress.log": 3,
+    "merchant_export.csv": 3,
+    "worker.jsonl.gz": 22
+  },
+  "near_misses": {
+    "resend requests that worked (a resend delivery was made)": 18,
+    "  of those, for a delivery that had died": 10,
+    "  of those, still waiting at the end because the endpoint is off": 1,
+    "requests naming another merchant's endpoint (accepted, nothing made, left out)": 4,
+    "events with a lost request to their own merchant's endpoint and a request to another merchant's": 1,
+    "event and endpoint asked for twice, both lost": 3,
+    "event and endpoint asked for twice, both worked": 1,
+    "event and endpoint asked for twice, one lost and one worked (caught up in between)": 1,
+    "lost requests whose event and endpoint has a first delivery all the same (catch-up)": 1,
+    "lost requests to an endpoint that is switched off": 3
+  },
+  "records_cut_on_purpose": {
+    "lost request, api record cut (router's resend.skipped is whole)": 7,
+    "lost request, router's resend.skipped cut (api record is whole)": 5,
+    "request that worked, api record cut": 2,
+    "request that worked, router's delivery.created cut (egress, worker and later router records are whole)": 3
+  }
+}

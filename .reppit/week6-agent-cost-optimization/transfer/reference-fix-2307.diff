@@ -1,0 +1,168 @@
+diff -ruN -x .build -x __pycache__ app/services/api/src/main.ts ref/app/services/api/src/main.ts
+--- app/services/api/src/main.ts	2026-11-27 09:10:01.678969955 +0000
++++ ref/app/services/api/src/main.ts	2026-11-27 09:10:01.698816151 +0000
+@@ -205,8 +205,11 @@
+ 
+ function resend(eventId: string, body: Body): Reply {
+   const endpointId = text(body, "endpoint_id");
+-  if (!store.event(eventId)) return [404, { error: "no such event" }];
+-  if (!store.endpoint(endpointId)) return [404, { error: "no such endpoint" }];
++  const event = store.event(eventId);
++  if (!event) return [404, { error: "no such event" }];
++  const endpoint = store.endpoint(endpointId);
++  if (!endpoint || endpoint.merchant_id !== event.merchant_id)
++    return [404, { error: "no such endpoint" }];
+   store.transaction(() =>
+     store.enqueue("resend.requested", now(), {
+       event_id: eventId,
+@@ -339,6 +342,8 @@
+   });
+ });
+ 
++store.transaction(() => store.repeatResends(now()));
++
+ server.listen(portBase + 1, "127.0.0.1", () =>
+   log("api.started", { release: RELEASE }),
+ );
+diff -ruN -x .build -x __pycache__ app/services/api/src/store.ts ref/app/services/api/src/store.ts
+--- app/services/api/src/store.ts	2026-11-27 09:10:01.678841740 +0000
++++ ref/app/services/api/src/store.ts	2026-11-27 09:10:01.698542314 +0000
+@@ -202,6 +202,33 @@
+       .run(type, now, JSON.stringify(data));
+   }
+ 
++  // Once, on the first start of this release: ask again for every resend the release before
++  // it took into the outbox. `request` names the message that first carried the request, so
++  // the router gives a delivery only to the ones that never got theirs.
++  repeatResends(now: number): void {
++    const done = this.db
++      .prepare("select value from meta where key = 'resends_repeated'")
++      .get();
++    if (done) return;
++    const rows = this.db
++      .prepare(
++        "select seq, data from outbox where type = 'resend.requested' order by seq",
++      )
++      .all() as { seq: number; data: string }[];
++    for (const row of rows) {
++      const data = JSON.parse(row.data) as Record<string, unknown>;
++      if (data.request !== undefined) continue;
++      this.enqueue("resend.requested", now, {
++        event_id: data.event_id,
++        endpoint_id: data.endpoint_id,
++        request: row.seq,
++      });
++    }
++    this.db
++      .prepare("insert into meta (key, value) values ('resends_repeated', 1)")
++      .run();
++  }
++
+   pending(): OutboxRow[] {
+     return this.db
+       .prepare(
+diff -ruN -x .build -x __pycache__ app/services/router/bus.py ref/app/services/router/bus.py
+--- app/services/router/bus.py	2026-11-27 09:10:01.680124405 +0000
++++ ref/app/services/router/bus.py	2026-11-27 09:10:01.701366454 +0000
+@@ -112,6 +112,8 @@
+         return producer, str(seq), "endpoint", body
+     if type_ == "resend.requested":
+         body = {"event_id": need(data, "event_id", str), "endpoint_id": need(data, "endpoint_id", str)}
++        if "request" in data:  # the sequence number of the message that first carried this request
++            body["request"] = need(data, "request", int)
+         return producer, str(seq), "resend", body
+     raise Malformed("unknown message type")
+ 
+diff -ruN -x .build -x __pycache__ app/services/router/main.py ref/app/services/router/main.py
+--- app/services/router/main.py	2026-11-27 09:10:01.679823503 +0000
++++ ref/app/services/router/main.py	2026-11-27 09:10:01.700781512 +0000
+@@ -51,7 +51,7 @@
+             return 200, {"applied": False}
+         now = self.clock.now()
+         self.db.execute("insert into bus_seen (producer, ident) values (?, ?)", (producer, ident))
+-        routing.apply(self.db, self.log, now, kind, body)
++        routing.apply(self.db, self.log, now, kind, body, producer, ident)
+         self.db.commit()
+         self.crash(1)
+         return 200, {"applied": True}
+diff -ruN -x .build -x __pycache__ app/services/router/routing.py ref/app/services/router/routing.py
+--- app/services/router/routing.py	2026-11-27 09:10:01.679968283 +0000
++++ ref/app/services/router/routing.py	2026-11-27 09:10:01.701088075 +0000
+@@ -140,18 +140,54 @@
+         catch_up(db, log, now, endpoint, disabled_at)
+ 
+ 
+-def apply_resend(db, log, now, body):
+-    original = first_delivery(db, body["event_id"], body["endpoint_id"])
+-    if original is None:
+-        log.write("resend.skipped", level="warn", event=body["event_id"], endpoint=body["endpoint_id"])
++def apply_resend(db, log, now, body, producer=None, ident=None):
++    """A resend request is one new delivery, whether or not the endpoint had the event before.
++
++    The only requests that create nothing name an event or an endpoint the router does not
++    have, or an endpoint of another merchant than the event's.
++    """
++    event_id, endpoint_id = body["event_id"], body["endpoint_id"]
++    event = db.execute("select merchant_id from events where id = ?", (event_id,)).fetchone()
++    endpoint = db.execute("select merchant_id from endpoints where id = ?", (endpoint_id,)).fetchone()
++    if event is None or endpoint is None or event["merchant_id"] != endpoint["merchant_id"]:
++        reason = "unknown" if event is None or endpoint is None else "merchant"
++        log.write("resend.skipped", level="warn", event=event_id, endpoint=endpoint_id, reason=reason)
++        return
++    # A request is known by the message that first carried it. A message with `request` repeats
++    # a request an earlier release has already applied (and recorded nowhere).
++    repeated = body.get("request") is not None
++    request = str(body["request"]) if repeated else str(ident)
++    producer = producer or ""
++    if db.execute(
++        "select 1 from resend_requests where producer = ? and request = ?", (producer, request)
++    ).fetchone():
+         return
+-    create_delivery(db, log, now, body["event_id"], body["endpoint_id"], resend_of=original["id"])
++    delivery_id = None
++    if repeated:
++        # That release either made a resend delivery for it or dropped it. A resend delivery
++        # that no request accounts for yet is the one it made.
++        made = db.execute(
++            "select id from deliveries where event_id = ? and endpoint_id = ? and resend_of is not null "
++            "and id not in (select delivery_id from resend_requests) order by ord limit 1",
++            (event_id, endpoint_id),
++        ).fetchone()
++        if made is not None:
++            delivery_id = made["id"]
++    if delivery_id is None:
++        original = first_delivery(db, event_id, endpoint_id)
++        delivery_id = create_delivery(
++            db, log, now, event_id, endpoint_id, resend_of=original["id"] if original is not None else None
++        )
++    db.execute(
++        "insert into resend_requests (producer, request, delivery_id) values (?, ?, ?)",
++        (producer, request, delivery_id),
++    )
+ 
+ 
+-def apply(db, log, now, kind, body):
++def apply(db, log, now, kind, body, producer=None, ident=None):
+     if kind == "event":
+         route_event(db, log, now, body)
+     elif kind == "endpoint":
+         apply_endpoint(db, log, now, body)
+     else:
+-        apply_resend(db, log, now, body)
++        apply_resend(db, log, now, body, producer, ident)
+diff -ruN -x .build -x __pycache__ app/services/router/store.py ref/app/services/router/store.py
+--- app/services/router/store.py	2026-11-27 09:10:01.680559335 +0000
++++ ref/app/services/router/store.py	2026-11-27 09:10:01.702297948 +0000
+@@ -57,6 +57,12 @@
+     expires_at integer not null,
+     closed_at integer
+ );
++create table if not exists resend_requests (
++    producer text not null,
++    request text not null,
++    delivery_id text not null,
++    primary key (producer, request)
++);
+ create table if not exists attempts (
+     attempt_id text primary key,
+     delivery_id text not null,

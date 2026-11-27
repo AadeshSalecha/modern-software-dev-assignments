@@ -1,0 +1,241 @@
+{
+  "period": [
+    "2026-10-26T00:00:00Z",
+    "2026-11-01T00:00:00Z"
+  ],
+  "events_accepted_by_api": 632,
+  "deliveries": 635,
+  "requests": 763,
+  "missed_entries": 71,
+  "missed_by_item": [
+    {
+      "endpoint_id": "ep_harbor_1",
+      "switched_off_at": "2026-10-26T09:14:07Z",
+      "switched_on_at": "2026-10-28T10:02:41Z",
+      "events": 14
+    },
+    {
+      "endpoint_id": "ep_isle_1",
+      "switched_off_at": "2026-10-27T08:00:30Z",
+      "switched_on_at": "2026-10-29T09:00:12Z",
+      "events": 14
+    },
+    {
+      "endpoint_id": "ep_isle_2",
+      "switched_off_at": "2026-10-27T20:00:05Z",
+      "switched_on_at": "2026-10-29T02:00:44Z",
+      "events": 5
+    },
+    {
+      "endpoint_id": "ep_juniper_1",
+      "switched_off_at": "2026-10-26T06:00:19Z",
+      "switched_on_at": "2026-10-27T08:00:03Z",
+      "events": 3
+    },
+    {
+      "endpoint_id": "ep_juniper_1",
+      "switched_off_at": "2026-10-28T12:00:50Z",
+      "switched_on_at": "2026-10-30T15:00:20Z",
+      "events": 19
+    },
+    {
+      "endpoint_id": "ep_moss_1",
+      "switched_off_at": "2026-10-26T12:00:21Z",
+      "switched_on_at": "2026-10-28T00:30:02Z",
+      "events": 4
+    },
+    {
+      "endpoint_id": "ep_nettle_1",
+      "switched_off_at": "2026-10-26T07:30:00Z",
+      "switched_on_at": "2026-10-28T08:15:10Z",
+      "events": 12
+    }
+  ],
+  "events_missed_by_two_endpoints": 5,
+  "off_periods_that_ended": [
+    {
+      "endpoint_id": "ep_harbor_1",
+      "switched_off_at": "2026-10-26T09:14:07Z",
+      "switched_on_at": "2026-10-28T10:02:41Z",
+      "seconds_off": 175714,
+      "hours_off": 48.81,
+      "accepted_meanwhile": 32,
+      "missed": 14,
+      "caught_up_or_waiting": 18
+    },
+    {
+      "endpoint_id": "ep_isle_1",
+      "switched_off_at": "2026-10-27T08:00:30Z",
+      "switched_on_at": "2026-10-29T09:00:12Z",
+      "seconds_off": 176382,
+      "hours_off": 48.99,
+      "accepted_meanwhile": 28,
+      "missed": 14,
+      "caught_up_or_waiting": 14
+    },
+    {
+      "endpoint_id": "ep_isle_2",
+      "switched_off_at": "2026-10-27T20:00:05Z",
+      "switched_on_at": "2026-10-29T02:00:44Z",
+      "seconds_off": 108039,
+      "hours_off": 30.01,
+      "accepted_meanwhile": 18,
+      "missed": 5,
+      "caught_up_or_waiting": 13
+    },
+    {
+      "endpoint_id": "ep_juniper_1",
+      "switched_off_at": "2026-10-26T06:00:19Z",
+      "switched_on_at": "2026-10-27T08:00:03Z",
+      "seconds_off": 93584,
+      "hours_off": 26.0,
+      "accepted_meanwhile": 22,
+      "missed": 3,
+      "caught_up_or_waiting": 19
+    },
+    {
+      "endpoint_id": "ep_juniper_1",
+      "switched_off_at": "2026-10-28T12:00:50Z",
+      "switched_on_at": "2026-10-30T15:00:20Z",
+      "seconds_off": 183570,
+      "hours_off": 50.99,
+      "accepted_meanwhile": 31,
+      "missed": 19,
+      "caught_up_or_waiting": 12
+    },
+    {
+      "endpoint_id": "ep_kestrel_1",
+      "switched_off_at": "2026-10-27T10:00:07Z",
+      "switched_on_at": "2026-10-28T06:00:09Z",
+      "seconds_off": 72002,
+      "hours_off": 20.0,
+      "accepted_meanwhile": 8,
+      "missed": 0,
+      "caught_up_or_waiting": 8
+    },
+    {
+      "endpoint_id": "ep_moss_1",
+      "switched_off_at": "2026-10-26T12:00:21Z",
+      "switched_on_at": "2026-10-28T00:30:02Z",
+      "seconds_off": 131381,
+      "hours_off": 36.49,
+      "accepted_meanwhile": 22,
+      "missed": 4,
+      "caught_up_or_waiting": 18
+    },
+    {
+      "endpoint_id": "ep_nettle_1",
+      "switched_off_at": "2026-10-26T07:30:00Z",
+      "switched_on_at": "2026-10-28T08:15:10Z",
+      "seconds_off": 175510,
+      "hours_off": 48.75,
+      "accepted_meanwhile": 27,
+      "missed": 12,
+      "caught_up_or_waiting": 15
+    },
+    {
+      "endpoint_id": "ep_pine_1",
+      "switched_off_at": "2026-10-29T09:00:04Z",
+      "switched_on_at": "2026-10-29T21:00:06Z",
+      "seconds_off": 43202,
+      "hours_off": 12.0,
+      "accepted_meanwhile": 1,
+      "missed": 0,
+      "caught_up_or_waiting": 1
+    },
+    {
+      "endpoint_id": "ep_pine_2",
+      "switched_off_at": "2026-10-26T22:00:00Z",
+      "switched_on_at": "2026-10-27T21:59:58Z",
+      "seconds_off": 86398,
+      "hours_off": 24.0,
+      "accepted_meanwhile": 6,
+      "missed": 0,
+      "caught_up_or_waiting": 6
+    }
+  ],
+  "still_off_at_the_end": {
+    "ep_larch_1": "2026-10-28T09:00:13Z",
+    "ep_moss_1": "2026-10-29T18:00:33Z"
+  },
+  "skipped_rows_by_file": {
+    "api.ndjson": 11,
+    "router.log": 53,
+    "egress.log": 18,
+    "merchant_export.csv": 3,
+    "worker.jsonl.gz": 31
+  },
+  "cut_on_purpose": {
+    "router event.routed of a missed event": 15,
+    "router delivery.created of a delivery of an owed event": 9,
+    "egress line of a delivery of an owed event": 14,
+    "worker attempt.started of a delivery of an owed event": 8
+  },
+  "near_misses": {
+    "owed at a switch-on and delivered or waiting (not missed)": 124,
+    "of those, in an off period of less than a day": 15,
+    "accepted while an endpoint was off that is still off at the end (no switch-on, no delivery)": 58,
+    "deliveries that never got a 2xx, by endpoint (endpoint not off at the end)": {
+      "ep_osier_1": 14
+    },
+    "events of m_nettle from before its endpoint existed": 4,
+    "same second as a change": {
+      "same_second_after_off": {
+        "event_id": "evt_2d7b4cc39a9412",
+        "endpoint_id": "ep_harbor_1",
+        "accepted_at": "2026-10-26T09:14:07Z",
+        "deliveries": 0,
+        "got_a_2xx": false,
+        "in_the_report": true
+      },
+      "same_second_before_off": {
+        "event_id": "evt_5d209028c06820",
+        "endpoint_id": "ep_isle_1",
+        "accepted_at": "2026-10-27T08:00:30Z",
+        "deliveries": 1,
+        "got_a_2xx": true,
+        "in_the_report": false
+      },
+      "same_second_before_on": {
+        "event_id": "evt_85d314bfdedd1c",
+        "endpoint_id": "ep_juniper_1",
+        "accepted_at": "2026-10-30T15:00:20Z",
+        "deliveries": 1,
+        "got_a_2xx": true,
+        "in_the_report": false
+      },
+      "same_second_after_on": {
+        "event_id": "evt_c49147ca150da1",
+        "endpoint_id": "ep_moss_1",
+        "accepted_at": "2026-10-28T00:30:02Z",
+        "deliveries": 1,
+        "got_a_2xx": true,
+        "in_the_report": false
+      }
+    },
+    "a day and 90 s before the switch-on": {
+      "event_id": "evt_8f6d219cc819ab",
+      "endpoint_id": "ep_harbor_1",
+      "accepted_at": "2026-10-27T10:01:11Z",
+      "deliveries": 0,
+      "got_a_2xx": false,
+      "in_the_report": true
+    },
+    "90 s less than a day before the switch-on": {
+      "event_id": "evt_4dbdf0ec58723a",
+      "endpoint_id": "ep_harbor_1",
+      "accepted_at": "2026-10-27T10:04:11Z",
+      "deliveries": 1,
+      "got_a_2xx": true,
+      "in_the_report": false
+    },
+    "accepted before the switch-off, delivery waiting for a retry, sent after the switch-on": {
+      "event_id": "evt_107a9a3cbeaf38",
+      "endpoint_id": "ep_isle_1",
+      "accepted_at": "2026-10-27T07:35:30Z",
+      "deliveries": 1,
+      "got_a_2xx": true,
+      "in_the_report": false
+    }
+  }
+}
