@@ -191,6 +191,37 @@ $0.5704 (Sonnet $0.4606, `gpt-6.1-terra` $0.1098), 55 requests, 237.9 s. Correct
   report session's; a second pass by the main session if it cannot start; a different model
   or effort per session so the cost line shows which sessions ran.
 
+## Status after the audit (2026-11-27, after the third graded run)
+
+The owner asked for a full audit aimed at the repair, with Codex as an outside reviewer.
+
+- **Root cause of all three graded results.** An upload keeps no file modes; the grader
+  restores the executable bit on `run.sh` only (`tools/runner.py`); `run.sh` started
+  `kit/prepare.sh` and `kit/check.sh` by path. Preparation never ran on the grader: no
+  snapshot, no evidence database, stale `app/AGENTS.md` in place, no second workspace. Found
+  by Codex (`gpt-6.1-sol`) and independently by two auditors; each submitted version, with
+  modes dropped, reproduces its graded signature. Without the snapshot `kit/rollout.py`
+  played the working tree as the shipped release, so replacement tests proved nothing.
+- **With real models, modes dropped, the kit of submission 3 still passes locally** (starter
+  $0.55, INC-2307 $0.74, INC-2318 $0.78; terra used for one report session only). So the
+  missing preparation removed the check; it did not force the miss.
+- **Changed** (commits 9204428, e7ec9a4, a65e9f3, d7999b9): helpers through interpreters,
+  preparation verified with a fallback, `dryrun/as_uploaded.sh` in the zip build; the runner
+  refuses without a snapshot; one release replacement per stage of work; final states the
+  contract does not name are notes; money lines for a run near $0.85, a review when there is
+  no second repair, the gate always run after the solvers; spend counted once; solver clock
+  from the end of preparation; stop hook sends back only the solver's own open items and
+  reuses an unchanged gate result.
+- **Audit material** (scratch, not in the repository): six lenses planned, four reported
+  (solver instructions, second solver, time and money, and the evaluation gap's first
+  tables); the verification stage and two lenses were stopped because their replays loaded
+  the machine and Codex had covered the same ground. Codex reviews: grader environment,
+  instructions, design, code.
+- **Not done:** a watchdog that replaces a harness which dies late or hangs; a second attempt
+  in place by the other model family; distinct models per session so the cost line shows what
+  ran; harsher practice judges (replacement while work is waiting for a retry or leased).
+- **No Gradescope submission is left**, so none of this has been graded.
+
 ## Out of scope
 
 Anything that needs to know the held-out ticket. We only get category counts back.

@@ -63,6 +63,9 @@ DESCRIPTIONS = collections.OrderedDict(
         ("v2d-from-zip", "The zip for submission 2, unpacked, nothing set (commit b407568). No Codex in the container, so the second solver cannot start: the run shows that case."),
         ("v4c-starter-terra", "Final validation of the zip for submission 3 (commit 9ec5cb1, nothing set) on the Mac: Sonnet main, `gpt-6.1-terra` through Codex as second solver and for the raw-file report."),
         ("v4c-nocodex", "The same commit, nothing set, in the container, where Codex is not installed: both Codex sessions fail to start and the fallbacks take their place (Haiku as second solver, Sonnet at effort low for the raw-file report)."),
+        ("noexec-starter", "The zip of submission 3 as the grader gets it: every file mode dropped except run.sh's (an upload keeps none). kit/prepare.sh cannot be started, so there is no snapshot of the release, no evidence database and no second workspace. Container, no Codex."),
+        ("v5a-nocodex", "After the audit, first version (commit e7ec9a4), run as uploaded (modes dropped) in the container while it was heavily loaded by the audit itself: every helper through its interpreter, preparation verified, a replacement of the release per stage of work, higher money lines."),
+        ("v5c-nocodex", "After the audit, final version (commit d7999b9), run as uploaded (modes dropped) on a quiet machine. Container, no Codex: Haiku as second solver, Sonnet at effort low for the raw-file report."),
     ]
 )
 
@@ -107,7 +110,9 @@ def transfer_section():
         "`v4`/`v4b-` the three-session version while it was built; `v4c-` its final validation at",
         "commit 9ec5cb1 with nothing set: `-terra` on the Mac (Sonnet, and `gpt-6.1-terra` twice",
         "through Codex), `-nocodex` in the container, where Codex cannot start and the fallback",
-        "sessions take over.",
+        "sessions take over. `noexec-` is the kit of submission 3 with file modes dropped as an",
+        "upload drops them (the preparation step cannot start); `v5fix-` the first fix of that;",
+        "`v5a-`/`v5c-` the versions after the audit, run as uploaded.",
         "",
         "| Setup | Run | Result | Repair | Impact | Cost | Requests | Time | Incident | Regr. | Compat |",
         "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",

@@ -54,6 +54,9 @@ Rebuilt by `make_results.py`.
 | v2d-from-zip | 1/1 | 1.00 | 1.00 | $0.243 | $0.24 to $0.24 | 13 | 113 s | 113 s |
 | v4c-starter-terra | 1/1 | 1.00 | 1.00 | $0.580 | $0.58 to $0.58 | 53 | 399 s | 399 s |
 | v4c-nocodex | 1/1 | 1.00 | 1.00 | $0.440 | $0.44 to $0.44 | 43 | 246 s | 246 s |
+| noexec-starter | 1/1 | 1.00 | 1.00 | $0.549 | $0.55 to $0.55 | 39 | 178 s | 178 s |
+| v5a-nocodex | 2/2 | 1.00 | 1.00 | $0.600 | $0.40 to $0.80 | 52 | 461 s | 552 s |
+| v5c-nocodex | 2/2 | 1.00 | 1.00 | $0.663 | $0.56 to $0.77 | 52 | 344 s | 401 s |
 | v4-sonnet-terra-terra | 1/1 | 1.00 | 1.00 | $0.655 | $0.66 to $0.66 | 60 | 388 s | 388 s |
 
 ## baseline
@@ -560,6 +563,32 @@ The same commit, nothing set, in the container, where Codex is not installed: bo
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 20261127-115006-1 | PASS | 1.00 | 1.00 | $0.440 | 43 | 246 s | 9/9 | 10/10 | 2/2 | 36,095 | 1,483,260 | 124,863 |
 
+## noexec-starter
+
+The zip of submission 3 as the grader gets it: every file mode dropped except run.sh's (an upload keeps none). kit/prepare.sh cannot be started, so there is no snapshot of the release, no evidence database and no second workspace. Container, no Codex.
+
+| Run | Result | Repair | Impact | Cost | Requests | Time | Incident | Regr. | Compat | Output | Cache read | Cache write |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 20261127-124007-1 | PASS | 1.00 | 1.00 | $0.549 | 39 | 178 s | 9/9 | 10/10 | 2/2 | 22,946 | 1,096,564 | 83,777 |
+
+## v5a-nocodex
+
+After the audit, first version (commit e7ec9a4), run as uploaded (modes dropped) in the container while it was heavily loaded by the audit itself: every helper through its interpreter, preparation verified, a replacement of the release per stage of work, higher money lines.
+
+| Run | Result | Repair | Impact | Cost | Requests | Time | Incident | Regr. | Compat | Output | Cache read | Cache write |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 20261127-132921-1 | PASS | 1.00 | 1.00 | $0.397 | 34 | 370 s | 9/9 | 10/10 | 2/2 | 25,056 | 784,074 | 89,981 |
+| 20261127-132921-2 | PASS | 1.00 | 1.00 | $0.803 | 70 | 552 s | 9/9 | 10/10 | 2/2 | 42,698 | 1,960,346 | 144,289 |
+
+## v5c-nocodex
+
+After the audit, final version (commit d7999b9), run as uploaded (modes dropped) on a quiet machine. Container, no Codex: Haiku as second solver, Sonnet at effort low for the raw-file report.
+
+| Run | Result | Repair | Impact | Cost | Requests | Time | Incident | Regr. | Compat | Output | Cache read | Cache write |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 20261127-143632-1 | PASS | 1.00 | 1.00 | $0.556 | 48 | 401 s | 9/9 | 10/10 | 2/2 | 32,669 | 1,568,335 | 112,039 |
+| 20261127-145031-1 | PASS | 1.00 | 1.00 | $0.771 | 55 | 288 s | 9/9 | 10/10 | 2/2 | 36,709 | 1,584,987 | 143,169 |
+
 ## v4-sonnet-terra-terra
 
 
@@ -580,7 +609,9 @@ sentence, run with one Sonnet session; `sub1-` is the first submission's version
 `v4`/`v4b-` the three-session version while it was built; `v4c-` its final validation at
 commit 9ec5cb1 with nothing set: `-terra` on the Mac (Sonnet, and `gpt-6.1-terra` twice
 through Codex), `-nocodex` in the container, where Codex cannot start and the fallback
-sessions take over.
+sessions take over. `noexec-` is the kit of submission 3 with file modes dropped as an
+upload drops them (the preparation step cannot start); `v5fix-` the first fix of that;
+`v5a-`/`v5c-` the versions after the audit, run as uploaded.
 
 | Setup | Run | Result | Repair | Impact | Cost | Requests | Time | Incident | Regr. | Compat |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -589,6 +620,8 @@ sessions take over.
 | codex-luna | 20261126-170021-1 | PASS | 1.0 | 1.0 | $0.029 | 23 | 481 s | 9/9 | 9/9 | 4/4 |
 | codex-terra | 20261126-165400-1 | PASS | 1.0 | 1.0 | $0.110 | 19 | 183 s | 9/9 | 9/9 | 4/4 |
 | codex-terra | 20261126-165400-2 | PASS | 1.0 | 1.0 | $0.147 | 21 | 186 s | 9/9 | 9/9 | 4/4 |
+| noexec-2307 | 20261127-124007-1 | PASS | 1.0 | 1.0 | $0.740 | 34 | 240 s | 19/19 | 21/21 | 6/6 |
+| noexec-2318-terra | 20261127-135245-1 | PASS | 1.0 | 1.0 | $0.778 | 45 | 293 s | 19/19 | 19/19 | 6/6 |
 | raw-haiku-2231 | 20261127-112336-1 | FAIL | 0.0 | 0.0 | $0.038 | 21 | 221 s | 0/9 | 9/9 | 4/4 |
 | raw-haiku-2307 | 20261127-112336-1 | FAIL | 0.0 | 0.0 | $0.046 | 26 | 221 s | 0/19 | 21/21 | 6/6 |
 | raw-haiku-2318 | 20261127-112336-1 | FAIL | 0.0 | 0.96 | $0.049 | 25 | 221 s | 0/19 | 19/19 | 6/6 |
@@ -659,6 +692,11 @@ sessions take over.
 | v4c-nocodex-2231 | 20261127-120235-1 | PASS | 1.0 | 1.0 | $0.488 | 37 | 130 s | 9/9 | 9/9 | 4/4 |
 | v4c-nocodex-2307 | 20261127-115006-1 | PASS | 1.0 | 1.0 | $0.773 | 53 | 314 s | 19/19 | 21/21 | 6/6 |
 | v4c-nocodex-2318 | 20261127-120235-1 | PASS | 1.0 | 1.0 | $0.774 | 45 | 318 s | 19/19 | 19/19 | 6/6 |
+| v5a-nocodex-2307 | 20261127-132921-1 | PASS | 1.0 | 1.0 | $0.739 | 53 | 532 s | 19/19 | 21/21 | 6/6 |
+| v5c-nocodex-2231 | 20261127-143632-1 | PASS | 1.0 | 1.0 | $0.598 | 47 | 391 s | 9/9 | 9/9 | 4/4 |
+| v5c-nocodex-2307 | 20261127-144320-1 | PASS | 1.0 | 1.0 | $0.878 | 59 | 416 s | 19/19 | 21/21 | 6/6 |
+| v5c-nocodex-2318 | 20261127-144320-1 | PASS | 1.0 | 1.0 | $0.769 | 52 | 415 s | 19/19 | 19/19 | 6/6 |
+| v5fix-2318-terra | 20261127-140127-1 | PASS | 1.0 | 1.0 | $0.657 | 47 | 278 s | 19/19 | 19/19 | 6/6 |
 
 ## Notes from reading the logs
 

@@ -1,0 +1,63 @@
+{
+  "passed": true,
+  "score": {
+    "categories": {
+      "incident": {
+        "passed": 9,
+        "total": 9,
+        "failed": []
+      },
+      "regressions": {
+        "passed": 10,
+        "total": 10,
+        "failed": []
+      },
+      "compat": {
+        "passed": 2,
+        "total": 2,
+        "failed": []
+      }
+    },
+    "repair": 1.0,
+    "impact": 1.0,
+    "precision": 1.0,
+    "recall": 1.0,
+    "totals_right": 6,
+    "totals": 6,
+    "seconds": 17.2
+  },
+  "exit_code": 0,
+  "timed_out": false,
+  "seconds": 552.4,
+  "error": null,
+  "cost_usd": 0.8031252600000001,
+  "requests": 70,
+  "rejected": [
+    "endpoint_not_available",
+    "endpoint_not_available",
+    "endpoint_not_available",
+    "endpoint_not_available",
+    "endpoint_not_available"
+  ],
+  "upstream_errors": 0,
+  "by_model": {
+    "claude-sonnet-5-5": {
+      "requests": 54,
+      "cost_usd": 0.7916274999999999,
+      "input": 112,
+      "output": 33984,
+      "cache_read": 1584810,
+      "cache_write": 117233,
+      "cache_write_1h": 0
+    },
+    "claude-haiku-5-5": {
+      "requests": 16,
+      "cost_usd": 0.01149776,
+      "input": 34,
+      "output": 8714,
+      "cache_read": 375536,
+      "cache_write": 27056,
+      "cache_write_1h": 0
+    }
+  }
+}

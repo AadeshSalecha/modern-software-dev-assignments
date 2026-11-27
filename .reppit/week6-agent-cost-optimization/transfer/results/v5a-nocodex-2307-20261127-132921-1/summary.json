@@ -1,0 +1,77 @@
+{
+  "passed": true,
+  "score": {
+    "passed": true,
+    "repair": 1.0,
+    "impact": {
+      "impact": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "figures_right": 9,
+      "figures": 9,
+      "problem": null,
+      "reported": {
+        "merchants": [
+          "m_juniper",
+          "m_kestrel",
+          "m_larch",
+          "m_oak",
+          "m_pine"
+        ],
+        "entries": 35,
+        "skipped_rows": 82
+      }
+    },
+    "categories": {
+      "incident": {
+        "passed": 19,
+        "total": 19,
+        "failed": []
+      },
+      "regressions": {
+        "passed": 21,
+        "total": 21,
+        "failed": []
+      },
+      "compat": {
+        "passed": 6,
+        "total": 6,
+        "failed": []
+      }
+    },
+    "build_problem": null
+  },
+  "exit_code": 0,
+  "timed_out": false,
+  "seconds": 532.5,
+  "error": null,
+  "cost_usd": 0.7393225700000001,
+  "requests": 53,
+  "rejected": [
+    "endpoint_not_available",
+    "endpoint_not_available",
+    "endpoint_not_available",
+    "endpoint_not_available"
+  ],
+  "upstream_errors": 0,
+  "by_model": {
+    "claude-haiku-5-5": {
+      "requests": 18,
+      "cost_usd": 0.014861570000000001,
+      "input": 38,
+      "output": 9589,
+      "cache_read": 527202,
+      "cache_write": 38330,
+      "cache_write_1h": 0
+    },
+    "claude-sonnet-5-5": {
+      "requests": 35,
+      "cost_usd": 0.724461,
+      "input": 72,
+      "output": 30960,
+      "cache_read": 1296370,
+      "cache_write": 114032,
+      "cache_write_1h": 0
+    }
+  }
+}

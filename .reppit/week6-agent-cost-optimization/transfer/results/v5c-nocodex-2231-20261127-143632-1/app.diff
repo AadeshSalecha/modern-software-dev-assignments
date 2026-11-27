@@ -1,0 +1,150 @@
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/api/src/main.ts week6/app/services/api/src/main.ts
+--- clean-app/services/api/src/main.ts	2026-11-27 12:41:14.021608886 +0000
++++ week6/app/services/api/src/main.ts	2026-11-27 14:37:53.589477031 +0000
+@@ -9,7 +9,7 @@
+ import { RecentKeys } from "./keys.ts";
+ import { type Endpoint, type EventRecord, Store } from "./store.ts";
+ 
+-const RELEASE = "2.3.1";
++const RELEASE = "2.4.0";
+ const EVENT_TYPES = new Set([
+   "payment.captured",
+   "payment.failed",
+@@ -339,6 +339,8 @@
+   });
+ });
+ 
+-server.listen(portBase + 1, "127.0.0.1", () =>
+-  log("api.started", { release: RELEASE }),
+-);
++server.listen(portBase + 1, "127.0.0.1", () => {
++  log("api.started", { release: RELEASE });
++  const resynced = store.resyncEndpoints(now());
++  if (resynced > 0) log("endpoints.resync", { count: resynced });
++});
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/api/src/store.ts week6/app/services/api/src/store.ts
+--- clean-app/services/api/src/store.ts	2026-11-27 12:41:14.021608886 +0000
++++ week6/app/services/api/src/store.ts	2026-11-27 14:37:53.583699864 +0000
+@@ -91,6 +91,27 @@
+     }
+   }
+ 
++  // Release 2.4: endpoint changes the router dropped as stale are published again, once,
++  // as the current state of every endpoint. The marker makes later starts do nothing.
++  resyncEndpoints(now: number): number {
++    return this.transaction((): number => {
++      const marked = this.db
++        .prepare(
++          "insert into meta (key, value) values ('endpoint_resync_2_4', 1) on conflict (key) do nothing",
++        )
++        .run();
++      if (Number(marked.changes) !== 1) return 0;
++      const rows = this.db
++        .prepare("select id from endpoints order by id")
++        .all() as unknown as { id: string }[];
++      for (const row of rows) {
++        const endpoint = this.endpoint(row.id);
++        if (endpoint) this.enqueue("endpoint.changed", now, { endpoint });
++      }
++      return rows.length;
++    });
++  }
++
+   // Opaque ids from a stored counter. Call inside a transaction.
+   nextId(prefix: string): string {
+     this.db
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/bus.py week6/app/services/router/bus.py
+--- clean-app/services/router/bus.py	2026-11-27 12:41:14.023752210 +0000
++++ week6/app/services/router/bus.py	2026-11-27 14:37:46.364948950 +0000
+@@ -109,6 +109,7 @@
+             need(ep, "enabled", bool),
+             need(ep, "version", int),
+         )
++        body["origin"] = "v3"
+         return producer, str(seq), "endpoint", body
+     if type_ == "resend.requested":
+         body = {"event_id": need(data, "event_id", str), "endpoint_id": need(data, "endpoint_id", str)}
+@@ -143,6 +144,7 @@
+             need(ep, "active", bool),
+             seq,
+         )
++        body["origin"] = "v2"
+         return "api.v2", str(seq), "endpoint", body
+     raise Malformed("unknown kind")
+ 
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/main.py week6/app/services/router/main.py
+--- clean-app/services/router/main.py	2026-11-27 12:41:14.023752210 +0000
++++ week6/app/services/router/main.py	2026-11-27 14:37:53.589959645 +0000
+@@ -14,7 +14,7 @@
+ import routing  # noqa: E402
+ from store import Clock, Log, open_db  # noqa: E402
+ 
+-RELEASE = "2.3.1"
++RELEASE = "2.4.0"
+ 
+ 
+ class Router:
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/routing.py week6/app/services/router/routing.py
+--- clean-app/services/router/routing.py	2026-11-27 12:41:14.023752210 +0000
++++ week6/app/services/router/routing.py	2026-11-27 14:37:46.366087816 +0000
+@@ -103,7 +103,17 @@
+ 
+ def apply_endpoint(db, log, now, endpoint):
+     old = db.execute("select * from endpoints where id = ?", (endpoint["id"],)).fetchone()
+-    if old is not None and endpoint["version"] <= old["version"]:
++    origin = endpoint.get("origin", "v3")
++    if old is not None:
++        if origin == "v3":
++            # The api's own versions are ordered only among themselves.
++            stale = old["v3_version"] is not None and endpoint["version"] <= old["v3_version"]
++        else:
++            # Archive (version 2) messages are ordered by sequence, and never override the api.
++            stale = old["v3_version"] is not None or endpoint["version"] <= old["version"]
++    else:
++        stale = False
++    if stale:
+         log.write("endpoint.stale", endpoint=endpoint["id"], version=endpoint["version"])
+         return
+     was_enabled = bool(old["enabled"]) if old is not None else None
+@@ -111,11 +121,11 @@
+     if not endpoint["enabled"] and was_enabled is not False:
+         disabled_at = now
+     db.execute(
+-        "insert into endpoints (id, merchant_id, url, secret, event_types, enabled, version, disabled_at) "
+-        "values (?, ?, ?, ?, ?, ?, ?, ?) "
++        "insert into endpoints (id, merchant_id, url, secret, event_types, enabled, version, disabled_at, v3_version) "
++        "values (?, ?, ?, ?, ?, ?, ?, ?, ?) "
+         "on conflict (id) do update set url = excluded.url, secret = excluded.secret, "
+         "event_types = excluded.event_types, enabled = excluded.enabled, version = excluded.version, "
+-        "disabled_at = excluded.disabled_at",
++        "disabled_at = excluded.disabled_at, v3_version = excluded.v3_version",
+         (
+             endpoint["id"],
+             endpoint["merchant_id"],
+@@ -125,6 +135,7 @@
+             int(endpoint["enabled"]),
+             endpoint["version"],
+             None if endpoint["enabled"] else disabled_at,
++            endpoint["version"] if origin == "v3" else None,
+         ),
+     )
+     log.write(
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/store.py week6/app/services/router/store.py
+--- clean-app/services/router/store.py	2026-11-27 12:41:14.023752210 +0000
++++ week6/app/services/router/store.py	2026-11-27 14:37:46.365663002 +0000
+@@ -77,6 +77,15 @@
+     db.execute("pragma journal_mode = wal")
+     db.execute("pragma synchronous = normal")
+     db.executescript(SCHEMA)
++    cols = [r[1] for r in db.execute("pragma table_info(endpoints)")]
++    if "v3_version" not in cols:
++        # Rows written by earlier releases: the version is the api's own unless a version-2
++        # message with that number as its sequence was applied (it then came from the archive).
++        db.execute("alter table endpoints add column v3_version integer")
++        db.execute(
++            "update endpoints set v3_version = version where not exists "
++            "(select 1 from bus_seen b where b.producer = 'api.v2' and b.ident = cast(endpoints.version as text))"
++        )
+     db.commit()
+     return db
+ 

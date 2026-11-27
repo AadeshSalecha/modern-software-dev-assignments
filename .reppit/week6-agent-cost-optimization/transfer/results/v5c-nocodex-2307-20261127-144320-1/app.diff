@@ -1,0 +1,141 @@
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/api/src/store.ts week6/app/services/api/src/store.ts
+--- clean-app/services/api/src/store.ts	2026-11-27 12:41:14.021608886 +0000
++++ week6/app/services/api/src/store.ts	2026-11-27 14:49:57.641904370 +0000
+@@ -77,6 +77,40 @@
+     this.db.exec("pragma journal_mode = wal");
+     this.db.exec("pragma synchronous = normal");
+     this.db.exec(SCHEMA);
++    this.replayLostResends();
++  }
++
++  // Once per store: queue again every resend the shipped release may have
++  // published without the router creating a delivery. The router tells the
++  // ones that already got a delivery apart and ignores them.
++  replayLostResends(): void {
++    this.db.exec("begin immediate");
++    try {
++      const done = this.db
++        .prepare("select value from meta where key = 'resend_replay'")
++        .get();
++      if (!done) {
++        const rows = this.db
++          .prepare(
++            "select seq, at, data from outbox where type = 'resend.requested' and status != 'rejected' order by seq",
++          )
++          .all() as unknown as { seq: number; at: number; data: string }[];
++        for (const row of rows) {
++          const data = JSON.parse(row.data);
++          if (data.request_seq !== undefined) continue;
++          this.enqueue("resend.requested", row.at, {
++            ...data,
++            request_seq: row.seq,
++            replay: true,
++          });
++        }
++        this.db.exec("insert into meta (key, value) values ('resend_replay', 1)");
++      }
++      this.db.exec("commit");
++    } catch (problem) {
++      this.db.exec("rollback");
++      throw problem;
++    }
+   }
+ 
+   transaction<T>(work: () => T): T {
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/bus.py week6/app/services/router/bus.py
+--- clean-app/services/router/bus.py	2026-11-27 12:41:14.023752210 +0000
++++ week6/app/services/router/bus.py	2026-11-27 14:49:57.650772627 +0000
+@@ -112,6 +112,11 @@
+         return producer, str(seq), "endpoint", body
+     if type_ == "resend.requested":
+         body = {"event_id": need(data, "event_id", str), "endpoint_id": need(data, "endpoint_id", str)}
++        body["request"] = str(seq)
++        body["replay"] = False
++        if data.get("replay") is True and isinstance(data.get("request_seq"), int):
++            body["request"] = str(data["request_seq"])
++            body["replay"] = True
+         return producer, str(seq), "resend", body
+     raise Malformed("unknown message type")
+ 
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/routing.py week6/app/services/router/routing.py
+--- clean-app/services/router/routing.py	2026-11-27 12:41:14.023752210 +0000
++++ week6/app/services/router/routing.py	2026-11-27 14:49:57.650722347 +0000
+@@ -20,6 +20,8 @@
+ def create_delivery(db, log, now, event_id, endpoint_id, resend_of=None):
+     version = db.execute("select version from endpoints where id = ?", (endpoint_id,)).fetchone()[0]
+     delivery_id = next_id(db, "dlv")
++    if resend_of == "self":
++        resend_of = delivery_id
+     ord_ = db.execute("select value from meta where key = 'dlv'").fetchone()[0]
+     db.execute(
+         "insert into deliveries (id, ord, event_id, endpoint_id, endpoint_version, resend_of, state, "
+@@ -141,11 +143,46 @@
+ 
+ 
+ def apply_resend(db, log, now, body):
+-    original = first_delivery(db, body["event_id"], body["endpoint_id"])
+-    if original is None:
+-        log.write("resend.skipped", level="warn", event=body["event_id"], endpoint=body["endpoint_id"])
++    producer = "api"
++    event_id, endpoint_id, request = body["event_id"], body["endpoint_id"], body["request"]
++    if db.execute("select 1 from resend_log where producer = ? and request = ?", (producer, request)).fetchone():
+         return
+-    create_delivery(db, log, now, body["event_id"], body["endpoint_id"], resend_of=original["id"])
++    event = db.execute("select merchant_id from events where id = ?", (event_id,)).fetchone()
++    endpoint = db.execute("select merchant_id from endpoints where id = ?", (endpoint_id,)).fetchone()
++    if event is None or endpoint is None or event["merchant_id"] != endpoint["merchant_id"]:
++        log.write("resend.skipped", level="warn", event=event_id, endpoint=endpoint_id)
++        db.execute(
++            "insert into resend_log (producer, request, event_id, endpoint_id, delivery_id, legacy) "
++            "values (?, ?, ?, ?, null, 1)",
++            (producer, request, event_id, endpoint_id),
++        )
++        return
++    if body.get("replay"):
++        # The shipped release made a delivery for some requests of this pair and none for
++        # others; resend deliveries not accounted for in resend_log are those it made.
++        made = db.execute(
++            "select count(*) from deliveries where event_id = ? and endpoint_id = ? and resend_of is not null "
++            "and id not in (select delivery_id from resend_log where delivery_id is not null)",
++            (event_id, endpoint_id),
++        ).fetchone()[0]
++        used = db.execute(
++            "select count(*) from resend_log where event_id = ? and endpoint_id = ? and legacy = 2",
++            (event_id, endpoint_id),
++        ).fetchone()[0]
++        if made > used:
++            db.execute(
++                "insert into resend_log (producer, request, event_id, endpoint_id, delivery_id, legacy) "
++                "values (?, ?, ?, ?, null, 2)",
++                (producer, request, event_id, endpoint_id),
++            )
++            return
++    original = first_delivery(db, event_id, endpoint_id)
++    delivery_id = create_delivery(db, log, now, event_id, endpoint_id, resend_of=original["id"] if original else "self")
++    db.execute(
++        "insert into resend_log (producer, request, event_id, endpoint_id, delivery_id, legacy) "
++        "values (?, ?, ?, ?, ?, 0)",
++        (producer, request, event_id, endpoint_id, delivery_id),
++    )
+ 
+ 
+ def apply(db, log, now, kind, body):
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/store.py week6/app/services/router/store.py
+--- clean-app/services/router/store.py	2026-11-27 12:41:14.023752210 +0000
++++ week6/app/services/router/store.py	2026-11-27 14:49:57.651088738 +0000
+@@ -15,6 +15,15 @@
+     ident text not null,
+     primary key (producer, ident)
+ );
++create table if not exists resend_log (
++    producer text not null,
++    request text not null,
++    event_id text not null,
++    endpoint_id text not null,
++    delivery_id text,
++    legacy integer not null default 0,
++    primary key (producer, request)
++);
+ create table if not exists endpoints (
+     id text primary key,
+     merchant_id text not null,

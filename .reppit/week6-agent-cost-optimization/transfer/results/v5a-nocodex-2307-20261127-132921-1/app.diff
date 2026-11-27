@@ -1,0 +1,177 @@
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/api/src/main.ts week6/app/services/api/src/main.ts
+--- clean-app/services/api/src/main.ts	2026-11-27 12:41:14.021608886 +0000
++++ week6/app/services/api/src/main.ts	2026-11-27 13:30:55.691805944 +0000
+@@ -206,7 +206,10 @@
+ function resend(eventId: string, body: Body): Reply {
+   const endpointId = text(body, "endpoint_id");
+   if (!store.event(eventId)) return [404, { error: "no such event" }];
+-  if (!store.endpoint(endpointId)) return [404, { error: "no such endpoint" }];
++  const target = store.endpoint(endpointId);
++  if (!target) return [404, { error: "no such endpoint" }];
++  if (target.merchant_id !== store.event(eventId)!.merchant_id)
++    return [404, { error: "no such endpoint" }];
+   store.transaction(() =>
+     store.enqueue("resend.requested", now(), {
+       event_id: eventId,
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/api/src/store.ts week6/app/services/api/src/store.ts
+--- clean-app/services/api/src/store.ts	2026-11-27 12:41:14.021608886 +0000
++++ week6/app/services/api/src/store.ts	2026-11-27 13:31:07.593540240 +0000
+@@ -77,6 +77,37 @@
+     this.db.exec("pragma journal_mode = wal");
+     this.db.exec("pragma synchronous = normal");
+     this.db.exec(SCHEMA);
++    this.reconcileResends();
++  }
++
++  // Resends the shipped release published were applied by a router that dropped some of
++  // them. Tell the router, once, how many requests each event and endpoint had; it
++  // creates what is missing. Rows are flagged legacy = 1 (done) or 0 (new code's).
++  reconcileResends(): void {
++    const cols = this.db.prepare("pragma table_info(outbox)").all() as unknown as {
++      name: string;
++    }[];
++    if (!cols.some((c) => c.name === "legacy"))
++      this.db.exec("alter table outbox add column legacy integer");
++    this.transaction(() => {
++      const rows = this.db
++        .prepare(
++          "select seq, status, data, type, at from outbox where legacy is null and type = 'resend.requested' and status in ('published', 'pending')",
++        )
++        .all() as unknown as { seq: number; data: string; at: number }[];
++      const counts = new Map<string, { event_id: string; endpoint_id: string; requests: number; at: number }>();
++      for (const r of rows) {
++        const d = JSON.parse(r.data);
++        const k = `${d.event_id}\u0000${d.endpoint_id}`;
++        const c = counts.get(k) ?? { event_id: d.event_id, endpoint_id: d.endpoint_id, requests: 0, at: r.at };
++        c.requests += 1;
++        counts.set(k, c);
++      }
++      for (const c of counts.values())
++        this.enqueue("resend.reconcile", c.at, c);
++      this.db.exec("update outbox set legacy = 1, status = 'published' where legacy is null and type = 'resend.requested' and status in ('published', 'pending')");
++      this.db.exec("update outbox set legacy = 0 where legacy is null");
++    });
+   }
+ 
+   transaction<T>(work: () => T): T {
+@@ -198,7 +229,7 @@
+ 
+   enqueue(type: string, now: number, data: unknown): void {
+     this.db
+-      .prepare("insert into outbox (type, at, data) values (?, ?, ?)")
++      .prepare("insert into outbox (type, at, data, legacy) values (?, ?, ?, 0)")
+       .run(type, now, JSON.stringify(data));
+   }
+ 
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/bus.py week6/app/services/router/bus.py
+--- clean-app/services/router/bus.py	2026-11-27 12:41:14.023752210 +0000
++++ week6/app/services/router/bus.py	2026-11-27 13:30:35.507347164 +0000
+@@ -113,6 +113,13 @@
+     if type_ == "resend.requested":
+         body = {"event_id": need(data, "event_id", str), "endpoint_id": need(data, "endpoint_id", str)}
+         return producer, str(seq), "resend", body
++    if type_ == "resend.reconcile":
++        body = {
++            "event_id": need(data, "event_id", str),
++            "endpoint_id": need(data, "endpoint_id", str),
++            "requests": need(data, "requests", int),
++        }
++        return producer, str(seq), "reconcile", body
+     raise Malformed("unknown message type")
+ 
+ 
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/routing.py week6/app/services/router/routing.py
+--- clean-app/services/router/routing.py	2026-11-27 12:41:14.023752210 +0000
++++ week6/app/services/router/routing.py	2026-11-27 13:35:58.398342878 +0000
+@@ -17,14 +17,14 @@
+     return "*" in event_types or type_ in event_types
+ 
+ 
+-def create_delivery(db, log, now, event_id, endpoint_id, resend_of=None):
++def create_delivery(db, log, now, event_id, endpoint_id, resend_of=None, is_resend=False):
+     version = db.execute("select version from endpoints where id = ?", (endpoint_id,)).fetchone()[0]
+     delivery_id = next_id(db, "dlv")
+     ord_ = db.execute("select value from meta where key = 'dlv'").fetchone()[0]
+     db.execute(
+         "insert into deliveries (id, ord, event_id, endpoint_id, endpoint_version, resend_of, state, "
+-        "available_at, created_at) values (?, ?, ?, ?, ?, ?, 'queued', ?, ?)",
+-        (delivery_id, ord_, event_id, endpoint_id, version, resend_of, now, now),
++        "available_at, created_at, via_resend) values (?, ?, ?, ?, ?, ?, 'queued', ?, ?, ?)",
++        (delivery_id, ord_, event_id, endpoint_id, version, resend_of, now, now, 1 if is_resend else 0),
+     )
+     log.write(
+         "delivery.created", delivery=delivery_id, event=event_id, endpoint=endpoint_id, version=version,
+@@ -96,7 +96,9 @@
+     for event in missed:
+         if not subscribed(endpoint["event_types"], event["type"]):
+             continue
+-        if first_delivery(db, event["id"], endpoint["id"]):
++        if db.execute(
++            "select 1 from deliveries where event_id = ? and endpoint_id = ?", (event["id"], endpoint["id"])
++        ).fetchone():
+             continue
+         create_delivery(db, log, now, event["id"], endpoint["id"])
+ 
+@@ -140,12 +142,38 @@
+         catch_up(db, log, now, endpoint, disabled_at)
+ 
+ 
+-def apply_resend(db, log, now, body):
+-    original = first_delivery(db, body["event_id"], body["endpoint_id"])
+-    if original is None:
++def _resend_target(db, log, body):
++    event = db.execute("select merchant_id from events where id = ?", (body["event_id"],)).fetchone()
++    ep = db.execute("select merchant_id from endpoints where id = ?", (body["endpoint_id"],)).fetchone()
++    if event is None or ep is None or event["merchant_id"] != ep["merchant_id"]:
+         log.write("resend.skipped", level="warn", event=body["event_id"], endpoint=body["endpoint_id"])
++        return False
++    return True
++
++
++def _link(db, event_id, endpoint_id):
++    row = first_delivery(db, event_id, endpoint_id)
++    return row["id"] if row else None
++
++
++def apply_resend(db, log, now, body):
++    if not _resend_target(db, log, body):
++        return
++    create_delivery(db, log, now, body["event_id"], body["endpoint_id"],
++                    resend_of=_link(db, body["event_id"], body["endpoint_id"]), is_resend=True)
++
++
++def apply_reconcile(db, log, now, body):
++    """Requests the shipped release accepted: each owes one resend delivery; some got theirs."""
++    if not _resend_target(db, log, body):
+         return
+-    create_delivery(db, log, now, body["event_id"], body["endpoint_id"], resend_of=original["id"])
++    have = db.execute(
++        "select count(*) from deliveries where event_id = ? and endpoint_id = ? and (resend_of is not null or via_resend = 1)",
++        (body["event_id"], body["endpoint_id"]),
++    ).fetchone()[0]
++    for _ in range(max(0, body["requests"] - have)):
++        create_delivery(db, log, now, body["event_id"], body["endpoint_id"],
++                        resend_of=_link(db, body["event_id"], body["endpoint_id"]), is_resend=True)
+ 
+ 
+ def apply(db, log, now, kind, body):
+@@ -153,5 +181,7 @@
+         route_event(db, log, now, body)
+     elif kind == "endpoint":
+         apply_endpoint(db, log, now, body)
++    elif kind == "reconcile":
++        apply_reconcile(db, log, now, body)
+     else:
+         apply_resend(db, log, now, body)
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/store.py week6/app/services/router/store.py
+--- clean-app/services/router/store.py	2026-11-27 12:41:14.023752210 +0000
++++ week6/app/services/router/store.py	2026-11-27 13:35:58.397842556 +0000
+@@ -77,6 +77,8 @@
+     db.execute("pragma journal_mode = wal")
+     db.execute("pragma synchronous = normal")
+     db.executescript(SCHEMA)
++    if not any(r["name"] == "via_resend" for r in db.execute("pragma table_info(deliveries)")):
++        db.execute("alter table deliveries add column via_resend integer")
+     db.commit()
+     return db
+ 

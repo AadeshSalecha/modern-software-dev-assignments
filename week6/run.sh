@@ -58,11 +58,13 @@ FIX_END=$((HARD_STOP - 95))            # the follow-up session is stopped then; 
 # and with the old line of 0.60 the follow-up never started there. It costs 5 to 17 cents
 # (median 6). With a second repair to compare with it starts below FIX_BUDGET, four cents
 # higher when a run as written fails on the main repair; without one it starts below
-# REVIEW_BUDGET, because then the run has spent less to begin with. A report decision costs about 15 cents: two different
+# REVIEW_BUDGET, because then the run has spent less to begin with. The session is given at
+# most two minutes: in the one run where it took longer (133 s, 13 cents) its result was
+# worse than what it started from and was dropped. A report decision costs about 15 cents: two different
 # reports mean one of them is wrong, and the report is a third of the correctness score.
-FIX_BUDGET=${KIT_FIX_BUDGET:-0.78}
-REVIEW_BUDGET=${KIT_REVIEW_BUDGET:-0.70}
-JUDGE_BUDGET=${KIT_JUDGE_BUDGET:-0.78}
+FIX_BUDGET=${KIT_FIX_BUDGET:-0.74}
+REVIEW_BUDGET=${KIT_REVIEW_BUDGET:-0.68}
+JUDGE_BUDGET=${KIT_JUDGE_BUDGET:-0.76}
 RECONCILE=${KIT_RECONCILE:-always}     # always: compare the two repairs every time; fails: only when a run fails
 
 MAIN="${KIT_MAIN:-claude:claude-sonnet-5-5:medium}"
@@ -80,7 +82,7 @@ REPORT_END=${KIT_REPORT_END:-220}      # the report-only session is stopped this
 # script, to the stop hook and to the agents. Sessions that have room are given more of it:
 # the main solver is told once if it stops with a good part of its share unused, and the
 # follow-up sessions run at effort high when the run can afford that (KIT_ADAPT=0: never).
-export KIT_MONEY="${KIT_MONEY:-0.88}"  # dollars the run means to stay under; full cost credit ends at 0.75
+export KIT_MONEY="${KIT_MONEY:-0.86}"  # dollars the run means to stay under; full cost credit ends at 0.75
 MAIN_SHARE=${KIT_MAIN_SHARE:-0.36}     # of which the main solver's first session may use this much
 SECOND_SHARE=${KIT_SECOND_SHARE:-0.18} # and the second solver this much (it is told; see also its time limit)
 export KIT_STARTED=$STARTED
@@ -479,7 +481,9 @@ improve() {
   cp -R work/scenarios work/cross/before-scenarios 2>/dev/null
   spec=$(with_room "$MAIN" 0.30) # effort high if the run can afford it; a judge may be running too
   log=$(log_for "$name" "$spec")
-  KIT_SESSION=$name KIT_PHASE=$name agent "$spec" resume $((FIX_END - $(elapsed))) all "$prompt" >"$log" 2>&1
+  local seconds=$((FIX_END - $(elapsed)))
+  [ "$seconds" -gt 120 ] && seconds=120
+  KIT_SESSION=$name KIT_PHASE=$name agent "$spec" resume "$seconds" all "$prompt" >"$log" 2>&1
   echo "run.sh: $name session ($spec) ended with status $? after $(elapsed) s"
   show "$log"
   stop_services
