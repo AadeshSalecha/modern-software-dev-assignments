@@ -129,6 +129,34 @@ spend more effort and time, and an answer to where the held-out failures could b
   harm and for price. Seven audit defects are not built into incidents (one needs a second
   worker, which the harness cannot start).
 
+## Status after the second graded run (2026-11-27, later)
+
+Submission 2: repair 0.71 (12 of 17), impact 0.11, $0.39, 177.5 s. The same scores as
+submission 1, and no request to `gpt-6.1-terra`: the run was one Sonnet session.
+
+- **Why the second solver did not run.** A graded run is another, unprivileged account with an
+  emptied environment (`tools/runner.py`). `make_copy` gave up on the first file it could not
+  read and `run.sh` went on alone. Reproduced with one unreadable folder under `app/`. Not
+  proven to be what happened on the grader; the other candidate is Codex failing to start in
+  the copy. Both are now handled (tolerant copy, checked; fallback sessions).
+- **Why the same score twice.** Systematic for one Sonnet session with this kit on that
+  incident. Ruled out by experiment: terse wording of the recovery requirement (6 of 6 pass),
+  the Python version (3.8 to 3.13 identical), running unprivileged with no environment.
+  Not reproduced locally.
+- **Literature** (survey by a research agent, sources in the conversation, several 2026 items
+  are preprints): selection is the bottleneck, different families cover more than resamples,
+  execution beats voting and LLM judging, agent-written tests are weak evidence, judges are
+  for triage. Consistent with: two or three different attempts, chosen by execution.
+- **Built (commits 92c089b, e75500d, e0b42c6):** tolerant copy and fallbacks; a third session
+  that derives the report from the raw files without the kit's database or skills; reports
+  settled part by part; the second repair taken when it dominates in the cross matrix.
+- **Measured:** the raw-file report with Sonnet has entries and totals right in 7 of 7 runs on
+  four incidents and `skipped_rows` wrong in 3; Haiku rarely finishes it; `gpt-6-luna` is near
+  but not exact. Full runs with Claude stand-ins: 7 of 7 pass, $0.37 to $0.71. Real pairing on
+  the Mac at 92c089b: starter $0.66, INC-2307 $0.63, both pass.
+- **Waiting on the Mac:** the real pairing at the final commit on all four incidents.
+  One Gradescope submission is left.
+
 ## Out of scope
 
 Anything that needs to know the held-out ticket. We only get category counts back.
