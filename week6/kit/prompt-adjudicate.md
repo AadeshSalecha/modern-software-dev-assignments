@@ -18,7 +18,9 @@ Method:
    on two or three concrete ids from the "only in" lists by following them through the
    per-file tables.
 3. Neither report is presumed right, and where they agree they can both be wrong. If you
-   find a sentence both scripts mishandle, fix that too.
+   find a sentence both scripts mishandle, fix that too. Check in particular that each set
+   is built from every file that can show a member (skill, rule 2): a script that takes a
+   set from one file misses the members whose row was cut there.
 4. Write the final file under `out/` with a script, `work/report-final.py`, in exactly the
    shape the ticket asks for, then run `kit/check.sh --only report`.
 

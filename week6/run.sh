@@ -30,7 +30,8 @@
 #   KIT_SECOND   the second solver; empty for one solver only
 #   KIT_JUDGE    the session that decides between two different reports
 # Other switches for experiments: KIT_TOOLS, KIT_MAX_TURNS, KIT_NO_HOOK=1, KIT_NO_FOLLOWUP=1,
-# KIT_VARIANT=flags (the bare ticket with only the harness flags changed), KIT_SOLVE_END,
+# KIT_VARIANT=flags (the bare ticket with only the harness flags changed) or report (only the
+# report, by one session), KIT_SOLVE_END,
 # KIT_HARD_STOP, KIT_FIX_BUDGET, KIT_JUDGE_BUDGET, KIT_RECONCILE=fails, KIT_KEEP_B=1, KIT_MONEY,
 # KIT_MAIN_SHARE, KIT_ADAPT=0 (follow-ups keep their effort), KIT_NO_NUDGE=1 (no word about unused budget).
 set -u
@@ -61,6 +62,7 @@ JUDGE="${KIT_JUDGE:-claude:claude-sonnet-5-5:medium}"
 # follow-up sessions run at effort high when the run can afford that (KIT_ADAPT=0: never).
 export KIT_MONEY="${KIT_MONEY:-0.72}"  # dollars the run means to stay under; full cost credit ends at 0.75
 MAIN_SHARE=${KIT_MAIN_SHARE:-0.36}     # of which the main solver's first session may use this much
+SECOND_SHARE=${KIT_SECOND_SHARE:-0.18} # and the second solver this much (it is told; see also its time limit)
 export KIT_STARTED=$STARTED
 export KIT_LOGS="$ROOT/work/logs"
 
@@ -279,6 +281,24 @@ PREPARED=1
 mkdir -p work/logs work/cross
 PROMPT="$(compose kit/prompt.md)"
 
+if [ "${KIT_VARIANT:-}" = "report" ]; then
+  # Experiment: one session that answers only the report request, to measure the report
+  # skill by itself. Nothing under app/ is meant to change.
+  cat >work/.report-only.md <<'EOF'
+Answer only the report request of the ticket below (its second part). Do not change anything
+under `app/`. Read `.claude/skills/evidence-report/SKILL.md` first, write the file under
+`out/` with a script `work/report.py`, run `kit/check.sh --only report`, and finish in three
+lines.
+
+Start-of-run notes:
+EOF
+  A_LOG=$(log_for a "$MAIN")
+  KIT_NO_HOOK=1 KIT_SESSION=a agent "$MAIN" start "$SOLVE_END" report "$(compose work/.report-only.md)" >"$A_LOG" 2>&1
+  cat "$A_LOG"
+  echo "run.sh: report only; estimated spend: $(python3 kit/spend.py work/logs | tail -1)"
+  exit 0
+fi
+
 # One more session for the main solver, and a check of what it hands back.
 # improve <name> <prompt>: resumes the main session with <prompt>. Its result is kept only if
 # the repair is no worse than before: it builds, the gate has not started failing, and on the
@@ -352,7 +372,7 @@ improve() {
 # --- 2. the solvers ------------------------------------------------------------------------
 if [ -n "$SECOND" ] && make_copy; then
   B_LOG=$(log_for b "$SECOND")
-  (cd "$B_ROOT" && KIT_SESSION=b agent "$SECOND" start $((SOLVE_END - $(elapsed))) all "$PROMPT") >"$B_LOG" 2>&1 &
+  (cd "$B_ROOT" && KIT_SESSION=b KIT_SHARE=$SECOND_SHARE agent "$SECOND" start $((SOLVE_END - $(elapsed))) all "$PROMPT") >"$B_LOG" 2>&1 &
   B_PID=$!
   BACKGROUND="$B_PID"
 else
@@ -370,7 +390,16 @@ if [ -n "$SECOND" ]; then
   b_left=150
   [ $((A_ENDED + b_left)) -lt 200 ] && b_left=$((200 - A_ENDED))
   (
-    sleep "$b_left"
+    waited=0
+    while [ "$waited" -lt "$b_left" ]; do
+      sleep 5
+      waited=$((waited + 5))
+      # It is also stopped when the run has less than ten cents left: what remains is for the
+      # report decision and the comparison, which do more for the answer than its last steps.
+      if [ $((waited % 15)) -eq 0 ] && ! python3 kit/budget.py --room 0.10 2>/dev/null; then
+        break
+      fi
+    done
     kill_tree "$B_PID"
   ) >/dev/null 2>&1 &
   B_TIMER=$!

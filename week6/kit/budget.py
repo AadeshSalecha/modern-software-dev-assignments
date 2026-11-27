@@ -56,8 +56,9 @@ through this list in order, and change code only when a check fails:
    (`--release old`) and passes on your change.
 3. `python3 kit/rollout.py work/scenarios/*.json --handed-over` and the same with
    `--restarted`. A failure there is a lead, not a verdict: decide it by the ticket.
-4. The report: reach the number of entries by a second query that goes another way through
-   the tables, and read each sentence of the report request against your script once more.
+4. The report: for each set in the ticket's definition, check a second file that records
+   the same members (no file is complete: `select * from skipped`), and read each sentence
+   of the report request against your script once more.
 
 Stop when the list is done or about a minute is left. `python3 kit/budget.py` shows where you are."""
 

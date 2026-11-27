@@ -44,20 +44,30 @@ python3 kit/evidence.py schema
    A record in which a service states a conclusion (a `msg` or `op` such as `…ignored`,
    `…stale`, `…rejected`) shows what that service believed then, which may be the defect
    itself. Use such records as leads; never let them replace the ticket's definition.
-2. **No file is complete, so a fact counts if any file records it.** Start from `events`,
-   `deliveries` and `responses`, which already combine the files. "One file says so" is a
-   smaller set than "it happened".
+2. **No file is complete, so build every set from all the files that can show a member.**
+   A row that was cut is gone from its file, and with it one member of anything you select
+   from that file alone. For each set the ticket's definition names (the requests that were
+   accepted, the events of a merchant, the deliveries that were answered), write down which
+   kinds of record show that a member exists: the record of the service that did it, and
+   records made downstream that could not exist without it (the router handling a message
+   shows the api published it; a worker's attempt shows the delivery was created and
+   leased). Take the union, then count how many members each source alone would have
+   missed. `events`, `deliveries`, `responses`, `attempts` and `leases` already combine the
+   files for those ids; for any other kind of fact, combine them yourself.
+   `select * from skipped` shows how many rows each file lost.
 3. **Order records by one file's own `ts`**, then `line_no`: lines arrive late and out of
    order. Clocks differ between files by up to minutes. Where the ticket ties a time to one
    service ("accepted by the api at", "leased at"), take both sides of the comparison from
    that service's file; compare across files only after correcting by the printed gap, and
    look at the records that fall within the gap's spread one by one.
-4. **Check for holes, and do not fill them.** A fact your definition needs may exist in a
-   single file and be missing for some ids, because its row was cut. Count those ids.
-   `app/contracts/evidence.md` promises that no fact a report depends on is missing from
-   every file, so an id whose defining fact is in no file is not one the report depends on:
-   leave it out, and say how many you left. Never rebuild the missing fact from a record of
-   another kind, such as a service's later conclusion about the same id or key (rule 1).
+4. **What may fill a hole, and what may not.** A record made downstream of a fact
+   establishes the fact (rule 2), so use it: take from it what it could not have been
+   written without (which message arrived, about which ids), not its verdict. A record in
+   which a service classifies something does not establish what it claims (rule 1), and a
+   missing attribute is never guessed. If, with every file used, an attribute your
+   definition needs is still missing for some id because its only record was cut, then by
+   `app/contracts/evidence.md` the report does not depend on that id: leave it out, and say
+   how many you left.
 5. **Exactness.** Complete ids; one entry per the key the ticket names; every id the entry
    asks for; whole numbers as whole numbers. For each figure, re-read the sentence that
    defines it and compute it over exactly the set it names.
