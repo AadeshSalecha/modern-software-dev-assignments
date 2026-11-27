@@ -100,6 +100,59 @@ class ShapeTest(unittest.TestCase):
         self.assertEqual(rollout.endpoint_paths(SCENARIO), {"ep_a": {"/hooks/ep_a"}, "ep_b": {"/in/b"}})
 
 
+class ReplacementCasesTest(unittest.TestCase):
+    """Which states of work a scenario leaves with the shipped release when it replaces it."""
+
+    def cases(self, *steps):
+        return rollout.replacement_cases({"steps": [dict(step) for step in steps]})
+
+    def test_no_upgrade_no_cases(self):
+        self.assertEqual(self.cases({"do": "event"}, {"do": "drain"}), set())
+
+    def test_right_after_the_api_step_the_work_is_unpublished(self):
+        self.assertIn("unpublished", self.cases({"do": "event"}, {"do": "upgrade"}, {"do": "drain"}))
+        self.assertNotIn("unpublished", self.cases({"do": "event"}, {"do": "tick", "service": "api"}, {"do": "upgrade"}))
+        self.assertNotIn("unpublished", self.cases({"do": "event"}, {"do": "drain"}, {"do": "upgrade"}))
+
+    def test_a_failing_merchant_leaves_work_waiting_for_a_retry(self):
+        failing = {"do": "receiver.script", "path": "/hooks/x", "responses": [], "default": 500}
+        self.assertIn("retry", self.cases(failing, {"do": "event"}, {"do": "drain", "limit": 20}, {"do": "upgrade"}))
+        healthy = {"do": "receiver.script", "path": "/hooks/x", "responses": [], "default": 200}
+        self.assertNotIn("retry", self.cases(healthy, {"do": "event"}, {"do": "drain"}, {"do": "upgrade"}))
+
+    def test_a_stopped_worker_holds_a_lease_and_a_restart_after_is_seen(self):
+        found = self.cases({"do": "crash_at", "service": "worker", "point": 2}, {"do": "event"}, {"do": "upgrade"},
+                           {"do": "restart", "service": "api"}, {"do": "event"}, {"do": "drain"})
+        self.assertTrue({"leased", "restarted", "traffic", "replaced"} <= found)
+
+
+class FinalStateNotesTest(unittest.TestCase):
+    """A delivery that ends in a state the contract does not name is shown, never failed."""
+
+    def result(self, deliveries, enabled=True):
+        return {"state": {"router": {"endpoints": [{"id": "ep", "enabled": enabled}],
+                                     "deliveries": [dict(d, endpoint_id="ep") for d in deliveries]}}}
+
+    def test_delivered_and_dead_say_nothing(self):
+        result = self.result([{"state": "delivered", "attempts": 1}, {"state": "dead", "attempts": 5}])
+        self.assertEqual(rollout.final_state_notes(result, {}), [])
+
+    def test_a_state_of_the_repair_s_own_is_a_note(self):
+        notes = rollout.final_state_notes(self.result([{"state": "cancelled", "attempts": 0}]), {})
+        self.assertEqual(len(notes), 1)
+        self.assertIn("`cancelled`", notes[0])
+        self.assertIn("ticket", notes[0])
+
+    def test_not_for_a_disabled_endpoint_and_not_when_the_scenario_says_so(self):
+        self.assertEqual(rollout.final_state_notes(self.result([{"state": "cancelled"}], enabled=False), {}), [])
+        self.assertEqual(rollout.final_state_notes(self.result([{"state": "cancelled"}]), {"skip_checks": ["final_state"]}), [])
+
+    def test_dead_before_the_attempts_are_used_up_is_a_note(self):
+        notes = rollout.final_state_notes(self.result([{"state": "dead", "attempts": 5}, {"state": "dead", "attempts": 1}]), {})
+        self.assertEqual(len(notes), 1)
+        self.assertIn("fewer counted attempts", notes[0])
+
+
 class ExpectationTest(unittest.TestCase):
     def test_endpoint_counts(self):
         got = result(

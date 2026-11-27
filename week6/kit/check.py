@@ -323,6 +323,11 @@ def scenario_checks(bins):
     own = sorted(glob.glob(os.path.join(ROOT, "work", "scenarios", "*.json")))
     have_old = rollout.OLD_APP != rollout.NEW_APP
     replaces = False
+    cases = set()
+    if not have_old:
+        # Said first and every time: without it no line below can speak about the shipped release.
+        soft.append(rollout.NO_SNAPSHOT + " Until then this script checks your working tree only: nothing below shows "
+                    "that a scenario fails on the shipped release or that your change can replace it.")
     for path in own:
         name = "work/scenarios/" + os.path.basename(path)
         try:
@@ -331,6 +336,7 @@ def scenario_checks(bins):
             hard.append(f"{name} cannot be read: {problem}")
             continue
         replaces = replaces or any(step.get("do") == "upgrade" for step in scenario["steps"])
+        cases |= rollout.replacement_cases(scenario)
         if scenario.get("skip_checks"):
             soft.append(
                 f"{name} skips the contract check(s) {', '.join(map(str, scenario['skip_checks']))}: "
@@ -388,6 +394,9 @@ def scenario_checks(bins):
                     f"store, not in the process. Repeat it with: python3 kit/rollout.py {label} --restarted"
                 )
             continue
+        for note in (outcome.get("notes") or []) if group == "scenarios" else []:
+            if not any(note in line for line in soft):
+                soft.append(f"{label}: {note}")
         if problems:
             failing.add(label)
             hard.append(f"{label} fails: " + problems[0])
@@ -399,6 +408,23 @@ def scenario_checks(bins):
             'no scenario in work/scenarios/ has an {"do": "upgrade"} step: show that state the shipped release '
             "left behind is handled when your change replaces it"
         )
+    elif have_old:
+        wanted = (
+            ("retry", "the merchant failing before the upgrade (receiver.script with a 5xx default, a drain with a "
+                      '"limit"), so that the work the shipped release left is waiting for a retry'),
+            ("leased", "a worker stopped at a crash point before the upgrade (crash_at worker, then tick worker), so "
+                       "that a delivery is leased and half sent"),
+            ("unpublished", "the upgrade directly after the api accepted something, before any api tick or drain"),
+            ("restarted", "a restart of api and router after the upgrade, then new traffic: the second start does nothing more"),
+        )
+        missing = [text for key, text in wanted if key not in cases]
+        if missing:
+            soft.append(
+                "your scenarios replace the release, but none of them does so with: " + "; ".join(missing) + ". A region "
+                "is in every one of these states when the release goes out. Write one scenario for each that the "
+                "ticket's outcome applies to (expect what the merchant gets in total), or say for each why the "
+                "ticket's outcome cannot depend on it."
+            )
     return hard, soft
 
 

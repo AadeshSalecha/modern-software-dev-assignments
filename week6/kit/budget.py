@@ -44,6 +44,7 @@ import spend  # noqa: E402
 
 NUDGE_MIN_MONEY = 0.05    # dollars of the session's share still unused
 NUDGE_MIN_SECONDS = 75    # seconds before the session is stopped
+OPEN_MIN_MONEY = 0.12     # dollars the whole run still has, for a round on what the agent says is open
 NUDGE = """Budget check (kit/budget.py): this session has used about ${used:.2f} of the ${share:.2f} set aside
 for it, and {gone} of its {limit} seconds. Nothing is gained by handing in early, and one missed
 case costs far more than everything that is left. Use what is left to look for a miss. Work
@@ -82,7 +83,8 @@ Tick a ledger line only after its check has run."""
 
 # What an agent writes when it knows of a gap. Matched per line of its last message.
 ADMITS = re.compile(
-    r"not covered|not verified|unverified|unproven|untested|not tested|not proven|did(?: not|n't) (?:test|verify|write|run|cover)"
+    r"not covered|not verified|unverified|unproven|untested|(?:not|n't) (?:been )?(?:tested|run|played|exercised)|not proven"
+    r"|did(?: not|n't) (?:test|verify|write|run|cover|add|re-?run|play)|only (?:the )?[\w` -]{1,40} (?:case|path) (?:has been|was) (?:run|tested)"
     r"|no scenario|without a scenario|could(?: not|n't) (?:verify|test|reproduce|cover)|cannot be tested|can't be tested"
     r"|have(?: not|n't) (?:tested|verified|covered)|still open|remains? (?:open|untested|unproven)|may still",
     re.IGNORECASE)
@@ -209,7 +211,17 @@ def nudge(now, given=0, said=""):
     """The message for a session that is stopping with room left, or an empty string. `given`
     is how many such messages it has had, `said` its last message."""
     room = session_room(now)
-    if room < NUDGE_MIN_MONEY or now["session_share"] is None:
+    if now is None or now["session_share"] is None:
+        return ""
+    # What the agent itself says is open is followed up while the RUN has money and the session
+    # has time, whatever is left of the session's own share: that share is a plan, not a limit.
+    run_room = now["money_left"] if now["money_left"] is not None else room
+    timed = now["seconds_left"] is not None and now["seconds_left"] >= NUDGE_MIN_SECONDS
+    gaps = ["ledger: " + line for line in open_ledger_lines()] + admitted_gaps(said)
+    if gaps and timed and run_room >= OPEN_MIN_MONEY and room < NUDGE_MIN_MONEY:
+        shown = "\n".join("  - " + line[:260] for line in gaps[:8])
+        return OPEN.format(left=run_room, seconds=now["seconds_left"], lines=shown)
+    if room < NUDGE_MIN_MONEY:
         return ""
     if given == 0:
         limit = now["session_deadline"]

@@ -25,7 +25,7 @@ A scenario is what app/bin/replay takes (see app/bin/replaylib.py), plus:
 Besides the scenario's expectations, every run is checked against the contracts:
   running         api, router and worker are still up at the end
   exits           no service exited except at an armed crash point
-  settled         nothing is left queued or leased after a final drain (any other state passes)
+  settled         nothing is left queued or leased after a final drain
   delivered       a delivery is delivered only with a recorded 2xx
   first_delivery  one first delivery per event and endpoint (a resend may add another)
   requests        every request names a known delivery and its event, with a valid signature
@@ -55,8 +55,16 @@ KIT = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(KIT)
 NEW_APP = os.environ.get("KIT_NEW_APP") or os.path.join(ROOT, "app")
 OLD_APP = os.environ.get("KIT_OLD_APP") or os.path.join(ROOT, ".pristine", "app")
-if not os.path.isdir(os.path.join(OLD_APP, "services")):
-    OLD_APP = NEW_APP  # no snapshot of the shipped release: "old" is the working tree
+HAVE_OLD = os.path.isdir(os.path.join(OLD_APP, "services"))
+if not HAVE_OLD:
+    OLD_APP = NEW_APP  # no snapshot of the shipped release: nothing below may claim to have run it
+NO_SNAPSHOT = (
+    "NO SNAPSHOT of the shipped release: .pristine/app/services does not exist, so this run would play "
+    "your working tree in its place and prove nothing about the release as shipped or about replacing it. "
+    "If you have not changed app/services yet, make it now: "
+    "mkdir -p .pristine/app && cp -R app/services app/bin app/scenarios .pristine/app/ . "
+    "If you have, say so in your summary: no result about the shipped release exists in this run."
+)
 
 sys.path.insert(0, os.path.join(OLD_APP, "bin"))
 import replaylib  # noqa: E402
@@ -315,6 +323,36 @@ def invariants(result, scenario):
     return out
 
 
+def final_state_notes(result, scenario):
+    """Deliveries of endpoints that are not disabled which end in a state app/contracts/delivery.md
+    does not name, or dead without the full number of counted attempts. Never a failure: a ticket
+    may allow it. Shown so that it is a decision and not an accident."""
+    if result is None or "final_state" in (scenario.get("skip_checks") or []):
+        return []
+    router = result["state"].get("router") or {}
+    enabled = {e["id"]: e.get("enabled") for e in router.get("endpoints", [])}
+    deliveries = router.get("deliveries", [])
+    most = max([d.get("attempts") or 0 for d in deliveries if d.get("state") == "dead"] or [0])
+    states, early = set(), 0
+    for delivery in deliveries:
+        if not enabled.get(delivery["endpoint_id"], True):
+            continue
+        if delivery["state"] not in ("queued", "leased", "delivered", "dead"):
+            states.add(delivery["state"])
+        elif delivery["state"] == "dead" and most and (delivery.get("attempts") or 0) < most:
+            early += 1
+    out = []
+    if states:
+        out.append(
+            "a delivery of an endpoint that is not disabled ends as " + ", ".join(f"`{s}`" for s in sorted(states)) + ": "
+            "app/contracts/delivery.md names only `delivered` and `dead`. Right only if the ticket itself says a "
+            "delivery may end otherwise; quote that sentence in the ledger, or end it in a state the contract names"
+        )
+    if early:
+        out.append(f"{early} delivery(ies) are `dead` with fewer counted attempts than others that died: right only if the ticket says so")
+    return out
+
+
 def digest(result):
     """A few lines that say what happened, for a failed run."""
     if result is None:
@@ -402,6 +440,41 @@ def restarted(scenario):
     return changed
 
 
+def _fails(step):
+    answers = list(step.get("responses") or []) + [step.get("default", 200)]
+    return any((isinstance(a, int) and not 200 <= a < 300) or a in ("drop", "refuse") for a in answers)
+
+
+def replacement_cases(scenario):
+    """Which states of work the shipped release holds at the moment this scenario replaces it.
+    Read from the steps alone; knows nothing about any incident."""
+    steps = scenario["steps"]
+    at = next((i for i, step in enumerate(steps) if step.get("do") == "upgrade"), None)
+    if at is None:
+        return set()
+    before, after = steps[:at], steps[at + 1:]
+    found = {"replaced"}
+    failing = False
+    for step in before:
+        if step.get("do") == "receiver.script":
+            failing = _fails(step)
+    if failing:
+        found.add("retry")      # the merchant was failing: deliveries are waiting for a retry
+    if any(step.get("do") == "crash_at" and step.get("service") == "worker" for step in before):
+        found.add("leased")     # a worker stopped holding a delivery
+    api_steps = ("event", "resend", "endpoint.create", "endpoint.update")
+    last = max([i for i, step in enumerate(before) if step.get("do") in api_steps] or [-1])
+    if last >= 0 and not any(
+        step.get("do") == "drain" or (step.get("do") == "tick" and step.get("service") == "api") for step in before[last + 1:]
+    ):
+        found.add("unpublished")  # accepted by the api, not yet passed on
+    if any(step.get("do") == "restart" for step in after):
+        found.add("restarted")
+    if any(step.get("do") in api_steps or step.get("do") == "bus" for step in after):
+        found.add("traffic")
+    return found
+
+
 def upgrade_positions(scenario, limit=None):
     """Positions where replacing the release keeps the scenario's meaning: not right after a
     crash point is armed (the arming would be lost), and not after the last step."""
@@ -452,7 +525,8 @@ def run_all(jobs_spec, bins, jobs=4, port_base=10000, deadline=None):
         problems = list(errors)
         if result is not None:
             problems += expectations(result, scenario) + invariants(result, scenario)
-        return {"label": label, "name": scenario.get("name", ""), "problems": problems, "digest": digest(result), "result": result}
+        return {"label": label, "name": scenario.get("name", ""), "problems": problems, "digest": digest(result), "result": result,
+                "notes": final_state_notes(result, scenario)}
 
     if jobs <= 1 or len(jobs_spec) <= 1:
         return [one(spec) for spec in jobs_spec]
@@ -513,6 +587,12 @@ def main(argv=None):
             upgrades = any(step.get("do") == "upgrade" for step in scenario["steps"])
             mode = "release as shipped" if args.release == "old" else ("shipped, then working tree" if upgrades else "working tree")
             specs.append((f"{short} [{mode}]", scenario, args.release))
+    needs_old = args.release == "old" or any(
+        step.get("do") == "upgrade" for _, scenario, _ in specs for step in scenario["steps"]
+    )
+    if needs_old and not HAVE_OLD:
+        print(NO_SNAPSHOT)
+        return 3
     try:
         bins = build({OLD_APP, NEW_APP})
     except RuntimeError as problem:
@@ -527,6 +607,8 @@ def main(argv=None):
             print(("FAIL  " if outcome["problems"] else "ok    ") + outcome["label"] + "  " + outcome["name"])
             for problem in outcome["problems"][:8]:
                 print("  " + problem)
+            for note in outcome.get("notes") or []:
+                print("  note: " + note)
             if len(outcome["problems"]) > 8:
                 print(f"  ... {len(outcome['problems']) - 8} more problems")
             if outcome["problems"] or args.full:

@@ -45,12 +45,19 @@ Not about the incident, do not open: `assignment.md`, `writeup.md`, `tools/`, `r
 - One release of api, router and worker **replaces the running one in place, in every
   region**. Each service keeps its store across the replacement (api: SQLite with events,
   endpoints and the outbox; router: SQLite with deliveries, leases and attempts; worker: a
-  journal), and messages are in flight while it happens. A repair therefore has to be right
-  for traffic that arrives after it and for messages from older producers, and you have to
-  ask what the shipped release has already written. If some of that state carries the
-  defect, the new release has to deal with it, in a step that is safe to run again on every
-  start. If none does, add nothing for it: work on old state that the defect does not need
-  is only a risk.
+  journal). At that moment every region holds work in every stage, put there by the shipped
+  release: accepted by the api and not yet published; queued and never attempted; waiting
+  for a retry after a failed attempt; leased, with the request being sent; finished. A
+  repair has to give the outcome the ticket wants in each of those stages, as well as for
+  traffic that arrives afterwards and for messages from older producers. Two questions, and
+  an answer by reasoning is not an answer: play each stage (the `replay-scenarios` skill
+  says how).
+  - What has the shipped release already done wrong that is still in a store? Your release
+    has to put it right, wherever it finds it, and doing so again on the next start must
+    change nothing more.
+  - What does your change look for in a store that the shipped release never wrote? A
+    column you add is empty on every row that is already there.
+  Leave alone what the shipped release did right: the same replacement must not touch it.
 - The evidence covers one region. Other regions hold other data, so the repair must find
   what it needs in the services' own stores, never in the evidence.
 - api runs as several replicas, the router as one, workers as several, and any of them can
@@ -62,9 +69,15 @@ Not about the incident, do not open: `assignment.md`, `writeup.md`, `tools/`, `r
   Numbered crash points (`crash(n)`) stay at the same step under the same number.
 - Delivery is at least once: a merchant may get the same delivery id again, but one event
   reaches one endpoint under one delivery id unless someone asked for a resend.
+- A delivery of an endpoint that is not disabled ends `delivered` or `dead`
+  (`app/contracts/delivery.md`). Give one another end only if the ticket says so in words.
 
 ## Working rules
 
+- First command of the run: `ls .pristine/app/services work/evidence.db`. If the first is
+  missing, make it before you change anything (`mkdir -p .pristine/app && cp -R app/services
+  app/bin app/scenarios .pristine/app/`); if the second is, `python3 kit/evidence.py build`.
+  Without the snapshot nothing can be compared with the release as shipped.
 - Edit only `app/services/{api,router,worker}`, `work/` and `out/`. Do not edit contracts,
   docs, the changelog, `app/bin` or `app/scenarios`: none of it is judged, all of it costs.
 - Use the map and line ranges; do not print whole files or directories. Send independent

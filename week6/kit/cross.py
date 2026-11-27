@@ -20,7 +20,7 @@ another agent did the whole job on its own. What happens:
             the kit's database. See compare_reports for what settles a difference.
 
 Written to <out>/:
-  decision.env   BEST=a|b  A_FAILS=<n>  B_FAILS=<n>  A_USABLE=0|1  B_USABLE=0|1
+  decision.env   BEST=a|b  A_FAILS=<n>  B_FAILS=<n>  A_WRITTEN=<n>  A_USABLE=0|1  B_USABLE=0|1
                  A_CHANGED=0|1  B_CHANGED=0|1  REPORTS=same|settled|decide|none
   fix.txt        for the first workspace's author: the runs its repair fails
   reports.txt    how the reports differ
@@ -206,7 +206,24 @@ def judge_repairs(roots, deadline):
         if old is None or rollout.not_run(old) or not runs or any(r is None or rollout.not_run(r) for r in runs.values()):
             continue
         if not old["problems"]:
-            notes.append(f"{author}'s {file_name} passes on the shipped release too: not used")
+            # It says nothing about the defect. It does say something about a repair that fails
+            # it while the other passes it: something that worked as shipped no longer does.
+            # (Failing on every repair is different: then the scenario holds the shipped
+            # release to behaviour that both authors changed on purpose.)
+            broken = [name for name, r in runs.items() if r["problems"]]
+            if len(runs) > 1 and broken and len(broken) < len(runs):
+                for name in broken:
+                    scores[name]["fails"].append({"scenario": file_name, "author": author, "path": path, "played": scenario,
+                                                  "how": "as written", "regression": True,
+                                                  "problem": "it passes on the shipped release and on the other repair; here: "
+                                                             + runs[name]["problems"][0][:160]})
+                for name, r in runs.items():
+                    if not r["problems"]:
+                        scores[name]["passed"] += 1
+                notes.append(f"{author}'s {file_name} passes on the shipped release and fails on {', '.join(broken)}: "
+                             "something that worked as shipped no longer does there")
+            else:
+                notes.append(f"{author}'s {file_name} passes on the shipped release too: not used")
             continue
         private = private_bus_step(scenario, old, [r for r in runs.values() if not r["problems"]])
         if private:
@@ -255,6 +272,12 @@ def judge_repairs(roots, deadline):
         else:
             scores[name]["passed"] += 1
     return scores, notes
+
+
+def written(score):
+    """How many runs this repair fails exactly as their author wrote them (or does not build):
+    the failures that need no judgement about what a variant may ask for."""
+    return sum(1 for f in score["fails"] if f["how"] in ("as written", "build"))
 
 
 def better(scores):
@@ -502,6 +525,7 @@ def main(argv=None):
     if args.repairs_only:
         with open(os.path.join(args.out, "decision.env"), "w", encoding="utf-8") as handle:
             handle.write(f"BEST={best}\nA_FAILS={len(scores['a']['fails'])}\nB_FAILS={len(scores['b']['fails'])}\n"
+                         f"A_WRITTEN={written(scores['a'])}\n"
                          f"A_USABLE={int(scores['a']['usable'])}\nB_USABLE={int(scores['b']['usable'])}\n")
         summary = describe(scores, best, notes)
         with open(os.path.join(args.out, "summary.txt"), "w", encoding="utf-8") as handle:
@@ -566,6 +590,7 @@ def main(argv=None):
     with open(os.path.join(args.out, "decision.env"), "w", encoding="utf-8") as handle:
         handle.write(f"BEST={best}\n"
                      f"A_FAILS={len(scores['a']['fails'])}\nB_FAILS={len(scores['b']['fails'])}\n"
+                     f"A_WRITTEN={written(scores['a'])}\n"
                      f"A_USABLE={int(scores['a']['usable'])}\nB_USABLE={int(scores['b']['usable'])}\n"
                      f"A_CHANGED={int(scores['a']['changed'])}\nB_CHANGED={int(scores['b']['changed'])}\n"
                      f"REPORTS={state}\n")

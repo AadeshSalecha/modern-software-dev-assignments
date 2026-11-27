@@ -16,10 +16,11 @@ python3 kit/rollout.py app/scenarios/*.json --upgrade-each  # shipped scenarios,
 
 Output is one line per run, plus the problems and a digest of deliveries and requests when
 it fails. Every run is also checked against the contracts: the services are still up,
-nothing is left `queued` or `leased` after a final drain (any other final state is fine,
-including one your change adds), a delivery is `delivered` only with a recorded 2xx, an
+nothing is left `queued` or `leased` after a final drain, a delivery is `delivered` only
+with a recorded 2xx, an
 event has one first delivery per endpoint, and every request is signed and names a known
-delivery.
+delivery. A delivery that ends in any state but `delivered` or `dead` while its endpoint is
+enabled is shown as a note: the contract does not allow it, so it needs the ticket's word.
 
 ## Format
 
@@ -55,7 +56,9 @@ Expectations:
 - `{"delivery": {"event": ref, "endpoint": id}, ...}` with any of `state`, `count`
   (deliveries of that event to that endpoint), `receipts`, `accepted`, `counted` (failed
   attempts), `gaps_at_least`, `amount_minor`, `currency`; `min_` and `max_` forms of
-  `receipts` and `accepted`.
+  `receipts` and `accepted`. Also `secrets` (the secret each request in turn was signed
+  with), `path` (the paths the requests went to, in order), `first_receipt_at_least` and
+  `first_receipt_at_most` (seconds from the start).
 - `{"endpoint": id, ...}` with any of `requests`, `accepted`, `events`, `deliveries`: what
   that endpoint received in total, whichever events they belonged to; `min_` and `max_`
   forms of each. Use this when the question is how many times a merchant was told.
@@ -71,13 +74,26 @@ Expectations:
    (`"drop"`) with the clock moved past a lease or a retry, a message applied twice or in an
    older version, an endpoint changed while work is queued.
 2. **Then make it pass** on your working tree.
-3. **Replace the release part-way.** Write at least one scenario with an `upgrade` step:
-   every region is mid-flight when your change is rolled out. If the shipped release
-   writes state that carries the defect, put the step after that state exists and before it
-   has finished playing out, and expect what the ticket wants to happen to it. If it leaves
-   no such state, the step can go anywhere and the scenario shows that the repaired
-   behaviour holds afterwards. A change that does work at start-up must do nothing more the
-   second time: follow the `upgrade` with a `restart`.
+3. **Replace the release in every stage of work.** Every region is mid-flight when your
+   change goes out. Each scenario here starts on the shipped release, lets it do what the
+   ticket complains of, has an `upgrade` step, and expects what the merchant has received in
+   total at the end (`{"endpoint": …, "accepted": …}`, and `max_accepted` or `accepted` per
+   delivery), not a state inside a service. One scenario for each stage the affected work can be in at the `upgrade`:
+
+   | Stage at the `upgrade` | How a scenario gets there |
+   | --- | --- |
+   | accepted by the api, not published | the api step, then `upgrade`, with no `tick` or `drain` between |
+   | queued, never attempted | the api step, `tick` the api, then `upgrade` |
+   | waiting for a retry | `receiver.script` with a failing `default` before the work starts, a `drain` with a `limit` shorter than the next retry wait, `upgrade`, `receiver.script` back to 200, `drain` |
+   | leased, the request being sent | `crash_at` the worker at a point between starting and finishing an attempt (its `AGENTS.md` lists them), `tick` api, `tick` worker, then `upgrade` |
+   | finished | `drain`, then `upgrade` |
+
+   Put two or three affected objects and one that the shipped release handled correctly
+   into at least one of them: each affected one gets the ticket's outcome, the correct one
+   is not touched; no restart after the `upgrade` in that one, so that a single start has to
+   deal with all of them. In another, follow the `upgrade` with a `restart` of api and router
+   and with new traffic of the same kind: the second start must do nothing more. A stage you leave
+   out needs the sentence of the ticket or contract that makes it impossible, in the ledger.
 4. **Cover the near misses**: inputs next to the defect's trigger that must keep working
    exactly as before. Take them from the contract clauses your change touches.
 5. Put them in `work/scenarios/`. `kit/check.sh` runs them on both releases, runs each once

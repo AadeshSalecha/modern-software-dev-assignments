@@ -53,12 +53,15 @@ SOLVE_END=${KIT_SOLVE_END:-300}        # solvers are stopped this many seconds a
 HARD_STOP=${KIT_HARD_STOP:-570}        # everything here is finished by then, 30 s before the grader's limit
 FIX_END=$((HARD_STOP - 130))           # the comparison session is stopped then, so its result can be checked
 # Spending lines, in dollars of estimated spend so far. Full cost credit ends at $0.75 and each
-# cent above costs about half a point. A comparison cost 4 to 17 cents in ten runs, so it
-# starts below 0.60. A report decision costs about 15 cents, but two different reports mean
-# one of them is wrong and the report is a third of the correctness score, so it may start
-# up to 0.70.
-FIX_BUDGET=${KIT_FIX_BUDGET:-0.60}
-JUDGE_BUDGET=${KIT_JUDGE_BUDGET:-0.70}
+# cent above costs about half a point; the repair is worth more than a few of those, so the
+# run may end near $0.85. A follow-up session for the main solver costs 8 to 15 cents. With a
+# second repair to compare with it starts below FIX_BUDGET, six cents higher when a run as
+# written fails on the main repair; without one it starts below REVIEW_BUDGET, because then
+# the run has spent less to begin with. A report decision costs about 15 cents: two different
+# reports mean one of them is wrong, and the report is a third of the correctness score.
+FIX_BUDGET=${KIT_FIX_BUDGET:-0.74}
+REVIEW_BUDGET=${KIT_REVIEW_BUDGET:-0.68}
+JUDGE_BUDGET=${KIT_JUDGE_BUDGET:-0.78}
 RECONCILE=${KIT_RECONCILE:-always}     # always: compare the two repairs every time; fails: only when a run fails
 
 MAIN="${KIT_MAIN:-claude:claude-sonnet-5-5:medium}"
@@ -76,8 +79,8 @@ REPORT_END=${KIT_REPORT_END:-220}      # the report-only session is stopped this
 # script, to the stop hook and to the agents. Sessions that have room are given more of it:
 # the main solver is told once if it stops with a good part of its share unused, and the
 # follow-up sessions run at effort high when the run can afford that (KIT_ADAPT=0: never).
-export KIT_MONEY="${KIT_MONEY:-0.72}"  # dollars the run means to stay under; full cost credit ends at 0.75
-MAIN_SHARE=${KIT_MAIN_SHARE:-0.30}     # of which the main solver's first session may use this much
+export KIT_MONEY="${KIT_MONEY:-0.85}"  # dollars the run means to stay under; full cost credit ends at 0.75
+MAIN_SHARE=${KIT_MAIN_SHARE:-0.36}     # of which the main solver's first session may use this much
 SECOND_SHARE=${KIT_SECOND_SHARE:-0.18} # and the second solver this much (it is told; see also its time limit)
 export KIT_STARTED=$STARTED
 export KIT_LOGS="$ROOT/work/logs"
@@ -448,6 +451,10 @@ improve() {
   for service in api router worker; do
     cp -R "app/services/$service" work/cross/before/ 2>/dev/null
   done
+  # The scenarios as they are now are played afterwards too, on both: one that the session
+  # deletes or weakens must still count.
+  rm -rf work/cross/before-scenarios
+  cp -R work/scenarios work/cross/before-scenarios 2>/dev/null
   spec=$(with_room "$MAIN" 0.30) # effort high if the run can afford it; a judge may be running too
   log=$(log_for "$name" "$spec")
   KIT_SESSION=$name KIT_PHASE=$name agent "$spec" resume $((FIX_END - $(elapsed))) all "$prompt" >"$log" 2>&1
@@ -462,6 +469,11 @@ improve() {
     stop_services
     # The repair as it was, as a workspace of its own, so that both are run on the same scenarios.
     mkdir -p work/cross/before-root/work/scenarios work/cross/vs-before
+    for scenario in work/cross/before-scenarios/*.json; do
+      [ -e "$scenario" ] || continue
+      cmp -s "$scenario" "work/scenarios/$(basename "$scenario")" ||
+        cp "$scenario" work/cross/before-root/work/scenarios/ 2>/dev/null
+    done
     cp -R app work/cross/before-root/app 2>/dev/null
     for service in api router worker; do
       rm -rf "work/cross/before-root/app/services/$service"
@@ -579,10 +591,13 @@ stop_services
 # --- 3. cross-check, 4. follow-up, 5. install ---------------------------------------------
 BEST=a
 A_FAILS=0
+A_WRITTEN=0
 A_CHANGED=0
 B_CHANGED=0
 REPORTS=same
-if [ -n "$SECOND" ] || [ -n "$THIRD" ]; then
+# This runs whatever became of the other sessions: without a second repair the main solver's
+# own scenarios are still played in their variants and its session still gets a second pass.
+if [ "${KIT_NO_CROSS:-}" != "1" ]; then
   if [ -z "$SECOND" ]; then
     B_ROOT="$ROOT/work/cross/no-second" # nothing there: the reports are still compared
     mkdir -p "$B_ROOT"
@@ -594,12 +609,14 @@ if [ -n "$SECOND" ] || [ -n "$THIRD" ]; then
   if [ -s work/cross/decision.env ]; then
     BEST=$(grep '^BEST=' work/cross/decision.env | cut -d= -f2)
     A_FAILS=$(grep '^A_FAILS=' work/cross/decision.env | cut -d= -f2)
+    A_WRITTEN=$(grep '^A_WRITTEN=' work/cross/decision.env | cut -d= -f2)
     A_CHANGED=$(grep '^A_CHANGED=' work/cross/decision.env | cut -d= -f2)
     B_CHANGED=$(grep '^B_CHANGED=' work/cross/decision.env | cut -d= -f2)
     REPORTS=$(grep '^REPORTS=' work/cross/decision.env | cut -d= -f2)
   fi
   case "$BEST" in a | b) ;; *) BEST=a ;; esac
   case "$A_FAILS" in '' | *[!0-9]*) A_FAILS=0 ;; esac
+  case "$A_WRITTEN" in '' | *[!0-9]*) A_WRITTEN=0 ;; esac
 
   JUDGE_PID=""
   if [ "${KIT_NO_FOLLOWUP:-}" != "1" ]; then
@@ -620,17 +637,29 @@ if [ -n "$SECOND" ] || [ -n "$THIRD" ]; then
       BACKGROUND="$JUDGE_PID"
     fi
 
-    # 4b. The main solver's session is resumed with the other solver's change, ledger and
-    #     scenarios, the runs its own repair fails, and what the gate still reports.
+    # 4b. The main solver's session is resumed once. With a second repair in hand it gets
+    #     that change, its ledger and scenarios and compares the two. Without one (no second
+    #     workspace, a harness that never got going, a second solver that changed nothing) it
+    #     goes over its own repair, so that a second look never depends on something else
+    #     having worked. Either way it gets the runs its repair fails and the gate's output.
     want_fix=0
-    if [ "$A_CHANGED" = "1" ] && [ -n "$SECOND" ]; then
-      [ "$A_FAILS" -gt 0 ] && want_fix=1
-      [ "$RECONCILE" = "always" ] && [ "$B_CHANGED" = "1" ] && want_fix=1
+    fix_kind=compare
+    if [ "$A_CHANGED" = "1" ]; then
+      if [ -n "$SECOND" ] && [ "$B_CHANGED" = "1" ]; then
+        [ "$A_FAILS" -gt 0 ] && want_fix=1
+        [ "$RECONCILE" = "always" ] && want_fix=1
+      else
+        fix_kind=review
+        want_fix=1
+      fi
     fi
-    # Money is kept back for a report decision that has started, and for a session whose
-    # cached context has expired by now (a resumed session then pays to write it again).
+    # A run as written that fails on the main repair is the strongest evidence there is, and
+    # worth six cents more. Money is kept back for a report decision that has started, and for
+    # a session whose cached context has expired (a resumed session pays to write it again).
     fix_line=$FIX_BUDGET
-    [ -n "$JUDGE_PID" ] && fix_line=$(python3 -c "print($FIX_BUDGET - 0.10)")
+    [ "$fix_kind" = "review" ] && fix_line=$REVIEW_BUDGET
+    [ "$A_WRITTEN" -gt 0 ] && fix_line=$(python3 -c "print($fix_line + 0.06)")
+    [ -n "$JUDGE_PID" ] && fix_line=$(python3 -c "print($fix_line - 0.08)")
     if [ $(($(elapsed) - A_ENDED)) -gt 230 ]; then
       fix_line=$(python3 -c "print($fix_line - 0.15)")
     fi
@@ -639,7 +668,7 @@ if [ -n "$SECOND" ] || [ -n "$THIRD" ]; then
       limited 60 bash kit/check.sh --only repair >work/cross/gate.txt 2>&1
       gate_now=$?
       stop_services
-      fix_prompt="$(cat kit/prompt-reconcile.md work/cross/fix.txt 2>/dev/null)"
+      fix_prompt="$(cat "kit/prompt-$([ "$fix_kind" = "review" ] && echo review || echo reconcile).md" work/cross/fix.txt 2>/dev/null)"
       [ -s work/cross/fix.txt ] || fix_prompt="$fix_prompt
 (none: your repair passes every run)"
       if [ "$gate_now" -ne 0 ] && grep -q '^BLOCKING' work/cross/gate.txt; then
@@ -649,7 +678,7 @@ Before any of that: kit/check.sh --only repair fails on your repair as it is now
 
 $(head -30 work/cross/gate.txt)"
       fi
-      improve compare "$fix_prompt"
+      improve "$fix_kind" "$fix_prompt"
     fi
     # 4c. Still failing its own gate, with money and time left: one more session on exactly
     #     that. Handing in a repair whose own checks fail is what the budget is there to prevent.

@@ -5,9 +5,12 @@ Work in this order, in as few steps as you can. Send independent commands togeth
 1. **Ledger.** Write `work/ledger.md`: one `- [ ]` line for every requirement in the ticket,
    split so that each qualifier ("including …", "regardless of …", "even when …",
    "without …") has its own line, each ending with how you will check it (a scenario name, a
-   query, a command). Add three standing lines from `AGENTS.md`: it holds for new traffic;
-   what the shipped release has already written that carries the defect is dealt with (name
-   that state, or write "none" and add nothing for it); older bus messages still work.
+   query, a command). Add the standing lines from `AGENTS.md`: it holds for new traffic;
+   one line for each stage of work the shipped release can hold when it is replaced (not
+   yet published, never attempted, waiting for a retry, leased, finished), each naming the
+   scenario that replaces the release in that stage; the replacement leaves alone what the
+   shipped release did right; older bus messages still work (a scenario of yours that posts
+   one: the shipped scenarios post none).
 2. **Report.** Read `.claude/skills/evidence-report/SKILL.md`, then answer the ticket's
    report request from `work/evidence.db` with a script, and write the file under `out/`
    now. What you learn here about when and where the incident happened is your first lead.
@@ -16,15 +19,18 @@ Work in this order, in as few steps as you can. Send independent commands togeth
    reproduce the defect with a scenario that fails on the shipped release. Then, before you
    repair anything, look for every other way into the same defect: the same decision is
    usually made in more than one place (in another service, once per bus message version,
-   again on a retry, a resend, an expired lease or a restart). Add a ledger line for each
+   again on a retry, a resend, an expired lease, a restart, or a service that stops between
+   two steps that write to its store). Add a ledger line for each
    way in that the ticket's wording covers; the first one you found is rarely the only one.
 4. **Repair** in `app/services`, as small a change as covers every ledger line. Prove each
-   behaviour with a scenario in `work/scenarios/`, one of them replacing the release
-   part-way. `kit/check.sh` passing shows only what the shipped scenarios cover: every case
+   behaviour with a scenario in `work/scenarios/`, and replace the release in each stage of
+   work (step 3 of the skill): that half of the job is where repairs that pass every other
+   check are found wrong. `kit/check.sh` passing shows only what the shipped scenarios cover: every case
    the ticket names, each "including …" on its own, needs a scenario that exercises exactly
    that case. A requirement you could not meet is a failed job, not a note for the summary.
-5. **Check.** Run `bash kit/check.sh`. Fix what it reports, tick each ledger line you have
-   actually verified, and stop. It runs again when you stop and sends you back if it fails.
+5. **Check.** Run `bash kit/check.sh`. Fix what it reports, tick a ledger line only when
+   the scenario or query it names has run and passed (never all lines in one command), and
+   stop. It runs again when you stop and sends you back if it fails.
 
 Budget: being right is worth far more here than being quick or cheap. `python3 kit/budget.py`
 shows what this session has used of the money and time set aside for it. Do not stop early

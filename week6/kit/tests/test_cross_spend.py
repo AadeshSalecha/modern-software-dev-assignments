@@ -53,6 +53,45 @@ class Better(unittest.TestCase):
         self.assertEqual(cross.better({"a": self.score(usable=False), "b": self.score(fails=[("b", "as written")] * 4)}), "b")
 
 
+class Regressions(unittest.TestCase):
+    """A scenario that passes on the shipped release says nothing about the defect, but it does
+    say something about a repair that fails it while the other passes it."""
+
+    def judge(self, failing):
+        from unittest import mock
+        scenario = {"name": "a neighbour that must keep working", "steps": [{"at": 0, "do": "drain"}], "expect": []}
+
+        def run_all(specs, bins, deadline=None):
+            out = []
+            for label, _, release, app in specs:
+                bad = release == "new" and any(app.startswith("/w/" + name + "/") for name in failing)
+                out.append({"label": label, "name": "", "digest": "", "result": {"statuses": {}},
+                            "problems": ["ep_a: 0 requests, expected 1"] if bad else []})
+            return out
+
+        with mock.patch.object(cross.rollout, "build", lambda apps: {}), \
+                mock.patch.object(cross.rollout, "run_all", run_all), \
+                mock.patch.object(cross, "changed", lambda root: True), \
+                mock.patch.object(cross, "scenarios_of", lambda root: [("near.json", root + "/near.json", scenario)] if root == "/w/b" else []), \
+                mock.patch.object(cross.glob, "glob", lambda pattern: []):
+            return cross.judge_repairs({"a": "/w/a", "b": "/w/b"}, time.time() + 60)
+
+    def test_it_counts_against_the_one_repair_that_breaks_it(self):
+        scores, notes = self.judge(failing=["a"])
+        self.assertEqual([(f["author"], f["how"]) for f in scores["a"]["fails"]], [("b", "as written")])
+        self.assertEqual(scores["b"]["fails"], [])
+        self.assertEqual(cross.written(scores["a"]), 1)
+        self.assertEqual(cross.better(scores), "b")
+        self.assertIn("worked as shipped no longer does", notes[0])
+
+    def test_it_decides_nothing_when_no_repair_or_every_repair_fails_it(self):
+        for failing in ([], ["a", "b"]):
+            scores, notes = self.judge(failing=failing)
+            self.assertEqual(scores["a"]["fails"], [])
+            self.assertEqual(scores["b"]["fails"], [])
+            self.assertIn("not used", notes[0])
+
+
 class Reports(unittest.TestCase):
     def test_list_order_does_not_matter(self):
         a = {"affected": [{"id": 1}, {"id": 2}], "total": 3}
@@ -287,6 +326,16 @@ class Budget(unittest.TestCase):
         self.assertIn("attempt already in flight", text)
         self.assertNotIn("53 entries", text)
         self.assertEqual(self.budget.nudge(now, 1, "All of it is verified by scenarios."), "")
+
+    def test_a_gap_the_agent_admits_is_followed_up_while_the_run_has_money_whatever_its_share(self):
+        self.log("a.claude.m.jsonl", "s1", 35000)   # 0.35 of its 0.36: no room of its own
+        now = self.budget.state()
+        said = "Fixed.\nI did not add a scenario for a repeat that is leased at the moment of upgrade; only the queued case has been run."
+        self.assertEqual(self.budget.nudge(now, 0, "All verified."), "")
+        text = self.budget.nudge(now, 0, said)
+        self.assertIn("leased at the moment of upgrade", text)
+        self.log("b.codex.m.jsonl", "s2", 30000)    # the run is at 0.65 of 0.72: under twelve cents left
+        self.assertEqual(self.budget.nudge(self.budget.state(), 0, said), "")
 
     def test_the_last_message_is_read_from_what_the_harness_hands_the_hook(self):
         given = os.path.join(self.top.name, "stop.json")
