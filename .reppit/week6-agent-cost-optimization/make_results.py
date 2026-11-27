@@ -66,6 +66,7 @@ DESCRIPTIONS = collections.OrderedDict(
         ("noexec-starter", "The zip of submission 3 as the grader gets it: every file mode dropped except run.sh's (an upload keeps none). kit/prepare.sh cannot be started, so there is no snapshot of the release, no evidence database and no second workspace. Container, no Codex."),
         ("v5a-nocodex", "After the audit, first version (commit e7ec9a4), run as uploaded (modes dropped) in the container while it was heavily loaded by the audit itself: every helper through its interpreter, preparation verified, a replacement of the release per stage of work, higher money lines."),
         ("v5c-nocodex", "After the audit, final version (commit d7999b9), run as uploaded (modes dropped) on a quiet machine. Container, no Codex: Haiku as second solver, Sonnet at effort low for the raw-file report."),
+        ("v5d-nocodex", "The commit the zip is built from (1d6c3b5: lower money lines, the follow-up given two minutes at most), run as uploaded. Container, no Codex."),
     ]
 )
 

@@ -57,6 +57,7 @@ Rebuilt by `make_results.py`.
 | noexec-starter | 1/1 | 1.00 | 1.00 | $0.549 | $0.55 to $0.55 | 39 | 178 s | 178 s |
 | v5a-nocodex | 2/2 | 1.00 | 1.00 | $0.600 | $0.40 to $0.80 | 52 | 461 s | 552 s |
 | v5c-nocodex | 2/2 | 1.00 | 1.00 | $0.663 | $0.56 to $0.77 | 52 | 344 s | 401 s |
+| v5d-nocodex | 1/1 | 1.00 | 1.00 | $0.437 | $0.44 to $0.44 | 40 | 240 s | 240 s |
 | v4-sonnet-terra-terra | 1/1 | 1.00 | 1.00 | $0.655 | $0.66 to $0.66 | 60 | 388 s | 388 s |
 
 ## baseline
@@ -589,6 +590,14 @@ After the audit, final version (commit d7999b9), run as uploaded (modes dropped)
 | 20261127-143632-1 | PASS | 1.00 | 1.00 | $0.556 | 48 | 401 s | 9/9 | 10/10 | 2/2 | 32,669 | 1,568,335 | 112,039 |
 | 20261127-145031-1 | PASS | 1.00 | 1.00 | $0.771 | 55 | 288 s | 9/9 | 10/10 | 2/2 | 36,709 | 1,584,987 | 143,169 |
 
+## v5d-nocodex
+
+The commit the zip is built from (1d6c3b5: lower money lines, the follow-up given two minutes at most), run as uploaded. Container, no Codex.
+
+| Run | Result | Repair | Impact | Cost | Requests | Time | Incident | Regr. | Compat | Output | Cache read | Cache write |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 20261127-145801-1 | PASS | 1.00 | 1.00 | $0.437 | 40 | 240 s | 9/9 | 10/10 | 2/2 | 24,895 | 988,349 | 87,507 |
+
 ## v4-sonnet-terra-terra
 
 
@@ -696,6 +705,7 @@ upload drops them (the preparation step cannot start); `v5fix-` the first fix of
 | v5c-nocodex-2231 | 20261127-143632-1 | PASS | 1.0 | 1.0 | $0.598 | 47 | 391 s | 9/9 | 9/9 | 4/4 |
 | v5c-nocodex-2307 | 20261127-144320-1 | PASS | 1.0 | 1.0 | $0.878 | 59 | 416 s | 19/19 | 21/21 | 6/6 |
 | v5c-nocodex-2318 | 20261127-144320-1 | PASS | 1.0 | 1.0 | $0.769 | 52 | 415 s | 19/19 | 19/19 | 6/6 |
+| v5d-nocodex-2318 | 20261127-145801-1 | PASS | 1.0 | 1.0 | $0.732 | 43 | 334 s | 19/19 | 19/19 | 6/6 |
 | v5fix-2318-terra | 20261127-140127-1 | PASS | 1.0 | 1.0 | $0.657 | 47 | 278 s | 19/19 | 19/19 | 6/6 |
 
 ## Notes from reading the logs

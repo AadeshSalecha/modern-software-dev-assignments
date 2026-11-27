@@ -1,0 +1,187 @@
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/api/src/main.ts week6/app/services/api/src/main.ts
+--- clean-app/services/api/src/main.ts	2026-11-27 12:41:14.021608886 +0000
++++ week6/app/services/api/src/main.ts	2026-11-27 15:00:32.057888462 +0000
+@@ -230,6 +230,13 @@
+       at: row.at,
+       data: JSON.parse(row.data),
+     };
++    if (row.type === "endpoint.changed") {
++      const ep = message.data.endpoint;
++      if (ep && ep.enabled === true) {
++        const from = store.offStart(ep.id, ep.version);
++        if (from !== null) message.data.off_since = from;
++      }
++    }
+     let status: number;
+     try {
+       const response = await fetch(`${routerUrl}/bus`, {
+@@ -261,6 +268,28 @@
+   return did;
+ }
+ 
++// Release 2.4: a store written by an earlier release holds off periods whose
++// events were never delivered. Ask the router, once, to catch each one up.
++function repairCatchUp(): void {
++  store.transaction(() => {
++    const done = store.db
++      .prepare("select value from meta where key = 'catchup_repair'")
++      .get();
++    if (done) return;
++    for (const period of store.switchOns()) {
++      store.enqueue("endpoint.catchup", now(), {
++        endpoint: period.endpoint,
++        from: period.from,
++        to: period.to,
++      });
++    }
++    store.db
++      .prepare("insert into meta (key, value) values ('catchup_repair', 1)")
++      .run();
++  });
++}
++repairCatchUp();
++
+ // For Support: the event a merchant's idempotency key was first accepted as.
+ function eventByKey(url: string): Reply {
+   const query = new URL(url, "http://api").searchParams;
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/api/src/store.ts week6/app/services/api/src/store.ts
+--- clean-app/services/api/src/store.ts	2026-11-27 12:41:14.021608886 +0000
++++ week6/app/services/api/src/store.ts	2026-11-27 15:00:32.057539473 +0000
+@@ -153,6 +153,48 @@
+     this.enqueue("endpoint.changed", now, { endpoint });
+   }
+ 
++  // Start of the off period that the switch-on at `version` ends: the change
++  // that took the endpoint from on to off (its creation if created off). A
++  // change made while it is off does not move the start.
++  offStart(endpointId: string, version: number): number | null {
++    const rows = this.db
++      .prepare(
++        "select version, config, at from endpoint_history where endpoint_id = ? and version < ? order by version",
++      )
++      .all(endpointId, version) as { version: number; config: string; at: number }[];
++    let start: number | null = null;
++    for (const row of rows) {
++      const on = JSON.parse(row.config).enabled === true;
++      if (on) start = null;
++      else if (start === null) start = row.at;
++    }
++    return start;
++  }
++
++  // Every completed off period, as the switch-on that ended it.
++  switchOns(): { endpoint: Endpoint; from: number; to: number }[] {
++    const rows = this.db
++      .prepare(
++        "select endpoint_id, version, config, at from endpoint_history order by endpoint_id, version",
++      )
++      .all() as { endpoint_id: string; version: number; config: string; at: number }[];
++    const found: { endpoint: Endpoint; from: number; to: number }[] = [];
++    let current = "";
++    let start: number | null = null;
++    for (const row of rows) {
++      if (row.endpoint_id !== current) {
++        current = row.endpoint_id;
++        start = null;
++      }
++      const config = JSON.parse(row.config) as Endpoint;
++      if (config.enabled === true) {
++        if (start !== null) found.push({ endpoint: config, from: start, to: row.at });
++        start = null;
++      } else if (start === null) start = row.at;
++    }
++    return found;
++  }
++
+   event(id: string): EventRecord | undefined {
+     const row = this.db.prepare("select * from events where id = ?").get(id) as
+       | Record<string, unknown>
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/bus.py week6/app/services/router/bus.py
+--- clean-app/services/router/bus.py	2026-11-27 12:41:14.023752210 +0000
++++ week6/app/services/router/bus.py	2026-11-27 15:00:32.058140744 +0000
+@@ -109,7 +109,23 @@
+             need(ep, "enabled", bool),
+             need(ep, "version", int),
+         )
++        if isinstance(data.get("off_since"), int) and not isinstance(data.get("off_since"), bool):
++            body["off_since"] = data["off_since"]
+         return producer, str(seq), "endpoint", body
++    if type_ == "endpoint.catchup":
++        ep = need(data, "endpoint", dict)
++        body = endpoint_body(
++            need(ep, "id", str),
++            need(ep, "merchant_id", str),
++            need(ep, "url", str),
++            need(ep, "secret", str),
++            need(ep, "event_types", list),
++            need(ep, "enabled", bool),
++            need(ep, "version", int),
++        )
++        body["from"] = need(data, "from", int)
++        body["to"] = need(data, "to", int)
++        return producer, str(seq), "catchup", body
+     if type_ == "resend.requested":
+         body = {"event_id": need(data, "event_id", str), "endpoint_id": need(data, "endpoint_id", str)}
+         return producer, str(seq), "resend", body
+diff -ruN -x .build -x state -x __pycache__ clean-app/services/router/routing.py week6/app/services/router/routing.py
+--- clean-app/services/router/routing.py	2026-11-27 12:41:14.023752210 +0000
++++ week6/app/services/router/routing.py	2026-11-27 15:00:32.058732509 +0000
+@@ -86,12 +86,18 @@
+             create_delivery(db, log, now, event["id"], ep["id"])
+ 
+ 
+-def catch_up(db, log, now, endpoint, since):
+-    """Deliver what the endpoint missed while it was disabled."""
+-    floor = max(since, now - CATCH_UP_SECONDS)
++def catch_up(db, log, now, endpoint, since, off_since=None, until=None):
++    """Deliver what the endpoint missed while it was disabled, however long that was."""
++    if until is None:
++        # A switch-on: events that arrived while off, or that the API accepted since it went off.
++        where, args = "routed_at >= ?", [since]
++        if off_since is not None:
++            where, args = "(routed_at >= ? or created >= ?)", [since, off_since]
++    else:
++        where, args = "created >= ? and created < ?", [since, until]
+     missed = db.execute(
+-        "select id, type from events where merchant_id = ? and routed_at >= ? order by routed_at, rowid",
+-        (endpoint["merchant_id"], floor),
++        f"select id, type from events where merchant_id = ? and {where} order by routed_at, rowid",
++        [endpoint["merchant_id"], *args],
+     ).fetchall()
+     for event in missed:
+         if not subscribed(endpoint["event_types"], event["type"]):
+@@ -101,6 +107,13 @@
+         create_delivery(db, log, now, event["id"], endpoint["id"])
+ 
+ 
++def apply_catchup(db, log, now, body):
++    if db.execute("select 1 from endpoints where id = ?", (body["id"],)).fetchone() is None:
++        log.write("catchup.skipped", level="warn", endpoint=body["id"])
++        return
++    catch_up(db, log, now, body, body["from"], body["from"], body["to"])
++
++
+ def apply_endpoint(db, log, now, endpoint):
+     old = db.execute("select * from endpoints where id = ?", (endpoint["id"],)).fetchone()
+     if old is not None and endpoint["version"] <= old["version"]:
+@@ -136,8 +149,10 @@
+     )
+     if old is not None and not INC_2188_WORKAROUND:
+         follow_version(db, log, now, endpoint["id"], endpoint["version"])
+-    if endpoint["enabled"] and was_enabled is False and disabled_at is not None:
+-        catch_up(db, log, now, endpoint, disabled_at)
++    if endpoint["enabled"] and was_enabled is False:
++        off_since = endpoint.get("off_since")
++        if disabled_at is not None or off_since is not None:
++            catch_up(db, log, now, endpoint, disabled_at if disabled_at is not None else now, off_since)
+ 
+ 
+ def apply_resend(db, log, now, body):
+@@ -153,5 +168,7 @@
+         route_event(db, log, now, body)
+     elif kind == "endpoint":
+         apply_endpoint(db, log, now, body)
++    elif kind == "catchup":
++        apply_catchup(db, log, now, body)
+     else:
+         apply_resend(db, log, now, body)
